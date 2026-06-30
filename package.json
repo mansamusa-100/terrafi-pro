@@ -1,0 +1,20 @@
+{
+  "name": "field-pro",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev --prefix Backend\" \"npm run dev --prefix Frontend\"",
+    "dev:backend": "npm run dev --prefix Backend",
+    "dev:frontend": "npm run dev --prefix Frontend",
+    "build": "npm run build --prefix Frontend",
+    "start": "npm run start --prefix Backend",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:migrate": "npm run db:migrate --prefix Backend",
+    "db:seed": "npm run db:seed --prefix Backend",
+    "setup": "npm install && npm install --prefix Backend && npm install --prefix Frontend && npm run db:up && npm run db:migrate --prefix Backend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

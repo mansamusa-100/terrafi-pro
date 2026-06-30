@@ -1,0 +1,37 @@
+{
+  "name": "field-pro-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch index.js",
+    "start": "node index.js",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:push": "prisma db push",
+    "db:init": "powershell -ExecutionPolicy Bypass -File scripts/setup-local-db.ps1",
+    "db:setup-local": "powershell -ExecutionPolicy Bypass -File scripts/setup-local-db.ps1",
+    "db:seed": "node prisma/seed.js",
+    "db:studio": "prisma studio",
+    "float:backfill-phones": "node scripts/backfill-phone-normalized.js",
+    "float:simulate": "node scripts/simulate-float-delivery.js",
+    "float:map-demo-phones": "node scripts/map-demo-agents-to-bi.mjs",
+    "float:sync-from-bi": "node scripts/sync-float-from-bi.mjs",
+    "float:decrypt": "node scripts/decrypt-partner-agent-float.mjs"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.3.1",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.2"
+  },
+  "devDependencies": {
+    "prisma": "^6.3.1"
+  }
+}

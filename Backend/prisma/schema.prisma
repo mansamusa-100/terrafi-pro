@@ -1,0 +1,205 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id            String            @id
+  name          String
+  plan          String
+  agents        Int               @default(0)
+  officers      Int               @default(0)
+  status        String
+  mrr           Int               @default(0)
+  since         String
+  contactEmail  String?           @map("contact_email")
+  registeredAt  DateTime          @default(now()) @map("registered_at")
+  users         User[]
+  agentsRel     Agent[]
+  officersRel   Officer[]
+  visits        Visit[]
+  alerts        Alert[]
+  training      TrainingModule[]
+  floatTrend    FloatTrendPoint[]
+  auditLogs     AuditLog[]
+  settings      CompanySettings?
+}
+
+model CompanySettings {
+  companyId                      String  @id @map("company_id")
+  company                        Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  defaultFloatThreshold          Int     @default(5000) @map("default_float_threshold")
+  visitFrequencyTarget           Int     @default(25) @map("visit_frequency_target")
+  alertNotificationDelayMinutes  Int     @default(5) @map("alert_notification_delay_minutes")
+  autoSuspendMissedVisitsDays    Int     @default(14) @map("auto_suspend_missed_visits_days")
+  activeZones                    Int     @default(7) @map("active_zones")
+  subTerritories                 Int     @default(24) @map("sub_territories")
+  coverageModel                  String  @default("Officer-based") @map("coverage_model")
+  coreWalletApiStatus            String  @default("Connected") @map("core_wallet_api_status")
+  smsGatewayStatus               String  @default("Active") @map("sms_gateway_status")
+  emailNotificationsStatus       String  @default("Active") @map("email_notifications_status")
+  exportFormat                   String  @default("Excel, PDF") @map("export_format")
+  updatedAt                      DateTime @updatedAt @map("updated_at")
+}
+
+model User {
+  id           String     @id
+  name         String
+  email        String     @unique
+  passwordHash String     @map("password_hash")
+  role         String
+  companyId    String?    @map("company_id")
+  company      Company?   @relation(fields: [companyId], references: [id])
+  scope        String
+  zone         String?
+  status       String     @default("active")
+  auditLogs    AuditLog[] @relation("AuditActor")
+  assignedAgents Agent[]  @relation("AgentOfficer")
+}
+
+model AuditLog {
+  id          Int      @id @default(autoincrement())
+  scope       String
+  companyId   String?  @map("company_id")
+  company     Company? @relation(fields: [companyId], references: [id])
+  actorId     String   @map("actor_id")
+  actor       User     @relation("AuditActor", fields: [actorId], references: [id])
+  actorName   String   @map("actor_name")
+  actorEmail  String   @map("actor_email")
+  action      String
+  entityType  String?  @map("entity_type")
+  entityId    String?  @map("entity_id")
+  details     String?
+  createdAt   DateTime @default(now()) @map("created_at")
+}
+
+model Zone {
+  name String @id
+}
+
+model Agent {
+  id                  String        @id
+  companyId           String        @map("company_id")
+  company             Company       @relation(fields: [companyId], references: [id])
+  name                String
+  zone                String
+  phone               String
+  phoneNormalized     String?       @map("phone_normalized")
+  status              String        @default("active")
+  efloat              Int           @default(0)
+  cash                Int           @default(0)
+  score               Int           @default(0)
+  visits              Int           @default(0)
+  officer             String
+  officerId           String?       @map("officer_id")
+  officerUser         User?         @relation("AgentOfficer", fields: [officerId], references: [id], onDelete: SetNull)
+  joined              String
+  lat                 Float
+  lng                 Float
+  kyc                 String        @default("pending")
+  lastVisit           String?       @map("last_visit")
+  nationalId          String?       @map("national_id")
+  businessType        String?       @map("business_type")
+  lastFloatSnapshotAt DateTime?     @map("last_float_snapshot_at")
+  floatBalanceAsOf    DateTime?     @map("float_balance_as_of")
+  lastFloatDeliveryId String?       @map("last_float_delivery_id")
+  kycDocs             KycDocument[]
+  visitsRel           Visit[]
+
+  @@unique([companyId, phoneNormalized])
+}
+
+model KycDocument {
+  id         Int      @id @default(autoincrement())
+  agentId    String   @map("agent_id")
+  agent      Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  docType    String   @map("doc_type")
+  fileName   String   @map("file_name")
+  filePath   String   @map("file_path")
+  mimeType   String?  @map("mime_type")
+  uploadedAt DateTime @default(now()) @map("uploaded_at")
+}
+
+model Officer {
+  id        Int     @id @default(autoincrement())
+  companyId String  @map("company_id")
+  company   Company @relation(fields: [companyId], references: [id])
+  name      String
+  agents    Int     @default(0)
+  visits    Int     @default(0)
+  target    Int     @default(25)
+  score     Int     @default(0)
+  zone      String
+}
+
+model Visit {
+  id               Int      @id @default(autoincrement())
+  companyId        String   @map("company_id")
+  company          Company  @relation(fields: [companyId], references: [id])
+  agentId          String   @map("agent_id")
+  agent            Agent    @relation(fields: [agentId], references: [id])
+  agentName        String   @map("agent_name")
+  officer          String
+  status           String   @default("done")
+  time             String
+  type             String
+  zone             String
+  visitDate        String   @map("visit_date")
+  efloat           Int?
+  cash             Int?
+  notes            String?
+  compliancePassed Int?     @map("compliance_passed")
+  complianceTotal  Int?     @map("compliance_total")
+  checkInLat       Float?   @map("check_in_lat")
+  checkInLng       Float?   @map("check_in_lng")
+  gpsVerified      Boolean  @default(false) @map("gps_verified")
+  distanceMeters   Float?   @map("distance_meters")
+  createdAt        DateTime @default(now()) @map("created_at")
+}
+
+model Alert {
+  id        Int     @id @default(autoincrement())
+  companyId String? @map("company_id")
+  company   Company? @relation(fields: [companyId], references: [id])
+  type      String
+  title     String
+  body      String
+  time      String
+  agentId   String? @map("agent_id")
+}
+
+model TrainingModule {
+  id        Int     @id @default(autoincrement())
+  companyId String  @map("company_id")
+  company   Company @relation(fields: [companyId], references: [id])
+  title     String
+  assigned  Int
+  completed Int
+  passing   Int
+}
+
+model FloatTrendPoint {
+  id        Int     @id @default(autoincrement())
+  companyId String  @map("company_id")
+  company   Company @relation(fields: [companyId], references: [id])
+  dayIndex  Int     @map("day_index")
+  label     String
+  efloat    Int
+  cash      Int
+}
+
+model FloatDelivery {
+  deliveryId   String   @id @map("delivery_id")
+  companyId    String   @map("company_id")
+  snapshotAt   DateTime @map("snapshot_at")
+  recordCount  Int      @map("record_count")
+  updatedCount Int      @map("updated_count")
+  skippedCount Int      @default(0) @map("skipped_count")
+  unknownCount Int      @default(0) @map("unknown_count")
+  receivedAt   DateTime @default(now()) @map("received_at")
+  status       String   @default("completed")
+}

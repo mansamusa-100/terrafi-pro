@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: field-pro-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fieldpro
+      POSTGRES_PASSWORD: fieldpro
+      POSTGRES_DB: fieldpro
+    ports:
+      - "5432:5432"
+    volumes:
+      - field_pro_pg:/var/lib/postgresql/data
+
+volumes:
+  field_pro_pg:
