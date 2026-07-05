@@ -15,6 +15,8 @@ const ACTION_LABELS: Record<string, string> = {
   'kyc.approved': 'KYC approved',
   'kyc.rejected': 'KYC rejected',
   'visit.scheduled': 'Visit scheduled',
+  'visit.logged': 'Visit logged',
+  'visit.logged_offline': 'Offline visit synced',
   'auth.login': 'Sign in'
 };
 

@@ -3,10 +3,12 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState
 } from 'react';
 import {
   api,
+  ApiError,
   Agent,
   Visit,
   Officer,
@@ -27,6 +29,16 @@ import {
 } from './api';
 import { useAuth } from './auth';
 import { Role } from './rbac';
+import {
+  enqueueVisit,
+  getDeviceId,
+  getQueuedVisitCount,
+  getQueuedVisits,
+  isBrowserOnline,
+  isNetworkError,
+  removeQueuedVisit,
+  updateQueuedVisitError
+} from './offline-visits';
 
 interface AppDataContextValue {
   agents: Agent[];
@@ -56,6 +68,9 @@ interface AppDataContextValue {
   visitSummary: VisitSummary | null;
   adrPerformance: AdrPerformance[];
   adrMyPerformance: AdrPerformance | null;
+  queuedVisitCount: number;
+  visitSyncing: boolean;
+  syncQueuedVisits: () => Promise<{ synced: number; failed: number }>;
   updateUserRole: (email: string, role: string) => Promise<void>;
   updateUser: (
     email: string,
@@ -123,6 +138,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [visitSummary, setVisitSummary] = useState<VisitSummary | null>(null);
   const [adrPerformance, setAdrPerformance] = useState<AdrPerformance[]>([]);
   const [adrMyPerformance, setAdrMyPerformance] = useState<AdrPerformance | null>(null);
+  const [queuedVisitCount, setQueuedVisitCount] = useState(getQueuedVisitCount);
+  const [visitSyncing, setVisitSyncing] = useState(false);
+  const visitSyncingRef = useRef(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -237,13 +255,124 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     [refresh]
   );
 
+  useEffect(() => {
+    const refreshCount = () => setQueuedVisitCount(getQueuedVisitCount());
+    window.addEventListener('offline-visits-changed', refreshCount);
+    window.addEventListener('online', refreshCount);
+    window.addEventListener('offline', refreshCount);
+    return () => {
+      window.removeEventListener('offline-visits-changed', refreshCount);
+      window.removeEventListener('online', refreshCount);
+      window.removeEventListener('offline', refreshCount);
+    };
+  }, []);
+
+  const syncQueuedVisits = useCallback(async () => {
+    if (!isBrowserOnline() || visitSyncingRef.current) {
+      return { synced: 0, failed: 0 };
+    }
+
+    const queue = getQueuedVisits();
+    if (queue.length === 0) {
+      setQueuedVisitCount(0);
+      return { synced: 0, failed: 0 };
+    }
+
+    visitSyncingRef.current = true;
+    setVisitSyncing(true);
+    let synced = 0;
+    let failed = 0;
+
+    try {
+      for (const item of queue) {
+        try {
+          await api.visits.create(item.body);
+          removeQueuedVisit(item.id);
+          synced++;
+        } catch (err) {
+          failed++;
+          const message =
+            err instanceof ApiError
+              ? err.message
+              : err instanceof Error
+                ? err.message
+                : 'Sync failed';
+          updateQueuedVisitError(item.id, message);
+          if (isNetworkError(err)) break;
+        }
+      }
+      setQueuedVisitCount(getQueuedVisitCount());
+      if (synced > 0) await refresh();
+      return { synced, failed };
+    } finally {
+      visitSyncingRef.current = false;
+      setVisitSyncing(false);
+    }
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (!['manager', 'adr'].includes(user.role)) return;
+
+    const trySync = () => {
+      if (isBrowserOnline() && getQueuedVisitCount() > 0) {
+        syncQueuedVisits().catch(() => {});
+      }
+    };
+
+    trySync();
+    window.addEventListener('online', trySync);
+    return () => window.removeEventListener('online', trySync);
+  }, [user, syncQueuedVisits]);
+
+  const queueVisitOffline = useCallback(
+    (body: Record<string, unknown>) => {
+      const agent = agents.find((a) => a.id === body.agentId);
+      const payload = {
+        ...body,
+        offline: true,
+        deviceId: getDeviceId()
+      };
+      const item = enqueueVisit(payload, {
+        agentName: agent?.name || String(body.agentId),
+        captureDistance:
+          typeof body.captureDistance === 'number' ? body.captureDistance : null,
+        gpsOkAtCapture: body.gpsOkAtCapture === true
+      });
+      setQueuedVisitCount(getQueuedVisitCount());
+      return {
+        agent: agent?.name || String(body.agentId),
+        agent_id: String(body.agentId),
+        officer: '',
+        status: 'queued',
+        time: new Date().toTimeString().slice(0, 5),
+        type: String(body.type || 'Visit'),
+        zone: agent?.zone || '',
+        offlineQueued: true,
+        queueId: item.id
+      } satisfies Visit;
+    },
+    [agents]
+  );
+
   const logVisit = useCallback(
     async (body: Record<string, unknown>) => {
-      const visit = await api.visits.create(body);
-      await refresh();
-      return visit;
+      const payload = { ...body, deviceId: getDeviceId() };
+      if (!isBrowserOnline()) {
+        return queueVisitOffline(payload);
+      }
+      try {
+        const visit = await api.visits.create(payload);
+        await refresh();
+        return visit;
+      } catch (err) {
+        if (isNetworkError(err)) {
+          return queueVisitOffline(payload);
+        }
+        throw err;
+      }
     },
-    [refresh]
+    [refresh, queueVisitOffline]
   );
 
   const scheduleVisit = useCallback(
@@ -408,6 +537,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         visitSummary,
         adrPerformance,
         adrMyPerformance,
+        queuedVisitCount,
+        visitSyncing,
+        syncQueuedVisits,
         scheduleVisit,
         updateVisit,
         dismissAlert

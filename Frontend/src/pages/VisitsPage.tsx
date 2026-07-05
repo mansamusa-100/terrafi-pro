@@ -24,6 +24,7 @@ import { useAuth } from '../lib/auth';
 import { can } from '../lib/rbac';
 import { ApiError, api } from '../lib/api';
 import type { Visit } from '../lib/api';
+import { getQueuedVisits } from '../lib/offline-visits';
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -67,7 +68,8 @@ export function VisitsPage() {
     visitSummary,
     logVisit,
     scheduleVisit,
-    updateVisit
+    updateVisit,
+    queuedVisitCount
   } = useAppData();
   const canLog = user ? can(user.role, 'logVisit') : false;
   const canSchedule = user ? can(user.role, 'scheduleVisit') : false;
@@ -89,6 +91,7 @@ export function VisitsPage() {
 
   const weeklyLabels = visitSummary?.weeklyVolume?.labels ?? [];
   const weeklyValues = visitSummary?.weeklyVolume?.values ?? [];
+  const queuedVisits = queuedVisitCount > 0 ? getQueuedVisits() : [];
 
   const sortedVisits = useMemo(() => {
     const data = [...visits];
@@ -198,6 +201,57 @@ export function VisitsPage() {
               <Plus className="w-4 h-4" />
               Log visit
             </button>
+          )}
+        </div>
+      )}
+
+      {queuedVisits.length > 0 && (
+        <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <div className="text-sm font-semibold text-amber-900 mb-2">
+            Queued offline ({queuedVisits.length})
+          </div>
+          <ul className="space-y-1.5">
+            {queuedVisits.map((q) => (
+              <li
+                key={q.id}
+                className="text-xs text-amber-900 flex justify-between gap-2 items-start">
+                <span>
+                  {q.agentName} · {String(q.body.type || 'Visit')}
+                  {q.captureDistance != null && (
+                    <span
+                      className={
+                        q.gpsOkAtCapture ? ' text-amber-700' : ' text-red-700'
+                      }>
+                      {' '}
+                      · {q.captureDistance}m
+                      {!q.gpsOkAtCapture && ' (over limit)'}
+                    </span>
+                  )}
+                  {q.body.capturedAt && (
+                    <span className="block text-[10px] text-amber-700">
+                      GPS at{' '}
+                      {new Date(String(q.body.capturedAt)).toLocaleString(
+                        undefined,
+                        { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }
+                      )}
+                    </span>
+                  )}
+                </span>
+                <span className="text-amber-700 shrink-0">
+                  {new Date(q.queuedAt).toLocaleString(undefined, {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {queuedVisits.some((q) => q.lastError) && (
+            <p className="text-[11px] text-red-700 mt-2">
+              Some visits failed to sync — use Sync in the banner above.
+            </p>
           )}
         </div>
       )}

@@ -7,6 +7,7 @@ import { CompanyDrawer } from './components/CompanyDrawer';
 import { VisitLogModal } from './components/VisitLogModal';
 import { AdrFieldBar } from './components/AdrFieldBar';
 import { PwaInstallBanner } from './components/PwaInstallBanner';
+import { OfflineVisitBanner } from './components/OfflineVisitBanner';
 import { SubscriptionBanner } from './components/SubscriptionBanner';
 import { PlatformDashboardPage } from './pages/PlatformDashboardPage';
 import { LoginScreen } from './components/LoginScreen';
@@ -25,8 +26,9 @@ import { UsersPage } from './pages/UsersPage';
 import { AuditPage } from './pages/AuditPage';
 import { AuthProvider, useAuth } from './lib/auth';
 import { AppDataProvider, useAppData } from './lib/data-context';
-import { canAccess, firstPageFor } from './lib/rbac';
+import { canAccess, firstPageFor, can } from './lib/rbac';
 import type { Agent } from './lib/api';
+import { toast } from 'sonner';
 
 function AuthenticatedApp({
   page,
@@ -36,7 +38,7 @@ function AuthenticatedApp({
   setPage: (p: string) => void;
 }) {
   const { user } = useAuth();
-  const { logVisit } = useAppData();
+  const { logVisit, queuedVisitCount, visitSyncing, syncQueuedVisits } = useAppData();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [searchQ, setSearchQ] = useState('');
@@ -63,6 +65,23 @@ function AuthenticatedApp({
 
   const activePage = canAccess(user.role, page) ? page : firstPageFor(user.role);
   const isAdrField = user.role === 'adr';
+  const canLogVisit = can(user.role, 'logVisit');
+
+  const handleSyncVisits = async () => {
+    const { synced, failed } = await syncQueuedVisits();
+    if (synced > 0) {
+      toast.success(
+        synced === 1 ? '1 visit synced' : `${synced} visits synced`
+      );
+    }
+    if (failed > 0) {
+      toast.error(
+        failed === 1
+          ? '1 visit could not sync — check GPS or connection'
+          : `${failed} visits could not sync`
+      );
+    }
+  };
 
   const pageComponents: Record<string, JSX.Element> = {
     dashboard:
@@ -112,6 +131,13 @@ function AuthenticatedApp({
           setSelectedAgent={setSelectedAgent}
         />
         {isAdrField && <PwaInstallBanner />}
+        {canLogVisit && (
+          <OfflineVisitBanner
+            count={queuedVisitCount}
+            syncing={visitSyncing}
+            onSync={handleSyncVisits}
+          />
+        )}
         <SubscriptionBanner />
         <main
           className={`flex-1 overflow-y-auto ${isAdrField ? 'pb-20 lg:pb-0 adr-touch' : ''}`}>

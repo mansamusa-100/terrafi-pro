@@ -178,6 +178,9 @@ model Visit {
   checkInLng       Float?   @map("check_in_lng")
   gpsVerified      Boolean  @default(false) @map("gps_verified")
   distanceMeters   Float?   @map("distance_meters")
+  offlineLogged    Boolean  @default(false) @map("offline_logged")
+  capturedAt       DateTime? @map("captured_at")
+  deviceId         String?  @map("device_id")
   createdAt        DateTime @default(now()) @map("created_at")
 }
 

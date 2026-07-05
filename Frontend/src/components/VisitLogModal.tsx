@@ -13,7 +13,12 @@ import { useAppData } from '../lib/data-context';
 import type { Agent } from '../lib/api';
 import { ApiError } from '../lib/api';
 import { cn } from '../lib/utils';
-import { captureDeviceLocation } from '../lib/geolocation';
+import {
+  captureDeviceLocation,
+  verifyGpsCheckIn,
+  GPS_VERIFY_RADIUS_M
+} from '../lib/geolocation';
+import { isBrowserOnline } from '../lib/offline-visits';
 interface VisitLogModalProps {
   open: boolean;
   onClose: () => void;
@@ -53,6 +58,8 @@ export function VisitLogModal({
   const [checkInLat, setCheckInLat] = useState<number | null>(null);
   const [checkInLng, setCheckInLng] = useState<number | null>(null);
   const [checkInDistance, setCheckInDistance] = useState<number | null>(null);
+  const [captureGpsOk, setCaptureGpsOk] = useState<boolean | null>(null);
+  const [capturedAt, setCapturedAt] = useState<string | null>(null);
   const [efloat, setEfloat] = useState('');
   const [cash, setCash] = useState('');
   const [compliance, setCompliance] = useState<Record<string, boolean>>({});
@@ -63,6 +70,15 @@ export function VisitLogModal({
   useEffect(() => {
     if (open && presetAgentId) setAgentId(presetAgentId);
   }, [open, presetAgentId]);
+
+  useEffect(() => {
+    setCheckedIn(false);
+    setCheckInLat(null);
+    setCheckInLng(null);
+    setCheckInDistance(null);
+    setCaptureGpsOk(null);
+    setCapturedAt(null);
+  }, [agentId]);
   if (!open) return null;
   const agent = agents.find((a) => a.id === agentId);
   const reset = () => {
@@ -73,6 +89,8 @@ export function VisitLogModal({
     setCheckInLat(null);
     setCheckInLng(null);
     setCheckInDistance(null);
+    setCaptureGpsOk(null);
+    setCapturedAt(null);
     setEfloat('');
     setCash('');
     setCompliance({});
@@ -93,12 +111,23 @@ export function VisitLogModal({
     setCheckingIn(true);
     try {
       const { lat, lng } = await captureDeviceLocation();
+      const gps = verifyGpsCheckIn(agent.lat, agent.lng, lat, lng);
       setCheckInLat(lat);
       setCheckInLng(lng);
+      setCheckInDistance(gps.distanceMeters);
+      setCaptureGpsOk(gps.verified);
+      setCapturedAt(new Date().toISOString());
       setCheckedIn(true);
-      toast.success('GPS position captured', {
-        description: `Verifying distance to ${agent.name}…`
-      });
+
+      if (gps.verified) {
+        toast.success('GPS check-in OK', {
+          description: `${gps.distanceMeters}m from ${agent.name} (within ${GPS_VERIFY_RADIUS_M}m)`
+        });
+      } else {
+        toast.warning('You appear far from the agent', {
+          description: `${gps.distanceMeters ?? '?'}m away (max ${GPS_VERIFY_RADIUS_M}m). Recheck in at the shop or this visit may fail to sync.`
+        });
+      }
     } catch (err) {
       toast.error('GPS check-in failed', {
         description: err instanceof Error ? err.message : 'Could not get location'
@@ -122,14 +151,27 @@ export function VisitLogModal({
         compliancePassed: compliancePassed,
         complianceTotal: COMPLIANCE_ITEMS.length,
         checkInLat,
-        checkInLng
-      })) as { distance_meters?: number };
-      if (result?.distance_meters != null) {
-        setCheckInDistance(result.distance_meters);
+        checkInLng,
+        capturedAt,
+        captureDistance: checkInDistance,
+        gpsOkAtCapture: captureGpsOk === true
+      })) as { distance_meters?: number; offlineQueued?: boolean };
+
+      if (result?.offlineQueued) {
+        const offlineNote = !isBrowserOnline()
+          ? 'Will sync when you have network — GPS was captured at the agent.'
+          : 'Saved locally — will sync shortly.';
+        toast.success('Visit saved offline', {
+          description: `${agent?.name || 'Agent'} · ${offlineNote}`
+        });
+      } else {
+        if (result?.distance_meters != null) {
+          setCheckInDistance(result.distance_meters);
+        }
+        toast.success('Visit logged', {
+          description: `${agent?.name || 'Agent'} · ${compliancePassed}/${COMPLIANCE_ITEMS.length} compliance checks passed`
+        });
       }
-      toast.success('Visit logged', {
-        description: `${agent?.name || 'Agent'} · ${compliancePassed}/${COMPLIANCE_ITEMS.length} compliance checks passed`
-      });
       handleClose();
     } catch (err) {
       toast.error(
@@ -233,17 +275,21 @@ export function VisitLogModal({
             <div
               className={cn(
                 'rounded-xl border p-4 flex items-center gap-4',
-                checkedIn ?
-                'border-apsGreen/30 bg-apsGreenLt/40' :
-                'border-slate-200 bg-slate-50'
+                !checkedIn
+                  ? 'border-slate-200 bg-slate-50'
+                  : captureGpsOk
+                    ? 'border-apsGreen/30 bg-apsGreenLt/40'
+                    : 'border-apsAmber/40 bg-apsAmberLt/40'
               )}>
               
               <div
                 className={cn(
                   'w-10 h-10 rounded-lg flex items-center justify-center shrink-0',
-                  checkedIn ?
-                  'bg-apsGreen text-white' :
-                  'bg-white text-slate-400 border border-slate-200'
+                  !checkedIn
+                    ? 'bg-white text-slate-400 border border-slate-200'
+                    : captureGpsOk
+                      ? 'bg-apsGreen text-white'
+                      : 'bg-apsAmber text-white'
                 )}>
                 
                 {checkedIn ?
@@ -257,23 +303,64 @@ export function VisitLogModal({
                   GPS visit verification
                 </div>
                 <div className="text-xs text-slate-500">
-                  {checkedIn ?
-                  (checkInDistance != null ?
-                    `Verified · ${checkInDistance}m from agent` :
-                    'GPS captured — will verify on submit') :
-                  'Verify you are physically at the agent'}
+                  {checkedIn ? (
+                    checkInDistance != null ? (
+                      captureGpsOk ? (
+                        <>
+                          Verified at capture · {checkInDistance}m from agent
+                          {capturedAt && (
+                            <span className="block text-[10px] text-slate-400 mt-0.5">
+                              GPS locked{' '}
+                              {new Date(capturedAt).toLocaleTimeString(undefined, {
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                              {!isBrowserOnline() && ' · offline queue'}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-amber-800 font-medium">
+                            {checkInDistance}m from agent — over {GPS_VERIFY_RADIUS_M}m limit
+                          </span>
+                          <span className="block text-[10px] text-amber-700 mt-0.5">
+                            Move closer and tap Check in again before leaving
+                          </span>
+                        </>
+                      )
+                    ) : (
+                      'GPS captured'
+                    )
+                  ) : (
+                    'Check in while at the agent — coordinates are saved for later sync'
+                  )}
                 </div>
               </div>
-              {!checkedIn &&
-              <button
-                onClick={checkIn}
-                disabled={checkingIn || !agentId}
-                className="flex items-center gap-2 bg-apsBlue hover:bg-apsBlueMid text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-40">
-                
+              {checkedIn && !captureGpsOk && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCheckedIn(false);
+                    setCheckInLat(null);
+                    setCheckInLng(null);
+                    setCheckInDistance(null);
+                    setCaptureGpsOk(null);
+                    setCapturedAt(null);
+                  }}
+                  className="text-xs font-medium text-apsBlue hover:underline shrink-0">
+                  Recheck
+                </button>
+              )}
+              {!checkedIn && (
+                <button
+                  onClick={checkIn}
+                  disabled={checkingIn || !agentId}
+                  className="flex items-center gap-2 bg-apsBlue hover:bg-apsBlueMid text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-40">
                   {checkingIn && <Loader2 className="w-4 h-4 animate-spin" />}
                   {checkingIn ? 'Checking…' : 'Check in'}
                 </button>
-              }
+              )}
             </div>
 
             {/* Float reporting */}

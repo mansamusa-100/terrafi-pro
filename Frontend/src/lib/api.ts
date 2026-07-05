@@ -133,6 +133,8 @@ export interface Visit {
   zone: string;
   visit_date?: string;
   notes?: string | null;
+  offlineQueued?: boolean;
+  queueId?: string;
 }
 
 export interface VisitSummary {

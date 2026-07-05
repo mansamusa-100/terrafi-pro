@@ -200,7 +200,10 @@ router.post('/', requireRoles('manager', 'adr'), async (req, res, next) => {
       compliancePassed,
       complianceTotal,
       checkInLat,
-      checkInLng
+      checkInLng,
+      offline,
+      capturedAt,
+      deviceId
     } = req.body;
 
     if (!agentId || !type) {
@@ -229,6 +232,12 @@ router.post('/', requireRoles('manager', 'adr'), async (req, res, next) => {
     const time = now.toTimeString().slice(0, 5);
     const visitDate = todayISO();
     const officer = req.user.role === 'adr' ? req.user.name : agent.officer;
+
+    const capturedAtDate =
+      capturedAt && !Number.isNaN(Date.parse(capturedAt))
+        ? new Date(capturedAt)
+        : null;
+    const offlineLogged = Boolean(offline);
 
     const newEfloat = efloat ?? agent.efloat;
     const newCash = cash ?? agent.cash;
@@ -261,7 +270,10 @@ router.post('/', requireRoles('manager', 'adr'), async (req, res, next) => {
         checkInLat,
         checkInLng,
         gpsVerified: true,
-        distanceMeters: gps.distanceMeters
+        distanceMeters: gps.distanceMeters,
+        offlineLogged,
+        capturedAt: capturedAtDate,
+        deviceId: deviceId?.trim() || null
       };
 
       if (pending) {
@@ -305,6 +317,27 @@ router.post('/', requireRoles('manager', 'adr'), async (req, res, next) => {
     await syncFloatAlertsForAgent(agentId);
     await notifyVisitLogged(visit, agent, req.user);
 
+    await logAudit({
+      scope: 'company',
+      companyId,
+      actor: req.user,
+      action: offlineLogged ? 'visit.logged_offline' : 'visit.logged',
+      entityType: 'visit',
+      entityId: String(visit.id),
+      details: {
+        agentName: agent.name,
+        type,
+        distanceMeters: gps.distanceMeters,
+        ...(offlineLogged && capturedAtDate
+          ? {
+              capturedAt: capturedAtDate.toISOString(),
+              syncedAt: now.toISOString(),
+              deviceId: deviceId?.trim() || null
+            }
+          : {})
+      }
+    });
+
     res.status(201).json({
       id: visit.id,
       agent: visit.agentName,
@@ -314,7 +347,8 @@ router.post('/', requireRoles('manager', 'adr'), async (req, res, next) => {
       type: visit.type,
       zone: visit.zone,
       gps_verified: visit.gpsVerified,
-      distance_meters: visit.distanceMeters
+      distance_meters: visit.distanceMeters,
+      offline_logged: visit.offlineLogged
     });
   } catch (err) {
     next(err);
