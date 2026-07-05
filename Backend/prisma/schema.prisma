@@ -17,6 +17,7 @@ model Company {
   mrr           Int               @default(0)
   since         String
   contactEmail  String?           @map("contact_email")
+  logoPath      String?           @map("logo_path")
   registeredAt  DateTime          @default(now()) @map("registered_at")
 
   // DirectPay / EasyPay subscription billing

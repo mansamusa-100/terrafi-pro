@@ -48,7 +48,9 @@ body {
 
   @media (max-width: 1023px) {
     .adr-touch button,
-    .adr-touch a {
+    .adr-touch a,
+    .field-touch button,
+    .field-touch a {
       min-height: 44px;
     }
   }

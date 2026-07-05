@@ -9,6 +9,7 @@ import {
   Phone
 } from 'lucide-react';
 import type { Agent } from '../lib/api';
+import { useAuth } from '../lib/auth';
 import { initials, avatarColor } from '../lib/data';
 import { cn } from '../lib/utils';
 
@@ -27,6 +28,8 @@ export function AgentCreatedSuccess({
   onDone,
   onRegisterAnother
 }: AgentCreatedSuccessProps) {
+  const { user } = useAuth();
+  const networkName = user?.branding?.title ?? user?.company ?? 'your company';
   const ac = avatarColor(agent.name);
 
   return (
@@ -60,7 +63,7 @@ export function AgentCreatedSuccess({
       </h2>
       <p className="text-slate-600 text-sm mt-2 max-w-sm leading-relaxed">
         <span className="font-semibold text-slate-900">{agent.name}</span> has
-        been registered on the APS WALLET agent network.
+        been registered on the {networkName} agent network.
       </p>
 
       <div className="w-full mt-6 rounded-xl border border-slate-200 bg-slate-50 divide-y divide-slate-100 text-left">

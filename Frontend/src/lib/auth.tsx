@@ -14,6 +14,7 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   switchRole: (email: string) => Promise<void>;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -67,9 +68,14 @@ export function AuthProvider({
     [onUserChange]
   );
 
+  const refreshProfile = useCallback(async () => {
+    const { user: u } = await api.me();
+    setUser(u);
+  }, []);
+
   return (
     <AuthContext.Provider
-      value={{ user, loading, login, logout, switchRole }}>
+      value={{ user, loading, login, logout, switchRole, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );

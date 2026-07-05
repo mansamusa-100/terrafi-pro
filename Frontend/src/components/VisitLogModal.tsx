@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   X,
   Crosshair,
@@ -13,6 +13,7 @@ import { useAppData } from '../lib/data-context';
 import type { Agent } from '../lib/api';
 import { ApiError } from '../lib/api';
 import { cn } from '../lib/utils';
+import { useAuth } from '../lib/auth';
 import {
   captureDeviceLocation,
   verifyGpsCheckIn,
@@ -32,8 +33,7 @@ const VISIT_TYPES = [
 'Equipment check',
 'Issue follow-up'];
 
-const COMPLIANCE_ITEMS = [
-'APS WALLET branding clearly displayed',
+const BASE_COMPLIANCE_ITEMS = [
 'Agent ID & licence visible to customers',
 'KYC documents current and on file',
 'Transaction logbook maintained',
@@ -50,7 +50,13 @@ export function VisitLogModal({
   presetAgentId,
   onSubmit
 }: VisitLogModalProps) {
+  const { user } = useAuth();
   const { agents } = useAppData();
+  const companyLabel = user?.branding?.title ?? user?.company ?? 'Company';
+  const complianceItems = useMemo(
+    () => [`${companyLabel} branding clearly displayed`, ...BASE_COMPLIANCE_ITEMS],
+    [companyLabel]
+  );
   const [agentId, setAgentId] = useState(presetAgentId || '');
   const [visitType, setVisitType] = useState(VISIT_TYPES[0]);
   const [checkedIn, setCheckedIn] = useState(false);
@@ -136,7 +142,7 @@ export function VisitLogModal({
       setCheckingIn(false);
     }
   };
-  const compliancePassed = COMPLIANCE_ITEMS.filter((i) => compliance[i]).length;
+  const compliancePassed = complianceItems.filter((i) => compliance[i]).length;
   const canSubmit =
     agentId && checkedIn && checkInLat != null && checkInLng != null && efloat.trim() !== '';
   const handleSubmit = async () => {
@@ -149,7 +155,7 @@ export function VisitLogModal({
         cash: cash ? parseInt(cash, 10) : undefined,
         notes,
         compliancePassed: compliancePassed,
-        complianceTotal: COMPLIANCE_ITEMS.length,
+        complianceTotal: complianceItems.length,
         checkInLat,
         checkInLng,
         capturedAt,
@@ -169,7 +175,7 @@ export function VisitLogModal({
           setCheckInDistance(result.distance_meters);
         }
         toast.success('Visit logged', {
-          description: `${agent?.name || 'Agent'} · ${compliancePassed}/${COMPLIANCE_ITEMS.length} compliance checks passed`
+          description: `${agent?.name || 'Agent'} · ${compliancePassed}/${complianceItems.length} compliance checks passed`
         });
       }
       handleClose();
@@ -408,7 +414,7 @@ export function VisitLogModal({
                 Compliance checklist
               </div>
               <div className="divide-y divide-slate-50">
-                {COMPLIANCE_ITEMS.map((item) =>
+                {complianceItems.map((item) =>
                 <Toggle
                   key={item}
                   label={item}
@@ -497,7 +503,7 @@ export function VisitLogModal({
           {/* Footer */}
           <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-between shrink-0">
             <span className="text-xs text-slate-500">
-              {compliancePassed}/{COMPLIANCE_ITEMS.length} compliance checks
+              {compliancePassed}/{complianceItems.length} compliance checks
             </span>
             <div className="flex items-center gap-2">
               <button

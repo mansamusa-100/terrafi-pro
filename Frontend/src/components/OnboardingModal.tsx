@@ -55,6 +55,7 @@ export function OnboardingModal({
 }: OnboardingModalProps) {
   const { zones: fallbackZones, users } = useAppData();
   const { user } = useAuth();
+  const companyLabel = user?.branding?.title ?? user?.company ?? 'your company';
   const adrs = users.filter((u) => u.role === 'adr' && u.id);
   const isManager = user ? can(user.role, 'editAgent') : false;
   const canAssignAdr =
@@ -292,7 +293,7 @@ export function OnboardingModal({
                 <p className="text-white/60 text-xs mt-0.5">
                   {createdAgent
                     ? 'Successfully added to your network'
-                    : 'Complete all steps to register an APS WALLET agent'}
+                    : `Complete all steps to register a ${companyLabel} agent`}
                 </p>
               </div>
               <button

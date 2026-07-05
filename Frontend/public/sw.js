@@ -1,4 +1,4 @@
-const CACHE = 'field-pro-v1';
+const CACHE = 'field-pro-v2';
 const SHELL = ['/', '/index.html', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {

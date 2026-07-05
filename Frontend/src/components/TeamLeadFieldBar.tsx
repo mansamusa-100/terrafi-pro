@@ -1,7 +1,7 @@
-import { LayoutDashboard, Map, Users } from 'lucide-react';
+import { LayoutDashboard, Map, MapPin, Users } from 'lucide-react';
 import { MobileFieldBar } from './MobileFieldBar';
 
-interface AdrFieldBarProps {
+interface TeamLeadFieldBarProps {
   active: string;
   setActive: (page: string) => void;
   onLogVisit: () => void;
@@ -9,18 +9,23 @@ interface AdrFieldBarProps {
 
 const ITEMS = [
   { id: 'dashboard', icon: LayoutDashboard, label: 'Home' },
+  { id: 'agents', icon: Users, label: 'Agents' },
   { id: 'visits', icon: Map, label: 'Visits' },
-  { id: 'agents', icon: Users, label: 'Agents' }
+  { id: 'map', icon: MapPin, label: 'Map' }
 ] as const;
 
-export function AdrFieldBar({ active, setActive, onLogVisit }: AdrFieldBarProps) {
+export function TeamLeadFieldBar({
+  active,
+  setActive,
+  onLogVisit
+}: TeamLeadFieldBarProps) {
   return (
     <MobileFieldBar
       active={active}
       setActive={setActive}
       items={ITEMS}
       fab={{ onClick: onLogVisit, ariaLabel: 'Log visit' }}
-      ariaLabel="ADR field navigation"
+      ariaLabel="Team lead field navigation"
     />
   );
 }

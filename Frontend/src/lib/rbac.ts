@@ -25,15 +25,23 @@ export type Role =
 'agent' |
 'teller';
 
+export interface AppBranding {
+  title: string;
+  subtitle: string;
+  logo_url: string | null;
+}
+
 export interface AppUser {
   id: string;
   name: string;
   email: string;
   role: Role;
   company: string;
+  company_id?: string | null;
   scope: string;
   zone?: string | null;
   supervised_adr_ids?: string[];
+  branding: AppBranding;
 }
 
 export const ROLE_META: Record<

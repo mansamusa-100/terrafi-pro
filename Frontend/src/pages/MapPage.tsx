@@ -126,8 +126,8 @@ export function MapPage({ setSelectedAgent }: MapPageProps) {
         </div>
       </div>
 
-      <div className="flex-1 grid grid-cols-[1fr_300px] gap-4 min-h-0">
-        <div className="relative rounded-xl overflow-hidden border border-slate-200 shadow-sm">
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-4 min-h-0">
+        <div className="relative rounded-xl overflow-hidden border border-slate-200 shadow-sm min-h-[min(50dvh,420px)] lg:min-h-0">
           <MapContainer
             center={[13.45, -16.35]}
             zoom={9}
@@ -201,7 +201,7 @@ export function MapPage({ setSelectedAgent }: MapPageProps) {
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col min-h-0">
+        <div className="bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col min-h-0 max-h-[min(40dvh,360px)] lg:max-h-none">
           <div className="px-4 py-3 border-b border-slate-100 shrink-0">
             <div className="text-sm font-semibold text-slate-900">
               {filtered.length} agents shown

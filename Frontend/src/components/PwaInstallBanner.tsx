@@ -41,7 +41,7 @@ export function PwaInstallBanner() {
       <div className="flex-1 min-w-0">
         <div className="font-semibold text-slate-900">Install Field-Pro</div>
         <div className="text-xs text-slate-600">
-          Add to your home screen for quick field visits offline-ready shell.
+          Add to your home screen for quick field access with offline-ready shell.
         </div>
       </div>
       <button

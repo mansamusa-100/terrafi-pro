@@ -6,8 +6,10 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const kycUploadDir = path.join(__dirname, '../uploads/kyc');
 const locationUploadDir = path.join(__dirname, '../uploads/location');
+const brandingUploadDir = path.join(__dirname, '../uploads/branding');
 fs.mkdirSync(kycUploadDir, { recursive: true });
 fs.mkdirSync(locationUploadDir, { recursive: true });
+fs.mkdirSync(brandingUploadDir, { recursive: true });
 
 function kycFileFilter(_req, file, cb) {
   const allowed = [
@@ -68,4 +70,19 @@ export const locationPhotoUpload = multer({
   fileFilter: imageFileFilter
 });
 
-export { kycUploadDir, locationUploadDir };
+const brandingStorage = multer.diskStorage({
+  destination: brandingUploadDir,
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || '.png';
+    const companyId = req.user?.companyId || 'company';
+    cb(null, `${companyId}-logo-${Date.now()}${ext}`);
+  }
+});
+
+export const companyLogoUpload = multer({
+  storage: brandingStorage,
+  limits: { fileSize: 2 * 1024 * 1024 },
+  fileFilter: imageFileFilter
+});
+
+export { kycUploadDir, locationUploadDir, brandingUploadDir };

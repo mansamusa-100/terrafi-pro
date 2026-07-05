@@ -370,6 +370,10 @@ export interface OnboardingConfig {
 
 export interface CompanySettings {
   company_id: string;
+  branding: {
+    company_name: string;
+    logo_url: string | null;
+  };
   network: {
     default_float_threshold: number;
     visit_frequency_target: number;
@@ -677,7 +681,18 @@ export const api = {
         method: 'PATCH',
         body: JSON.stringify(body)
       });
-    }
+    },
+    uploadLogo: (file: File) => {
+      const form = new FormData();
+      form.append('file', file);
+      return request<{ logo_url: string; company_name: string }>(
+        '/settings/logo',
+        { method: 'POST', body: form },
+        false
+      );
+    },
+    deleteLogo: () =>
+      request<{ logo_url: null }>('/settings/logo', { method: 'DELETE' })
   },
 
   billing: {

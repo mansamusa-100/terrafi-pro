@@ -6,6 +6,7 @@ import {
   getOnboardingConfig,
   parseStringArray
 } from './onboarding-config.js';
+import { companyLogoUrl } from './branding.js';
 
 export const COVERAGE_MODELS = ['Officer-based', 'Zone-based', 'Hybrid'];
 
@@ -69,10 +70,18 @@ export async function getOrCreateCompanySettings(companyId) {
   return row;
 }
 
-export async function serializeCompanySettings(row) {
+export async function serializeCompanySettings(row, company = null) {
   const onboarding = await getOnboardingConfig(row.companyId);
+  let co = company;
+  if (!co) {
+    co = await prisma.company.findUnique({ where: { id: row.companyId } });
+  }
   return {
     company_id: row.companyId,
+    branding: {
+      company_name: co?.name ?? '',
+      logo_url: companyLogoUrl(co?.logoPath ?? null)
+    },
     network: {
       default_float_threshold: row.defaultFloatThreshold,
       visit_frequency_target: row.visitFrequencyTarget,

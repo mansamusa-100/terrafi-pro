@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuth } from '../lib/auth';
 import { navFor, ROLE_META } from '../lib/rbac';
+import { BrandMark } from './BrandMark';
 
 interface SidebarProps {
   active: string;
@@ -33,6 +34,13 @@ export function Sidebar({
   if (!user) return null;
   const nav = navFor(user.role);
   const meta = ROLE_META[user.role];
+  const branding =
+    user.branding ??
+    ({
+      title: user.company || 'Field-Pro',
+      subtitle: 'Agent Network',
+      logo_url: null
+    } as const);
 
   const handleNav = (id: string) => {
     setActive(id);
@@ -65,19 +73,19 @@ export function Sidebar({
               setCollapsed(!collapsed);
             }
           }}>
-          <div className="w-8 h-8 bg-apsBlue rounded-lg flex items-center justify-center shrink-0 shadow-sm">
-            <span className="text-white text-sm font-bold">A</span>
-          </div>
+          <BrandMark branding={branding} size="sm" />
           <div
             className={cn(
-              'overflow-hidden flex-1 lg:block',
+              'overflow-hidden flex-1 lg:block min-w-0',
               collapsed && 'lg:hidden'
             )}>
-            <div className="text-white text-sm font-semibold whitespace-nowrap tracking-wide">
-              APS WALLET
+            <div
+              className="text-white text-sm font-semibold tracking-wide truncate"
+              title={branding.title}>
+              {branding.title}
             </div>
-            <div className="text-white/50 text-[10px] whitespace-nowrap mt-0.5 uppercase tracking-wider font-medium">
-              Agent Network
+            <div className="text-white/50 text-[10px] whitespace-nowrap mt-0.5 uppercase tracking-wider font-medium truncate">
+              {branding.subtitle}
             </div>
           </div>
           <button

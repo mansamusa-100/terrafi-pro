@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma.js';
 import { loadSupervisedAdrs, isTeamLeadRole } from '../lib/team-lead.js';
+import { resolveBranding } from '../lib/branding.js';
 
 export async function loadUser(req, res, next) {
   try {
@@ -196,14 +197,17 @@ export function serializeAgent(agent, extra = {}) {
 }
 
 export function serializeAppUser(row, supervised = null) {
+  const branding = resolveBranding(row.role, row.company ?? null);
   return {
     id: row.id,
     name: row.name,
     email: row.email,
     role: row.role,
-    company: row.company?.name || 'ANMS Platform',
+    company: row.company?.name || branding.title,
+    company_id: row.companyId ?? null,
     scope: row.scope,
     zone: row.zone ?? null,
-    supervised_adr_ids: supervised?.supervisedAdrIds ?? []
+    supervised_adr_ids: supervised?.supervisedAdrIds ?? [],
+    branding
   };
 }

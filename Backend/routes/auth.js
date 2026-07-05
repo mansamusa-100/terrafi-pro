@@ -48,34 +48,21 @@ router.post('/login', async (req, res, next) => {
 
 router.get('/me', authMiddleware, loadUser, async (req, res, next) => {
   try {
-    let subscription = null;
-    if (req.user.companyId) {
-      const company = await prisma.company.findUnique({
-        where: { id: req.user.companyId }
-      });
-      if (company) subscription = cachedCompanySubscription(company);
+    const row = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      include: { company: true }
+    });
+    if (!row) {
+      return res.status(401).json({ error: 'User not found' });
     }
 
-    const supervised =
-      req.user.role === 'team_lead'
-        ? await loadSupervisedAdrs(req.user.id)
-        : null;
+    let subscription = null;
+    if (row.companyId && row.company) {
+      subscription = cachedCompanySubscription(row.company);
+    }
 
     res.json({
-      user: {
-        ...serializeAppUser(
-          {
-            id: req.user.id,
-            name: req.user.name,
-            email: req.user.email,
-            role: req.user.role,
-            company: { name: req.user.company },
-            scope: req.user.scope,
-            zone: req.user.zone
-          },
-          supervised
-        )
-      },
+      user: await toAppUser(row),
       subscription
     });
   } catch (err) {
@@ -85,16 +72,16 @@ router.get('/me', authMiddleware, loadUser, async (req, res, next) => {
 
 router.get('/demo-users', async (_req, res, next) => {
   try {
-  const order = [
-    'system_owner',
-    'platform_staff',
-    'manager',
-    'internal',
-    'team_lead',
-    'adr',
-    'agent',
-    'teller'
-  ];
+    const order = [
+      'system_owner',
+      'platform_staff',
+      'manager',
+      'internal',
+      'team_lead',
+      'adr',
+      'agent',
+      'teller'
+    ];
     const users = await prisma.user.findMany({
       where: { role: { in: order } },
       include: { company: true }
@@ -114,7 +101,7 @@ router.get('/demo-users', async (_req, res, next) => {
         email: u.email,
         role: u.role,
         name: u.name,
-        company: u.company?.name || 'ANMS Platform'
+        company: u.company?.name || 'Field-Pro Platform'
       }))
     );
   } catch (err) {

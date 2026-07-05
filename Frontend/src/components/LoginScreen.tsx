@@ -1,10 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { Lock, Mail, ArrowRight, Loader2, Building2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { ROLE_META, Role } from '../lib/rbac';
 import { useAuth } from '../lib/auth';
 import { api, DemoUser, ApiError } from '../lib/api';
 import { cn } from '../lib/utils';
-import { toast } from 'sonner';
+import { BrandMark } from './BrandMark';
+
+const PLATFORM_BRANDING = {
+  title: 'Field-Pro',
+  subtitle: 'Agent Network Management',
+  logo_url: null as string | null
+};
 
 type Mode = 'signin' | 'register';
 
@@ -113,15 +120,13 @@ export function LoginScreen() {
 
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-12">
-            <div className="w-10 h-10 bg-apsBlue rounded-xl flex items-center justify-center shadow-lg">
-              <span className="text-white text-lg font-bold">A</span>
-            </div>
+            <BrandMark branding={PLATFORM_BRANDING} />
             <div>
               <div className="text-white text-lg font-bold tracking-wide">
-                Field-Pro
+                {PLATFORM_BRANDING.title}
               </div>
               <div className="text-white/50 text-xs uppercase tracking-widest font-medium">
-                Agent Network Management
+                {PLATFORM_BRANDING.subtitle}
               </div>
             </div>
           </div>

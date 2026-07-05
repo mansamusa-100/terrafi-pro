@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Upload, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ApiError, api, CompanySettings, OnboardingConfig } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { can } from '../lib/rbac';
 import { cn } from '../lib/utils';
 import { BillingCard } from '../components/BillingCard';
+import { BrandMark } from '../components/BrandMark';
 
 type FieldConfig = {
   id: keyof CompanySettingsPatchKeys;
@@ -251,7 +252,7 @@ function OnboardingListsSection({
 }
 
 export function SettingsPage() {
-  const { user } = useAuth();
+  const { user, refreshProfile } = useAuth();
   const canEdit = user ? can(user.role, 'configure') : false;
   const canBilling = user ? can(user.role, 'manageBilling') : false;
   const [settings, setSettings] = useState<CompanySettings | null>(null);
@@ -259,6 +260,7 @@ export function SettingsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
+  const [logoUploading, setLogoUploading] = useState(false);
 
   const loadSettings = useCallback(async () => {
     setLoading(true);
@@ -309,6 +311,51 @@ export function SettingsPage() {
     }
   };
 
+  const handleLogoUpload = async (file: File) => {
+    setLogoUploading(true);
+    try {
+      const result = await api.settings.uploadLogo(file);
+      await refreshProfile();
+      setSettings((prev) =>
+        prev
+          ? {
+              ...prev,
+              branding: {
+                company_name: result.company_name,
+                logo_url: result.logo_url
+              }
+            }
+          : prev
+      );
+      toast.success('Company logo updated');
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Logo upload failed');
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
+  const handleLogoRemove = async () => {
+    setLogoUploading(true);
+    try {
+      await api.settings.deleteLogo();
+      await refreshProfile();
+      setSettings((prev) =>
+        prev
+          ? {
+              ...prev,
+              branding: { ...prev.branding, logo_url: null }
+            }
+          : prev
+      );
+      toast.success('Company logo removed');
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Remove failed');
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="page-pad max-w-4xl flex items-center gap-2 text-sm text-slate-500">
@@ -329,6 +376,66 @@ export function SettingsPage() {
   return (
     <div className="page-pad max-w-4xl">
       {canBilling && <BillingCard />}
+
+      {canEdit && settings.branding && (
+        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm mb-4">
+          <h3 className="text-sm font-semibold text-slate-900 mb-1">
+            Company branding
+          </h3>
+          <p className="text-xs text-slate-500 mb-4">
+            Shown in the sidebar for everyone in your organisation. Your company
+            name comes from registration; upload a logo to personalise it.
+          </p>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            <BrandMark
+              branding={{
+                title: settings.branding.company_name,
+                subtitle: 'Agent Network',
+                logo_url: settings.branding.logo_url
+              }}
+              size="md"
+            />
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold text-slate-900">
+                {settings.branding.company_name}
+              </div>
+              <div className="text-xs text-slate-500 mt-0.5">Agent Network</div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-apsBlue text-white text-xs font-medium cursor-pointer hover:bg-apsBlueMid disabled:opacity-60">
+                <Upload className="w-3.5 h-3.5" />
+                {logoUploading ? 'Uploading…' : 'Upload logo'}
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  aria-label="Upload company logo"
+                  disabled={logoUploading}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleLogoUpload(file);
+                    e.target.value = '';
+                  }}
+                />
+              </label>
+              {settings.branding.logo_url && (
+                <button
+                  type="button"
+                  disabled={logoUploading}
+                  onClick={handleLogoRemove}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60">
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Remove
+                </button>
+              )}
+            </div>
+          </div>
+          <p className="text-[10px] text-slate-400 mt-3">
+            PNG, JPG or WebP · max 2 MB · square images work best
+          </p>
+        </div>
+      )}
+
       {EDITABLE_SECTIONS.map((section) => (
         <div
           key={section.title}
