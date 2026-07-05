@@ -50,7 +50,10 @@ export function UsersPage() {
     (can(user.role, 'managePlatformUsers') ||
       can(user.role, 'manageCompanyUsers'));
   const canEditUsers =
-    user && !isPlatform && can(user.role, 'editUsers');
+    user &&
+    (isPlatform
+      ? can(user.role, 'managePlatformUsers')
+      : can(user.role, 'editUsers'));
   const inviteRoles = isPlatform ? PLATFORM_INVITE_ROLES : COMPANY_INVITE_ROLES;
   const editableRoles = isPlatform ? PLATFORM_INVITE_ROLES : COMPANY_INVITE_ROLES;
 
@@ -70,7 +73,7 @@ export function UsersPage() {
     try {
       await updateUser(editTarget.email, {
         name: editForm.name.trim(),
-        zone: editForm.zone.trim(),
+        ...(isPlatform ? {} : { zone: editForm.zone.trim() }),
         status: editForm.status
       });
       toast.success('User updated');
@@ -396,6 +399,7 @@ export function UsersPage() {
                   className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm"
                 />
               </div>
+              {!isPlatform && (
               <div>
                 <label className="text-xs font-semibold text-slate-600 mb-1 block">
                   Zone
@@ -408,6 +412,7 @@ export function UsersPage() {
                   className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm"
                 />
               </div>
+              )}
               <div>
                 <label className="text-xs font-semibold text-slate-600 mb-1 block">
                   Status

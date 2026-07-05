@@ -5,6 +5,7 @@ import { ApiError, api, CompanySettings } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { can } from '../lib/rbac';
 import { cn } from '../lib/utils';
+import { BillingCard } from '../components/BillingCard';
 
 type FieldConfig = {
   id: keyof CompanySettingsPatchKeys;
@@ -110,6 +111,7 @@ function displayValue(field: FieldConfig, settings: CompanySettings) {
 export function SettingsPage() {
   const { user } = useAuth();
   const canEdit = user ? can(user.role, 'configure') : false;
+  const canBilling = user ? can(user.role, 'manageBilling') : false;
   const [settings, setSettings] = useState<CompanySettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -184,6 +186,7 @@ export function SettingsPage() {
 
   return (
     <div className="page-pad max-w-4xl">
+      {canBilling && <BillingCard />}
       {EDITABLE_SECTIONS.map((section) => (
         <div
           key={section.title}

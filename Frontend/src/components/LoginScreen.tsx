@@ -50,7 +50,19 @@ export function LoginScreen() {
         password: registerForm.password,
         zone: registerForm.zone.trim() || undefined
       });
-      toast.success(res.message);
+      const payUrl = res.billing?.payUrl;
+      if (payUrl) {
+        toast.success('Company registered — activate your Corporate plan', {
+          description: 'Pay your first subscription invoice in DirectPay.',
+          duration: 10000,
+          action: {
+            label: 'Pay now',
+            onClick: () => window.open(payUrl, '_blank', 'noopener')
+          }
+        });
+      } else {
+        toast.success(res.message);
+      }
       await login(registerForm.adminEmail.trim(), registerForm.password);
     } catch (err) {
       toast.error(

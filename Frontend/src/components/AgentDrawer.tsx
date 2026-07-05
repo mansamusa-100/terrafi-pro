@@ -37,9 +37,10 @@ type Tab = 'overview' | 'kyc' | 'visits';
 
 export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
   const { user } = useAuth();
-  const { users, updateAgent } = useAppData();
+  const { users, updateAgent, reviewKyc } = useAppData();
   const canUploadKyc = user ? can(user.role, 'onboardAgent') : false;
   const canEdit = user ? can(user.role, 'editAgent') : false;
+  const canReview = user ? can(user.role, 'reviewKyc') : false;
   const adrs = users.filter((u) => u.role === 'adr' && u.id);
   const [mounted, setMounted] = useState(false);
   const [tab, setTab] = useState<Tab>('overview');
@@ -48,6 +49,9 @@ export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
   const [uploading, setUploading] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [reviewBusy, setReviewBusy] = useState(false);
+  const [showReject, setShowReject] = useState(false);
+  const [rejectNote, setRejectNote] = useState('');
   const [editForm, setEditForm] = useState({
     name: '',
     phone: '',
@@ -59,7 +63,9 @@ export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
   useEffect(() => {
     if (agent) {
       setMounted(false);
-      setTab('overview');
+      setTab(agent.kyc === 'pending' ? 'kyc' : 'overview');
+      setShowReject(false);
+      setRejectNote('');
       const t = setTimeout(() => setMounted(true), 20);
       return () => clearTimeout(t);
     }
@@ -138,6 +144,7 @@ export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
   const docsByType = Object.fromEntries(
     kycDocs.map((d) => [d.docType, d])
   );
+  const allKycDocsReady = KYC_DOCS.every((d) => docsByType[d.key]);
 
   const handleDownload = async (docId: number, fileName: string) => {
     try {
@@ -415,6 +422,93 @@ export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
             </div>
           ) : tab === 'kyc' ? (
             <div className="space-y-4">
+              {data.kyc === 'expired' && data.kyc_review_note && (
+                <div className="rounded-lg border border-apsRed/20 bg-apsRedLt/50 px-3 py-2.5 text-xs text-apsRed">
+                  <span className="font-semibold">Rejected:</span> {data.kyc_review_note}
+                </div>
+              )}
+              {canReview && data.kyc === 'pending' && allKycDocsReady && (
+                <div className="rounded-xl border border-apsAmber/30 bg-apsAmberLt/40 p-4 space-y-3">
+                  <p className="text-xs font-semibold text-slate-800">
+                    Ready for KYC review
+                  </p>
+                  {!showReject ? (
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={reviewBusy}
+                        onClick={async () => {
+                          setReviewBusy(true);
+                          try {
+                            await reviewKyc(agent.id, 'approve');
+                            const refreshed = await api.agents.get(agent.id);
+                            setDetail(refreshed);
+                            toast.success('KYC approved');
+                          } catch (e) {
+                            toast.error(
+                              e instanceof Error ? e.message : 'Approval failed'
+                            );
+                          } finally {
+                            setReviewBusy(false);
+                          }
+                        }}
+                        className="flex-1 py-2 rounded-lg bg-apsGreen text-white text-xs font-semibold disabled:opacity-60">
+                        Approve KYC
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowReject(true)}
+                        className="flex-1 py-2 rounded-lg border border-apsRed/30 text-apsRed text-xs font-semibold">
+                        Reject
+                      </button>
+                    </div>
+                  ) : (
+                    <form
+                      onSubmit={async (e) => {
+                        e.preventDefault();
+                        setReviewBusy(true);
+                        try {
+                          await reviewKyc(agent.id, 'reject', rejectNote.trim());
+                          const refreshed = await api.agents.get(agent.id);
+                          setDetail(refreshed);
+                          setShowReject(false);
+                          setRejectNote('');
+                          toast.success('KYC rejected');
+                        } catch (err) {
+                          toast.error(
+                            err instanceof Error ? err.message : 'Rejection failed'
+                          );
+                        } finally {
+                          setReviewBusy(false);
+                        }
+                      }}
+                      className="space-y-2">
+                      <textarea
+                        required
+                        rows={2}
+                        value={rejectNote}
+                        onChange={(e) => setRejectNote(e.target.value)}
+                        placeholder="Rejection reason"
+                        className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="submit"
+                          disabled={reviewBusy}
+                          className="flex-1 py-2 rounded-lg bg-apsRed text-white text-xs font-semibold disabled:opacity-60">
+                          Confirm reject
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowReject(false)}
+                          className="px-3 py-2 text-xs border border-slate-200 rounded-lg">
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </div>
+              )}
               <p className="text-xs text-slate-500">
                 Required documents for KYC completion. Download uploaded files or
                 upload missing documents.

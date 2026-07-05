@@ -59,6 +59,8 @@ export interface Agent {
   lat: number;
   lng: number;
   kyc: string;
+  kyc_review_note?: string | null;
+  kyc_reviewed_at?: string | null;
   last_visit: string | null;
   national_id?: string | null;
   business_type?: string | null;
@@ -91,6 +93,23 @@ export interface AgentDetail extends Agent {
   }[];
 }
 
+export interface KycStats {
+  total: number;
+  suspended: number;
+  counts: {
+    verified: number;
+    pending: number;
+    incomplete: number;
+    expired: number;
+  };
+  complianceRate: number;
+}
+
+export interface KycReviewItem extends Agent {
+  submitted_at?: string | null;
+  kyc_docs: KycDocument[];
+}
+
 export interface BulkImportResult {
   created: number;
   agents: Agent[];
@@ -112,6 +131,31 @@ export interface Visit {
   time: string;
   type: string;
   zone: string;
+  visit_date?: string;
+  notes?: string | null;
+}
+
+export interface VisitSummary {
+  today: {
+    scheduled: number;
+    done: number;
+    pending: number;
+    missed: number;
+  };
+  monthCompleted: number;
+  weeklyVolume: {
+    labels: string[];
+    values: number[];
+  };
+}
+
+export interface Alert {
+  id?: number;
+  type: string;
+  title: string;
+  body: string;
+  time: string;
+  agent: string | null;
 }
 
 export interface Officer {
@@ -123,12 +167,33 @@ export interface Officer {
   zone: string;
 }
 
-export interface Alert {
+export interface AdrPerformance {
+  id: string;
+  name: string;
+  zone: string;
+  agents: number;
+  visits_done: number;
+  visits_pending: number;
+  visits_missed: number;
+  visit_target: number;
+  visit_rate: number;
+  kyc_verified: number;
+  kyc_rate: number;
+  onboarded_month: number;
+  score: number;
+}
+
+export interface Notification {
+  id: number;
   type: string;
   title: string;
   body: string;
-  time: string;
-  agent: string | null;
+  entity_type: string | null;
+  entity_id: string | null;
+  company_id: string | null;
+  read: boolean;
+  read_at: string | null;
+  created_at: string;
 }
 
 export interface TrainingModule {
@@ -149,6 +214,58 @@ export interface Company {
   since: string;
   contactEmail?: string | null;
   registeredAt?: string;
+  subscriptionStatus?: string | null;
+  subscriptionPlanCode?: string | null;
+  userCount?: number;
+}
+
+export interface CompanySubscription {
+  status: string | null;
+  planCode: string | null;
+  periodStart: string | null;
+  periodEnd: string | null;
+  billingInterval: string | null;
+  payUrl: string | null;
+  syncedAt: string | null;
+  provisioned: boolean;
+  accessAllowed: boolean;
+}
+
+export interface CompanyDetail extends Company {
+  visitCount: number;
+  agentCount: number;
+  directPaySlug?: string | null;
+  subscription: CompanySubscription;
+  users: CompanyUser[];
+  recentAudit: {
+    id: number;
+    action: string;
+    actorName: string;
+    createdAt: string;
+    details: Record<string, unknown> | null;
+  }[];
+}
+
+export interface PlatformStats {
+  companies: {
+    total: number;
+    active: number;
+    suspended: number;
+    signups7d: number;
+    signups30d: number;
+  };
+  agents: { total: number };
+  users: { platform: number; company: number };
+  revenue: { mrr: number };
+  subscriptions: Record<string, number>;
+  recentSignups: {
+    id: string;
+    name: string;
+    status: string;
+    contactEmail?: string | null;
+    registeredAt: string;
+    subscriptionStatus?: string | null;
+  }[];
 }
 
 export interface CompanyUser {
@@ -169,6 +286,7 @@ export interface AuditEntry {
   actorEmail: string;
   entityType: string | null;
   entityId: string | null;
+  companyId?: string | null;
   details: Record<string, unknown> | null;
   createdAt: string;
 }
@@ -248,6 +366,39 @@ export interface CompanySettings {
   updated_at: string;
 }
 
+export interface SubscriptionView {
+  status: string | null;
+  planCode: string | null;
+  periodStart?: string | null;
+  periodEnd: string | null;
+  billingInterval?: string | null;
+  payUrl: string | null;
+  syncedAt?: string | null;
+  provisioned: boolean;
+  accessAllowed: boolean;
+}
+
+export interface BillingStatus {
+  company_id: string;
+  company_name: string;
+  configured: boolean;
+  subscription: SubscriptionView;
+}
+
+export interface PayLinkResult {
+  ok: boolean;
+  payUrl: string | null;
+  invoiceCreated: boolean;
+  pendingInvoice: {
+    id: string;
+    amount: string;
+    currency: string;
+    status: string;
+    dueDate: string;
+    guestToken: string | null;
+  } | null;
+}
+
 export type CompanySettingsUpdate = Partial<{
   default_float_threshold: number;
   visit_frequency_target: number;
@@ -274,7 +425,9 @@ export const api = {
   },
 
   me() {
-    return request<{ user: AppUser }>('/auth/me');
+    return request<{ user: AppUser; subscription: SubscriptionView | null }>(
+      '/auth/me'
+    );
   },
 
   demoUsers() {
@@ -288,7 +441,10 @@ export const api = {
     password: string;
     zone?: string;
   }) {
-    return request<{ message: string }>('/auth/register-company', {
+    return request<{
+      message: string;
+      billing?: { payUrl: string | null; configured: boolean };
+    }>('/auth/register-company', {
       method: 'POST',
       body: JSON.stringify(body)
     });
@@ -338,13 +494,61 @@ export const api = {
       })
   },
 
+  kyc: {
+    stats: () => request<KycStats>('/kyc/stats'),
+    reviewQueue: () => request<KycReviewItem[]>('/kyc/review-queue'),
+    review: (agentId: string, body: { action: 'approve' | 'reject'; note?: string }) =>
+      request<Agent>(`/kyc/review/${agentId}`, {
+        method: 'POST',
+        body: JSON.stringify(body)
+      })
+  },
+
   visits: {
     list: (date = 'today') => request<Visit[]>(`/visits?date=${date}`),
+    summary: () => request<VisitSummary>('/visits/summary'),
+    schedule: (body: Record<string, unknown>) =>
+      request<Visit>('/visits/schedule', {
+        method: 'POST',
+        body: JSON.stringify(body)
+      }),
+    update: (id: number, body: Record<string, unknown>) =>
+      request<Visit>(`/visits/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body)
+      }),
     create: (body: Record<string, unknown>) =>
       request<Visit>('/visits', { method: 'POST', body: JSON.stringify(body) })
   },
 
-  companies: () => request<Company[]>('/companies'),
+  companies: {
+    list: () => request<Company[]>('/companies'),
+    get: (id: string) => request<CompanyDetail>(`/companies/${id}`),
+    updateStatus: (id: string, status: 'active' | 'suspended') =>
+      request<{ id: string; name: string; status: string }>(
+        `/companies/${id}/status`,
+        { method: 'PATCH', body: JSON.stringify({ status }) }
+      )
+  },
+  platform: {
+    stats: () => request<PlatformStats>('/platform/stats')
+  },
+  performance: {
+    adr: () => request<AdrPerformance[]>('/performance/adr'),
+    adrMe: () => request<AdrPerformance | null>('/performance/adr/me')
+  },
+  export: {
+    agents: () => '/export/agents',
+    visits: (from?: string, to?: string) => {
+      const params = new URLSearchParams();
+      if (from) params.set('from', from);
+      if (to) params.set('to', to);
+      const q = params.toString();
+      return `/export/visits${q ? `?${q}` : ''}`;
+    },
+    adrPerformance: () => '/export/adr-performance',
+    compliance: () => '/export/compliance'
+  },
   users: () => request<CompanyUser[]>('/users'),
   inviteUser: (body: {
     name: string;
@@ -366,11 +570,21 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(body)
     }),
-  audit: () => request<AuditEntry[]>('/audit'),
+  audit: (opts?: { limit?: number; action?: string }) => {
+    const params = new URLSearchParams();
+    if (opts?.limit != null) params.set('limit', String(opts.limit));
+    if (opts?.action) params.set('action', opts.action);
+    const q = params.toString();
+    return request<AuditEntry[]>(`/audit${q ? `?${q}` : ''}`);
+  },
 
   zones: () => request<string[]>('/zones'),
   officers: () => request<Officer[]>('/officers'),
   alerts: () => request<Alert[]>('/alerts'),
+  dismissAlert: (id: number) =>
+    request<{ id: number; dismissed: boolean }>(`/alerts/${id}/dismiss`, {
+      method: 'PATCH'
+    }),
   training: () => request<TrainingModule[]>('/training'),
   floatTrend: () => request<FloatTrend>('/float-trend'),
   floatSync: {
@@ -396,6 +610,16 @@ export const api = {
   },
   stats: () => request<NetworkStats>('/stats'),
 
+  notifications: {
+    list: (limit = 30) =>
+      request<Notification[]>(`/notifications?limit=${limit}`),
+    unreadCount: () => request<{ count: number }>('/notifications/unread-count'),
+    markRead: (id: number) =>
+      request<Notification>(`/notifications/${id}/read`, { method: 'PATCH' }),
+    markAllRead: () =>
+      request<{ updated: number }>('/notifications/read-all', { method: 'POST' })
+  },
+
   settings: {
     get: (companyId?: string) => {
       const q = companyId ? `?companyId=${encodeURIComponent(companyId)}` : '';
@@ -408,5 +632,29 @@ export const api = {
         body: JSON.stringify(body)
       });
     }
+  },
+
+  billing: {
+    status: () => request<BillingStatus>('/billing/status'),
+    provision: () =>
+      request<{ ok: boolean; subscription: SubscriptionView }>(
+        '/billing/provision',
+        { method: 'POST', body: JSON.stringify({}) }
+      ),
+    startSubscription: (planCode?: string, billingInterval?: string) =>
+      request<{ ok: boolean; subscription: SubscriptionView }>(
+        '/billing/subscription',
+        { method: 'POST', body: JSON.stringify({ planCode, billingInterval }) }
+      ),
+    payLink: () =>
+      request<PayLinkResult>('/billing/pay-link', {
+        method: 'POST',
+        body: JSON.stringify({})
+      }),
+    sync: () =>
+      request<{ ok: boolean; subscription: SubscriptionView }>('/billing/sync', {
+        method: 'POST',
+        body: JSON.stringify({})
+      })
   }
 };

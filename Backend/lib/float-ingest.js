@@ -1,5 +1,6 @@
 import { prisma } from './prisma.js';
 import { normalizePhone } from './phone.js';
+import { syncFloatAlerts } from './float-alerts.js';
 
 const BATCH_SIZE = 500;
 
@@ -122,6 +123,8 @@ export async function mergeAgentFloatSnapshot({
       }
     });
   });
+
+  await syncFloatAlerts(companyId);
 
   return { updatedCount, skippedCount, unknownCount };
 }

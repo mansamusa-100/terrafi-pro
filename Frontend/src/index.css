@@ -45,6 +45,13 @@ body {
   .data-table-scroll {
     @apply overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0;
   }
+
+  @media (max-width: 1023px) {
+    .adr-touch button,
+    .adr-touch a {
+      min-height: 44px;
+    }
+  }
 }
 
 /* Leaflet map sizing within flex layout */

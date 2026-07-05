@@ -100,8 +100,8 @@ const;
 
 // Which pages each role can access, in nav order
 export const PAGE_ACCESS: Record<Role, string[]> = {
-  system_owner: ['companies', 'users', 'audit', 'settings'],
-  platform_staff: ['companies', 'users', 'audit'],
+  system_owner: ['dashboard', 'companies', 'users', 'audit'],
+  platform_staff: ['dashboard', 'companies', 'users', 'audit'],
   manager: [
   'dashboard',
   'agents',
@@ -128,7 +128,7 @@ export const CAPABILITIES: Record<Role, Record<string, boolean>> = {
     managePlatformUsers: true,
     viewCompanies: true,
     viewPlatformAudit: true,
-    configure: true
+    manageCompanyStatus: true
   },
   platform_staff: {
     managePlatformUsers: true,
@@ -140,14 +140,20 @@ export const CAPABILITIES: Record<Role, Record<string, boolean>> = {
     viewCompanyAudit: true,
     viewFloatSync: true,
     configure: true,
+    manageBilling: true,
     onboardAgent: true,
     logVisit: true,
     scheduleVisit: true,
     editAgent: true,
-    editUsers: true
+    editUsers: true,
+    reviewKyc: true,
+    exportData: true
   },
-  internal: {},
-  adr: { onboardAgent: true, logVisit: true },
+  internal: {
+    viewKycCompliance: true,
+    exportData: true
+  },
+  adr: { onboardAgent: true, logVisit: true, scheduleVisit: true },
   agent: {},
   teller: {}
 };

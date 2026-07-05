@@ -13,6 +13,8 @@ import {
 import { requireRoles } from '../middleware/auth.js';
 import { kycUpload, bulkKycUpload, kycUploadDir } from '../middleware/upload.js';
 import { KYC_DOC_TYPES, KYC_DOC_LABELS, parseKycFilename } from '../lib/kyc.js';
+import { syncKycStatus } from '../lib/kyc-status.js';
+import { notifyAgentOnboarded } from '../lib/notifications.js';
 import { parseCsv, AGENT_IMPORT_TEMPLATE } from '../lib/csv.js';
 import { normalizePhone } from '../lib/phone.js';
 
@@ -46,23 +48,6 @@ async function assertAgentAccess(req, agent) {
     return { error: 'Agent is not assigned to you', status: 403 };
   }
   return null;
-}
-
-async function syncKycStatus(agentId) {
-  const docCount = await prisma.kycDocument.count({ where: { agentId } });
-  const types = await prisma.kycDocument.findMany({
-    where: { agentId },
-    select: { docType: true }
-  });
-  const uniqueTypes = new Set(types.map((t) => t.docType));
-  const hasAllRequired = KYC_DOC_TYPES.every((t) => uniqueTypes.has(t));
-  if (hasAllRequired) {
-    await prisma.agent.update({
-      where: { id: agentId },
-      data: { kyc: 'pending' }
-    });
-  }
-  return docCount;
 }
 
 router.get('/', async (req, res, next) => {
@@ -297,6 +282,22 @@ router.post('/', requireRoles('manager', 'adr'), async (req, res, next) => {
         .json({ error: 'Name, phone, and zone are required' });
     }
 
+    const agentLat = lat != null ? Number(lat) : NaN;
+    const agentLng = lng != null ? Number(lng) : NaN;
+    if (!Number.isFinite(agentLat) || !Number.isFinite(agentLng)) {
+      return res.status(400).json({
+        error: 'Agent GPS location is required (lat and lng)'
+      });
+    }
+    if (
+      agentLat < -90 ||
+      agentLat > 90 ||
+      agentLng < -180 ||
+      agentLng > 180
+    ) {
+      return res.status(400).json({ error: 'GPS coordinates are out of range' });
+    }
+
     const phoneFields = resolveAgentPhone(phone);
     if (phoneFields.error) {
       return res.status(400).json({ error: phoneFields.error });
@@ -335,8 +336,8 @@ router.post('/', requireRoles('manager', 'adr'), async (req, res, next) => {
           officer: assignment.officer,
           officerId: assignment.officerId,
           joined,
-          lat: lat ?? 13.45,
-          lng: lng ?? -16.65,
+          lat: agentLat,
+          lng: agentLng,
           kyc: 'pending',
           lastVisit: 'Never',
           nationalId: nationalId || null,
@@ -349,6 +350,8 @@ router.post('/', requireRoles('manager', 'adr'), async (req, res, next) => {
       });
       return created;
     });
+
+    await notifyAgentOnboarded(agent, req.user);
 
     res.status(201).json(serializeAgent(agent));
   } catch (err) {

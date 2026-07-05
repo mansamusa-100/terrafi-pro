@@ -13,6 +13,7 @@ import { useAppData } from '../lib/data-context';
 import type { Agent } from '../lib/api';
 import { ApiError } from '../lib/api';
 import { cn } from '../lib/utils';
+import { captureDeviceLocation } from '../lib/geolocation';
 interface VisitLogModalProps {
   open: boolean;
   onClose: () => void;
@@ -84,34 +85,27 @@ export function VisitLogModal({
     reset();
     onClose();
   };
-  const checkIn = () => {
+  const checkIn = async () => {
     if (!agent) {
       toast.error('Select an agent first');
       return;
     }
-    if (!navigator.geolocation) {
-      toast.error('Geolocation is not supported in this browser');
-      return;
-    }
     setCheckingIn(true);
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        setCheckInLat(lat);
-        setCheckInLng(lng);
-        setCheckingIn(false);
-        setCheckedIn(true);
-        toast.success('GPS position captured', {
-          description: `Verifying distance to ${agent.name}…`
-        });
-      },
-      (err) => {
-        setCheckingIn(false);
-        toast.error('GPS check-in failed', { description: err.message });
-      },
-      { enableHighAccuracy: true, timeout: 15000 }
-    );
+    try {
+      const { lat, lng } = await captureDeviceLocation();
+      setCheckInLat(lat);
+      setCheckInLng(lng);
+      setCheckedIn(true);
+      toast.success('GPS position captured', {
+        description: `Verifying distance to ${agent.name}…`
+      });
+    } catch (err) {
+      toast.error('GPS check-in failed', {
+        description: err instanceof Error ? err.message : 'Could not get location'
+      });
+    } finally {
+      setCheckingIn(false);
+    }
   };
   const compliancePassed = COMPLIANCE_ITEMS.filter((i) => compliance[i]).length;
   const canSubmit =

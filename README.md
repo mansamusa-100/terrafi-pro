@@ -122,11 +122,21 @@ Use the login screen quick-access buttons to switch personas.
 | POST | `/api/agents/import` | Bulk import agents from CSV |
 | POST | `/api/agents/kyc-docs/bulk` | Bulk upload KYC files by filename |
 | POST | `/api/agents/:id/kyc-docs` | Upload KYC document (multipart) |
+| GET | `/api/kyc/stats` | KYC compliance counts (manager, internal) |
+| GET | `/api/kyc/review-queue` | Agents awaiting KYC review |
+| POST | `/api/kyc/review/:agentId` | Approve or reject KYC (`{ action, note? }`; manager) |
+| GET | `/api/notifications` | In-app notifications for current user |
+| GET | `/api/notifications/unread-count` | Unread notification count |
+| PATCH | `/api/notifications/:id/read` | Mark notification read |
+| POST | `/api/notifications/read-all` | Mark all notifications read |
 | POST | `/api/visits` | Log visit (requires GPS coordinates) |
 | POST | `/api/integrations/agent-float` | biReports float snapshot ingest (Bearer + HMAC; see `partner-agent-float-integration.md`) |
 | GET | `/api/float-sync/deliveries` | biReports delivery log (manager only; paginated) |
 | GET | `/api/float-sync/deliveries/:id` | Delivery detail report (`?limit=` `?offset=`) |
-| GET | `/api/companies` | Platform companies (system owner) |
+| GET | `/api/companies` | List subscriber companies (platform) |
+| GET | `/api/companies/:id` | Company detail (platform) |
+| PATCH | `/api/companies/:id/status` | Suspend/reactivate company (system owner) |
+| GET | `/api/platform/stats` | Platform metrics dashboard |
 
 KYC uploads are served at `/uploads/kyc/…`.
 

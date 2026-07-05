@@ -13,6 +13,7 @@ import {
 import { useAppData } from '../lib/data-context';
 import type { Agent } from '../lib/api';
 import { cn } from '../lib/utils';
+import { useAuth } from '../lib/auth';
 interface DashboardPageProps {
   setActive: (page: string) => void;
   setSelectedAgent: (agent: Agent) => void;
@@ -21,7 +22,9 @@ export function DashboardPage({
   setActive,
   setSelectedAgent
 }: DashboardPageProps) {
-  const { agents, alerts, visits, floatTrend, stats } = useAppData();
+  const { user } = useAuth();
+  const { agents, alerts, visits, floatTrend, stats, dismissAlert, adrMyPerformance } =
+    useAppData();
   const networkFloat = agents.reduce((s, a) => s + a.efloat + a.cash, 0);
   const activeCount = agents.filter((a) => a.status === 'active').length;
   const alertCount = alerts.length;
@@ -31,6 +34,50 @@ export function DashboardPage({
   const floatData = floatTrend ?? { labels: [], efloat: [], cash: [] };
   return (
     <div className="page-pad">
+      {user?.role === 'adr' && adrMyPerformance && (
+        <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-sm mb-5">
+          <h3 className="text-sm font-semibold text-slate-900 mb-3">
+            Your performance this month
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div>
+              <div className="text-2xl font-bold text-slate-900">
+                {adrMyPerformance.visits_done}/{adrMyPerformance.visit_target}
+              </div>
+              <div className="text-xs text-slate-500">Visits completed</div>
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-slate-900">
+                {adrMyPerformance.agents}
+              </div>
+              <div className="text-xs text-slate-500">Agents assigned</div>
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-slate-900">
+                {adrMyPerformance.kyc_rate}%
+              </div>
+              <div className="text-xs text-slate-500">KYC verified</div>
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-apsBlue">
+                {adrMyPerformance.score}%
+              </div>
+              <div className="text-xs text-slate-500">Overall score</div>
+              <ProgressBar
+                value={adrMyPerformance.score}
+                color={
+                  adrMyPerformance.score >= 80
+                    ? 'bg-apsGreen'
+                    : adrMyPerformance.score >= 60
+                      ? 'bg-apsAmber'
+                      : 'bg-apsRed'
+                }
+                height="h-1.5"
+              />
+            </div>
+          </div>
+        </div>
+      )}
       {/* Metrics */}
       <div className="metric-grid mb-6">
         <MetricCard
@@ -235,9 +282,9 @@ export function DashboardPage({
           <h3 className="text-sm font-semibold text-slate-900 mb-4">
             Active alerts
           </h3>
-          {alerts.map((a, i) =>
-          <AlertItem key={i} alert={a} />
-          )}
+          {alerts.map((a) => (
+            <AlertItem key={a.id ?? a.title} alert={a} onDismiss={dismissAlert} />
+          ))}
         </div>
 
         {/* Visits today */}

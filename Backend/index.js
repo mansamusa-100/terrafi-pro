@@ -14,9 +14,16 @@ import usersRoutes from './routes/users.js';
 import registerRoutes from './routes/register.js';
 import auditRoutes from './routes/audit.js';
 import dataRoutes from './routes/data.js';
+import kycRoutes from './routes/kyc.js';
 import floatSyncRoutes from './routes/float-sync.js';
 import settingsRoutes from './routes/settings.js';
+import notificationsRoutes from './routes/notifications.js';
+import billingRoutes from './routes/billing.js';
+import platformRoutes from './routes/platform.js';
+import performanceRoutes from './routes/performance.js';
+import exportsRoutes from './routes/exports.js';
 import { handleAgentFloatDelivery } from './routes/integrations.js';
+import { handleDirectPayWebhook } from './routes/directpay-webhook.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3001;
@@ -32,6 +39,13 @@ const agentFloatIngest = [
 // biReports default URL path + Field-Pro canonical path
 app.post('/api/agent-float', ...agentFloatIngest);
 app.post('/api/integrations/agent-float', ...agentFloatIngest);
+
+// DirectPay / EasyPay subscription webhook (raw body for HMAC verification)
+app.post(
+  '/api/webhooks/directpay',
+  express.raw({ type: 'application/json', limit: '5mb' }),
+  handleDirectPayWebhook
+);
 
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -62,6 +76,12 @@ app.use('/api/users', usersRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/float-sync', floatSyncRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/billing', billingRoutes);
+app.use('/api/platform', platformRoutes);
+app.use('/api/performance', performanceRoutes);
+app.use('/api/export', exportsRoutes);
+app.use('/api/kyc', kycRoutes);
+app.use('/api/notifications', notificationsRoutes);
 app.use('/api', dataRoutes);
 
 app.use((err, _req, res, _next) => {

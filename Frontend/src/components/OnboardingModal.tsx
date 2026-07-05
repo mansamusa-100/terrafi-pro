@@ -7,15 +7,17 @@ import {
   MapPin,
   ClipboardCheck,
   Upload,
-  Loader2,
-  Crosshair } from
+  Loader2 } from
 'lucide-react';
 import { toast } from 'sonner';
 import { useAppData } from '../lib/data-context';
 import type { Agent } from '../lib/api';
+import { ApiError } from '../lib/api';
 import { cn } from '../lib/utils';
 import { useAuth } from '../lib/auth';
 import { can } from '../lib/rbac';
+import { LocationPicker } from './LocationPicker';
+import { formatCoords } from '../lib/geolocation';
 interface OnboardingModalProps {
   open: boolean;
   onClose: () => void;
@@ -77,7 +79,6 @@ export function OnboardingModal({ open, onClose, onSubmit }: OnboardingModalProp
   const adrs = users.filter((u) => u.role === 'adr' && u.id);
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
-  const [locating, setLocating] = useState(false);
   // Profile
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('+220 ');
@@ -104,7 +105,6 @@ export function OnboardingModal({ open, onClose, onSubmit }: OnboardingModalProp
     setDocs({});
     setCoords(null);
     setSubmitting(false);
-    setLocating(false);
   };
   const handleClose = () => {
     reset();
@@ -126,30 +126,6 @@ export function OnboardingModal({ open, onClose, onSubmit }: OnboardingModalProp
   step === 2 ?
   gpsValid :
   true;
-  const captureLocation = () => {
-    if (!navigator.geolocation) {
-      toast.error('Geolocation is not supported in this browser');
-      return;
-    }
-    setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setCoords({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude
-        });
-        setLocating(false);
-        toast.success('Location captured', {
-          description: 'GPS coordinates recorded for this agent'
-        });
-      },
-      (err) => {
-        setLocating(false);
-        toast.error('Could not capture location', { description: err.message });
-      },
-      { enableHighAccuracy: true, timeout: 15000 }
-    );
-  };
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
@@ -173,8 +149,10 @@ export function OnboardingModal({ open, onClose, onSubmit }: OnboardingModalProp
         description: 'Agent registered — KYC pending review'
       });
       handleClose();
-    } catch {
-      toast.error('Failed to register agent');
+    } catch (e) {
+      toast.error(
+        e instanceof ApiError ? e.message : 'Failed to register agent'
+      );
     } finally {
       setSubmitting(false);
     }
@@ -399,48 +377,17 @@ export function OnboardingModal({ open, onClose, onSubmit }: OnboardingModalProp
             }
 
             {step === 2 &&
-            <div className="flex flex-col items-center text-center py-4">
-                <div className="w-full h-44 rounded-xl bg-slate-100 border border-slate-200 relative overflow-hidden mb-5">
-                  <div
-                  className="absolute inset-0 opacity-60"
-                  style={{
-                    backgroundImage:
-                    'linear-gradient(#E2E8F0 1px, transparent 1px), linear-gradient(90deg, #E2E8F0 1px, transparent 1px)',
-                    backgroundSize: '24px 24px'
-                  }} />
-                
-                  {coords ?
-                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-                      <div className="w-4 h-4 bg-apsBlue rounded-full ring-4 ring-apsBlue/20 animate-pulse" />
-                    </div> :
-
-                <div className="absolute inset-0 flex items-center justify-center text-slate-400 text-xs">
-                      No location captured yet
-                    </div>
-                }
-                </div>
-                {coords &&
-              <div className="text-sm font-medium text-slate-900 mb-4">
-                    {coords.lat.toFixed(4)}°N, {Math.abs(coords.lng).toFixed(4)}
-                    °W
-                  </div>
-              }
-                <button
-                onClick={captureLocation}
-                disabled={locating}
-                className="flex items-center gap-2 bg-apsBlue hover:bg-apsBlueMid text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-60">
-                
-                  {locating ?
-                <Loader2 className="w-4 h-4 animate-spin" /> :
-
-                <Crosshair className="w-4 h-4" />
-                }
-                  {locating ?
-                'Capturing…' :
-                coords ?
-                'Re-capture location' :
-                'Capture GPS location'}
-                </button>
+            <div className="py-2">
+                <p className="text-xs text-slate-500 text-center mb-4">
+                  Set the agent&apos;s shop location. Use device GPS or tap/drag the
+                  pin on the map.
+                </p>
+                <LocationPicker
+                  value={coords}
+                  onChange={setCoords}
+                  autoCapture
+                  mapHeightClass="h-56"
+                />
               </div>
             }
 
@@ -455,9 +402,7 @@ export function OnboardingModal({ open, onClose, onSubmit }: OnboardingModalProp
                 ['Zone', zone],
                 [
                 'GPS',
-                coords ?
-                `${coords.lat.toFixed(4)}°N, ${Math.abs(coords.lng).toFixed(4)}°W` :
-                '—']].
+                coords ? formatCoords(coords) : '—']].
 
                 map(([k, v]) =>
                 <div

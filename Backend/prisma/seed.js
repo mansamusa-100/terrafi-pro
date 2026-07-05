@@ -286,6 +286,7 @@ async function main() {
       lat: 13.458,
       lng: -16.644,
       kyc: 'expired',
+      kycReviewNote: 'Business permit expired; please upload a current copy.',
       lastVisit: '21 days ago'
     },
     {
@@ -415,6 +416,20 @@ async function main() {
       companyId: APS_COMPANY,
       phoneNormalized: normalizePhone(a.phone)
     }))
+  });
+
+  const kycDocTypes = ['nationalId', 'businessPermit', 'agentAgreement'];
+  const pendingReviewAgents = ['APW-0221', 'APW-0312'];
+  await prisma.kycDocument.createMany({
+    data: pendingReviewAgents.flatMap((agentId) =>
+      kycDocTypes.map((docType) => ({
+        agentId,
+        docType,
+        fileName: `${agentId}-${docType}.pdf`,
+        filePath: `kyc/seed/${agentId}-${docType}.pdf`,
+        mimeType: 'application/pdf'
+      }))
+    )
   });
 
   await prisma.officer.createMany({

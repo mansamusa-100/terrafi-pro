@@ -17,7 +17,13 @@ import {
   FloatTrend,
   NetworkStats,
   BulkImportResult,
-  BulkKycResult
+  BulkKycResult,
+  KycStats,
+  KycReviewItem,
+  Notification,
+  PlatformStats,
+  VisitSummary,
+  AdrPerformance
 } from './api';
 import { useAuth } from './auth';
 import { Role } from './rbac';
@@ -34,6 +40,8 @@ interface AppDataContextValue {
   zones: string[];
   floatTrend: FloatTrend | null;
   stats: NetworkStats | null;
+  kycStats: KycStats | null;
+  kycReviewQueue: KycReviewItem[];
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
@@ -42,6 +50,12 @@ interface AppDataContextValue {
     kycFiles?: Record<string, File>
   ) => Promise<Agent>;
   logVisit: (body: Record<string, unknown>) => Promise<Visit>;
+  scheduleVisit: (body: Record<string, unknown>) => Promise<Visit>;
+  updateVisit: (id: number, body: Record<string, unknown>) => Promise<Visit>;
+  dismissAlert: (id: number) => Promise<void>;
+  visitSummary: VisitSummary | null;
+  adrPerformance: AdrPerformance[];
+  adrMyPerformance: AdrPerformance | null;
   updateUserRole: (email: string, role: string) => Promise<void>;
   updateUser: (
     email: string,
@@ -56,6 +70,18 @@ interface AppDataContextValue {
   importAgents: (csv: string) => Promise<BulkImportResult>;
   bulkUploadKyc: (files: File[]) => Promise<BulkKycResult>;
   updateAgent: (id: string, body: Record<string, unknown>) => Promise<void>;
+  reviewKyc: (
+    agentId: string,
+    action: 'approve' | 'reject',
+    note?: string
+  ) => Promise<void>;
+  notifications: Notification[];
+  unreadNotificationCount: number;
+  markNotificationRead: (id: number) => Promise<void>;
+  markAllNotificationsRead: () => Promise<void>;
+  refreshNotifications: () => Promise<void>;
+  platformStats: PlatformStats | null;
+  updateCompanyStatus: (id: string, status: 'active' | 'suspended') => Promise<void>;
 }
 
 const AppDataContext = createContext<AppDataContextValue | null>(null);
@@ -89,6 +115,14 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [zones, setZones] = useState<string[]>([]);
   const [floatTrend, setFloatTrend] = useState<FloatTrend | null>(null);
   const [stats, setStats] = useState<NetworkStats | null>(null);
+  const [kycStats, setKycStats] = useState<KycStats | null>(null);
+  const [kycReviewQueue, setKycReviewQueue] = useState<KycReviewItem[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [platformStats, setPlatformStats] = useState<PlatformStats | null>(null);
+  const [visitSummary, setVisitSummary] = useState<VisitSummary | null>(null);
+  const [adrPerformance, setAdrPerformance] = useState<AdrPerformance[]>([]);
+  const [adrMyPerformance, setAdrMyPerformance] = useState<AdrPerformance | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -105,6 +139,14 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       setZones([]);
       setFloatTrend(null);
       setStats(null);
+      setKycStats(null);
+      setKycReviewQueue([]);
+      setNotifications([]);
+      setUnreadNotificationCount(0);
+      setPlatformStats(null);
+      setVisitSummary(null);
+      setAdrPerformance([]);
+      setAdrMyPerformance(null);
       return;
     }
 
@@ -114,10 +156,16 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     try {
       const fetches: Promise<void>[] = [];
 
+      fetches.push(
+        api.notifications.list().then(setNotifications),
+        api.notifications.unreadCount().then((r) => setUnreadNotificationCount(r.count))
+      );
+
       if (isPlatformRole(user.role)) {
-        fetches.push(api.companies().then(setCompanies));
+        fetches.push(api.companies.list().then(setCompanies));
         fetches.push(api.users().then(setUsers));
-        fetches.push(api.audit().then(setAuditLogs));
+        fetches.push(api.audit({ limit: 100 }).then(setAuditLogs));
+        fetches.push(api.platform.stats().then(setPlatformStats));
       }
 
       if (user.role === 'manager') {
@@ -132,6 +180,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
       if (needsVisits(user.role)) {
         fetches.push(api.visits.list().then(setVisits));
+        fetches.push(api.visits.summary().then(setVisitSummary));
       }
 
       if (needsNetworkData(user.role)) {
@@ -147,6 +196,16 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
           api.officers().then(setOfficers),
           api.training().then(setTraining)
         );
+      }
+
+      if (['manager', 'internal'].includes(user.role)) {
+        fetches.push(api.kyc.stats().then(setKycStats));
+        fetches.push(api.kyc.reviewQueue().then(setKycReviewQueue));
+        fetches.push(api.performance.adr().then(setAdrPerformance));
+      }
+
+      if (user.role === 'adr') {
+        fetches.push(api.performance.adrMe().then(setAdrMyPerformance));
       }
 
       await Promise.all(fetches);
@@ -183,6 +242,32 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       const visit = await api.visits.create(body);
       await refresh();
       return visit;
+    },
+    [refresh]
+  );
+
+  const scheduleVisit = useCallback(
+    async (body: Record<string, unknown>) => {
+      const visit = await api.visits.schedule(body);
+      await refresh();
+      return visit;
+    },
+    [refresh]
+  );
+
+  const updateVisit = useCallback(
+    async (id: number, body: Record<string, unknown>) => {
+      const visit = await api.visits.update(id, body);
+      await refresh();
+      return visit;
+    },
+    [refresh]
+  );
+
+  const dismissAlert = useCallback(
+    async (id: number) => {
+      await api.dismissAlert(id);
+      await refresh();
     },
     [refresh]
   );
@@ -246,6 +331,45 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     [refresh]
   );
 
+  const refreshNotifications = useCallback(async () => {
+    if (!user) return;
+    const [list, { count }] = await Promise.all([
+      api.notifications.list(),
+      api.notifications.unreadCount()
+    ]);
+    setNotifications(list);
+    setUnreadNotificationCount(count);
+  }, [user]);
+
+  const markNotificationRead = useCallback(
+    async (id: number) => {
+      await api.notifications.markRead(id);
+      await refreshNotifications();
+    },
+    [refreshNotifications]
+  );
+
+  const markAllNotificationsRead = useCallback(async () => {
+    await api.notifications.markAllRead();
+    await refreshNotifications();
+  }, [refreshNotifications]);
+
+  const reviewKyc = useCallback(
+    async (agentId: string, action: 'approve' | 'reject', note?: string) => {
+      await api.kyc.review(agentId, { action, note });
+      await refresh();
+    },
+    [refresh]
+  );
+
+  const updateCompanyStatus = useCallback(
+    async (id: string, status: 'active' | 'suspended') => {
+      await api.companies.updateStatus(id, status);
+      await refresh();
+    },
+    [refresh]
+  );
+
   return (
     <AppDataContext.Provider
       value={{
@@ -260,6 +384,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         zones,
         floatTrend,
         stats,
+        kycStats,
+        kycReviewQueue,
         loading,
         error,
         refresh,
@@ -270,7 +396,21 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         importAgents,
         bulkUploadKyc,
         updateUser,
-        updateAgent
+        updateAgent,
+        reviewKyc,
+        notifications,
+        unreadNotificationCount,
+        markNotificationRead,
+        markAllNotificationsRead,
+        refreshNotifications,
+        platformStats,
+        updateCompanyStatus,
+        visitSummary,
+        adrPerformance,
+        adrMyPerformance,
+        scheduleVisit,
+        updateVisit,
+        dismissAlert
       }}>
       {children}
     </AppDataContext.Provider>

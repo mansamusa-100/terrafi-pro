@@ -3,6 +3,12 @@ import { Toaster } from 'sonner';
 import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
 import { AgentDrawer } from './components/AgentDrawer';
+import { CompanyDrawer } from './components/CompanyDrawer';
+import { VisitLogModal } from './components/VisitLogModal';
+import { AdrFieldBar } from './components/AdrFieldBar';
+import { PwaInstallBanner } from './components/PwaInstallBanner';
+import { SubscriptionBanner } from './components/SubscriptionBanner';
+import { PlatformDashboardPage } from './pages/PlatformDashboardPage';
 import { LoginScreen } from './components/LoginScreen';
 import { DashboardPage } from './pages/DashboardPage';
 import { AgentsPage } from './pages/AgentsPage';
@@ -18,9 +24,123 @@ import { CompaniesPage } from './pages/CompaniesPage';
 import { UsersPage } from './pages/UsersPage';
 import { AuditPage } from './pages/AuditPage';
 import { AuthProvider, useAuth } from './lib/auth';
-import { AppDataProvider } from './lib/data-context';
+import { AppDataProvider, useAppData } from './lib/data-context';
 import { canAccess, firstPageFor } from './lib/rbac';
 import type { Agent } from './lib/api';
+
+function AuthenticatedApp({
+  page,
+  setPage
+}: {
+  page: string;
+  setPage: (p: string) => void;
+}) {
+  const { user } = useAuth();
+  const { logVisit } = useAppData();
+  const [collapsed, setCollapsed] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [searchQ, setSearchQ] = useState('');
+  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
+  const [adrLogOpen, setAdrLogOpen] = useState(false);
+
+  useEffect(() => {
+    document.body.style.overflow = mobileNavOpen ? 'hidden' : '';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [mobileNavOpen]);
+
+  if (!user) return null;
+
+  const handleSetPage = (p: string) => {
+    setPage(p);
+    setSearchQ('');
+    setSelectedAgent(null);
+    setSelectedCompanyId(null);
+    setMobileNavOpen(false);
+  };
+
+  const activePage = canAccess(user.role, page) ? page : firstPageFor(user.role);
+  const isAdrField = user.role === 'adr';
+
+  const pageComponents: Record<string, JSX.Element> = {
+    dashboard:
+      user.role === 'system_owner' || user.role === 'platform_staff' ? (
+        <PlatformDashboardPage
+          setActive={handleSetPage}
+          onOpenCompany={setSelectedCompanyId}
+        />
+      ) : (
+        <DashboardPage
+          setActive={handleSetPage}
+          setSelectedAgent={setSelectedAgent}
+        />
+      ),
+    companies: <CompaniesPage onOpenCompany={setSelectedCompanyId} />,
+    agents: <AgentsPage searchQ={searchQ} onAgentClick={setSelectedAgent} />,
+    map: <MapPage setSelectedAgent={setSelectedAgent} />,
+    visits: <VisitsPage />,
+    float: <FloatPage />,
+    'float-sync': <FloatSyncPage />,
+    performance: <PerformancePage />,
+    training: <TrainingPage />,
+    compliance: <CompliancePage onOpenAgent={setSelectedAgent} />,
+    users: <UsersPage />,
+    audit: <AuditPage />,
+    settings: <SettingsPage />
+  };
+
+  return (
+    <div className="flex h-[100dvh] bg-slate-50 overflow-hidden">
+      <Sidebar
+        active={activePage}
+        setActive={handleSetPage}
+        collapsed={collapsed}
+        setCollapsed={setCollapsed}
+        mobileOpen={mobileNavOpen}
+        onMobileClose={() => setMobileNavOpen(false)}
+      />
+
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+        <Topbar
+          page={activePage}
+          searchQ={searchQ}
+          setSearchQ={setSearchQ}
+          onMenuClick={() => setMobileNavOpen(true)}
+          setPage={handleSetPage}
+          setSelectedAgent={setSelectedAgent}
+        />
+        {isAdrField && <PwaInstallBanner />}
+        <SubscriptionBanner />
+        <main
+          className={`flex-1 overflow-y-auto ${isAdrField ? 'pb-20 lg:pb-0 adr-touch' : ''}`}>
+          {pageComponents[activePage] || pageComponents[firstPageFor(user.role)]}
+        </main>
+      </div>
+
+      {isAdrField && (
+        <AdrFieldBar
+          active={activePage}
+          setActive={handleSetPage}
+          onLogVisit={() => setAdrLogOpen(true)}
+        />
+      )}
+
+      <VisitLogModal
+        open={adrLogOpen}
+        onClose={() => setAdrLogOpen(false)}
+        onSubmit={logVisit}
+      />
+
+      <AgentDrawer agent={selectedAgent} onClose={() => setSelectedAgent(null)} />
+      <CompanyDrawer
+        companyId={selectedCompanyId}
+        onClose={() => setSelectedCompanyId(null)}
+      />
+    </div>
+  );
+}
 
 function AppShell({
   page,
@@ -30,17 +150,6 @@ function AppShell({
   setPage: (p: string) => void;
 }) {
   const { user, loading } = useAuth();
-  const [collapsed, setCollapsed] = useState(false);
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [searchQ, setSearchQ] = useState('');
-  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
-
-  useEffect(() => {
-    document.body.style.overflow = mobileNavOpen ? 'hidden' : '';
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [mobileNavOpen]);
 
   if (loading) {
     return (
@@ -52,67 +161,9 @@ function AppShell({
 
   if (!user) return <LoginScreen />;
 
-  const handleSetPage = (p: string) => {
-    setPage(p);
-    setSearchQ('');
-    setSelectedAgent(null);
-    setMobileNavOpen(false);
-  };
-
-  const activePage = canAccess(user.role, page) ? page : firstPageFor(user.role);
-
-  const pageComponents: Record<string, JSX.Element> = {
-    dashboard: (
-      <DashboardPage
-        setActive={handleSetPage}
-        setSelectedAgent={setSelectedAgent}
-      />
-    ),
-    companies: <CompaniesPage />,
-    agents: (
-      <AgentsPage searchQ={searchQ} onAgentClick={setSelectedAgent} />
-    ),
-    map: <MapPage setSelectedAgent={setSelectedAgent} />,
-    visits: <VisitsPage />,
-    float: <FloatPage />,
-    'float-sync': <FloatSyncPage />,
-    performance: <PerformancePage />,
-    training: <TrainingPage />,
-    compliance: <CompliancePage />,
-    users: <UsersPage />,
-    audit: <AuditPage />,
-    settings: <SettingsPage />
-  };
-
   return (
     <AppDataProvider>
-      <div className="flex h-[100dvh] bg-slate-50 overflow-hidden">
-        <Sidebar
-          active={activePage}
-          setActive={handleSetPage}
-          collapsed={collapsed}
-          setCollapsed={setCollapsed}
-          mobileOpen={mobileNavOpen}
-          onMobileClose={() => setMobileNavOpen(false)}
-        />
-
-        <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-          <Topbar
-            page={activePage}
-            searchQ={searchQ}
-            setSearchQ={setSearchQ}
-            onMenuClick={() => setMobileNavOpen(true)}
-          />
-          <main className="flex-1 overflow-y-auto">
-            {pageComponents[activePage] || pageComponents.dashboard}
-          </main>
-        </div>
-
-        <AgentDrawer
-          agent={selectedAgent}
-          onClose={() => setSelectedAgent(null)}
-        />
-      </div>
+      <AuthenticatedApp page={page} setPage={setPage} />
     </AppDataProvider>
   );
 }

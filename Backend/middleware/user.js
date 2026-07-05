@@ -110,6 +110,8 @@ export function serializeAgent(agent, extra = {}) {
     lat: agent.lat,
     lng: agent.lng,
     kyc: agent.kyc,
+    kyc_review_note: agent.kycReviewNote ?? null,
+    kyc_reviewed_at: agent.kycReviewedAt ?? null,
     last_visit: agent.lastVisit,
     national_id: agent.nationalId ?? null,
     business_type: agent.businessType ?? null,

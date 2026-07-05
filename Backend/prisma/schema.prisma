@@ -18,6 +18,19 @@ model Company {
   since         String
   contactEmail  String?           @map("contact_email")
   registeredAt  DateTime          @default(now()) @map("registered_at")
+
+  // DirectPay / EasyPay subscription billing
+  directPayBusinessId         String?   @unique @map("directpay_business_id")
+  directPaySlug               String?   @map("directpay_slug")
+  directPaySubscriptionId     String?   @map("directpay_subscription_id")
+  subscriptionStatus          String?   @map("subscription_status")
+  subscriptionPlanCode        String?   @map("subscription_plan_code")
+  subscriptionPeriodStart     DateTime? @map("subscription_period_start")
+  subscriptionPeriodEnd       DateTime? @map("subscription_period_end")
+  subscriptionBillingInterval String?   @map("subscription_billing_interval")
+  subscriptionPayUrl          String?   @map("subscription_pay_url")
+  subscriptionSyncedAt        DateTime? @map("subscription_synced_at")
+
   users         User[]
   agentsRel     Agent[]
   officersRel   Officer[]
@@ -27,6 +40,7 @@ model Company {
   floatTrend    FloatTrendPoint[]
   auditLogs     AuditLog[]
   settings      CompanySettings?
+  notifications Notification[]
 }
 
 model CompanySettings {
@@ -59,6 +73,8 @@ model User {
   status       String     @default("active")
   auditLogs    AuditLog[] @relation("AuditActor")
   assignedAgents Agent[]  @relation("AgentOfficer")
+  kycReviews     Agent[]  @relation("KycReviewer")
+  notifications  Notification[]
 }
 
 model AuditLog {
@@ -101,6 +117,10 @@ model Agent {
   lat                 Float
   lng                 Float
   kyc                 String        @default("pending")
+  kycReviewNote       String?       @map("kyc_review_note")
+  kycReviewedAt       DateTime?     @map("kyc_reviewed_at")
+  kycReviewedById     String?       @map("kyc_reviewed_by_id")
+  kycReviewedBy       User?         @relation("KycReviewer", fields: [kycReviewedById], references: [id], onDelete: SetNull)
   lastVisit           String?       @map("last_visit")
   nationalId          String?       @map("national_id")
   businessType        String?       @map("business_type")
@@ -162,14 +182,18 @@ model Visit {
 }
 
 model Alert {
-  id        Int     @id @default(autoincrement())
-  companyId String? @map("company_id")
-  company   Company? @relation(fields: [companyId], references: [id])
-  type      String
-  title     String
-  body      String
-  time      String
-  agentId   String? @map("agent_id")
+  id          Int       @id @default(autoincrement())
+  companyId   String?   @map("company_id")
+  company     Company?  @relation(fields: [companyId], references: [id])
+  type        String
+  title       String
+  body        String
+  time        String
+  agentId     String?   @map("agent_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  dismissedAt DateTime? @map("dismissed_at")
+
+  @@index([companyId, dismissedAt])
 }
 
 model TrainingModule {
@@ -202,4 +226,22 @@ model FloatDelivery {
   unknownCount Int      @default(0) @map("unknown_count")
   receivedAt   DateTime @default(now()) @map("received_at")
   status       String   @default("completed")
+}
+
+model Notification {
+  id         Int       @id @default(autoincrement())
+  userId     String    @map("user_id")
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId  String?   @map("company_id")
+  company    Company?  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  type       String
+  title      String
+  body       String
+  entityType String?   @map("entity_type")
+  entityId   String?   @map("entity_id")
+  readAt     DateTime? @map("read_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([userId, readAt])
+  @@index([userId, createdAt(sort: Desc)])
 }

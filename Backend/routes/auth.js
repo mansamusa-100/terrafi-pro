@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '../lib/prisma.js';
 import { signToken, authMiddleware } from '../middleware/auth.js';
 import { loadUser } from '../middleware/user.js';
+import { cachedCompanySubscription } from '../lib/company-billing.js';
 
 const router = Router();
 
@@ -33,23 +34,46 @@ router.post('/login', async (req, res, next) => {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
+    if (row.status === 'suspended') {
+      return res.status(403).json({ error: 'Your account has been suspended' });
+    }
+
+    if (row.companyId && row.company?.status === 'suspended') {
+      return res.status(403).json({
+        error: 'This organisation has been suspended. Contact platform support.'
+      });
+    }
+
     res.json({ token: signToken(row), user: toAppUser(row) });
   } catch (err) {
     next(err);
   }
 });
 
-router.get('/me', authMiddleware, loadUser, (req, res) => {
-  res.json({
-    user: {
-      id: req.user.id,
-      name: req.user.name,
-      email: req.user.email,
-      role: req.user.role,
-      company: req.user.company,
-      scope: req.user.scope
+router.get('/me', authMiddleware, loadUser, async (req, res, next) => {
+  try {
+    let subscription = null;
+    if (req.user.companyId) {
+      const company = await prisma.company.findUnique({
+        where: { id: req.user.companyId }
+      });
+      if (company) subscription = cachedCompanySubscription(company);
     }
-  });
+
+    res.json({
+      user: {
+        id: req.user.id,
+        name: req.user.name,
+        email: req.user.email,
+        role: req.user.role,
+        company: req.user.company,
+        scope: req.user.scope
+      },
+      subscription
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
 router.get('/demo-users', async (_req, res, next) => {

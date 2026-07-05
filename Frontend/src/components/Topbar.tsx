@@ -1,19 +1,23 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Search, Bell, ChevronDown, LogOut, Repeat, Check, Menu } from 'lucide-react';
+import { Search, ChevronDown, LogOut, Repeat, Check, Menu } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { ROLE_META } from '../lib/rbac';
 import { api, DemoUser } from '../lib/api';
 import { cn } from '../lib/utils';
+import { NotificationBell } from './NotificationBell';
+import type { Agent } from '../lib/api';
 
 interface TopbarProps {
   page: string;
   searchQ: string;
   setSearchQ: (q: string) => void;
   onMenuClick: () => void;
+  setPage: (page: string) => void;
+  setSelectedAgent: (agent: Agent | null) => void;
 }
 
 const TITLES: Record<string, string> = {
-  dashboard: 'Network Overview',
+  dashboard: 'Overview',
   companies: 'Companies',
   agents: 'Agent Directory',
   map: 'Network Map',
@@ -28,7 +32,14 @@ const TITLES: Record<string, string> = {
   settings: 'Settings'
 };
 
-export function Topbar({ page, searchQ, setSearchQ, onMenuClick }: TopbarProps) {
+export function Topbar({
+  page,
+  searchQ,
+  setSearchQ,
+  onMenuClick,
+  setPage,
+  setSelectedAgent
+}: TopbarProps) {
   const { user, logout, switchRole } = useAuth();
   const [open, setOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
@@ -54,6 +65,13 @@ export function Topbar({ page, searchQ, setSearchQ, onMenuClick }: TopbarProps) 
 
   if (!user) return null;
   const meta = ROLE_META[user.role];
+  const isPlatform = user.role === 'system_owner' || user.role === 'platform_staff';
+  const pageTitle =
+    page === 'dashboard'
+      ? isPlatform
+        ? 'Platform Overview'
+        : 'Network Overview'
+      : TITLES[page] || 'Dashboard';
 
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shrink-0 shadow-sm">
@@ -68,7 +86,7 @@ export function Topbar({ page, searchQ, setSearchQ, onMenuClick }: TopbarProps) 
 
         <div className="flex-1 min-w-0">
           <h1 className="text-sm sm:text-base font-semibold text-slate-900 tracking-tight truncate">
-            {TITLES[page] || 'Dashboard'}
+            {pageTitle}
           </h1>
           <div className="text-[10px] sm:text-xs text-slate-500 mt-0.5 font-medium truncate">
             {user.company} · {meta.label}
@@ -99,14 +117,7 @@ export function Topbar({ page, searchQ, setSearchQ, onMenuClick }: TopbarProps) 
           />
         </div>
 
-        <div className="relative hidden sm:block">
-          <button
-            type="button"
-            className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors">
-            <Bell className="w-5 h-5" />
-          </button>
-          <span className="absolute top-2 right-2 w-2 h-2 bg-apsRed rounded-full border-2 border-white" />
-        </div>
+        <NotificationBell setPage={setPage} setSelectedAgent={setSelectedAgent} />
 
         <div className="relative" ref={ref}>
           <button

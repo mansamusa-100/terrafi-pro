@@ -4,6 +4,7 @@ import { prisma } from '../lib/prisma.js';
 import { companyFilter } from '../middleware/user.js';
 import { requireRoles } from '../middleware/auth.js';
 import { logAudit, isPlatformRole, PLATFORM_ROLES, COMPANY_ROLES } from '../lib/audit.js';
+import { notifyUserInvited } from '../lib/notifications.js';
 
 const router = Router();
 
@@ -110,6 +111,8 @@ router.post('/invite', requireRoles('system_owner', 'platform_staff', 'manager')
       details: { email: user.email, role: user.role, invitedName: user.name }
     });
 
+    await notifyUserInvited(user, req.user);
+
     res.status(201).json({
       name: user.name,
       email: user.email,
@@ -175,21 +178,36 @@ router.patch(
 
 router.patch(
   '/:email',
-  requireRoles('manager'),
+  requireRoles('system_owner', 'platform_staff', 'manager'),
   async (req, res, next) => {
     try {
       const user = await prisma.user.findFirst({
         where: { email: { equals: req.params.email, mode: 'insensitive' } }
       });
       if (!user) return res.status(404).json({ error: 'User not found' });
-      if (user.companyId !== req.user.companyId) {
+
+      const actorIsPlatform = isPlatformRole(req.user.role);
+
+      if (actorIsPlatform) {
+        if (user.companyId != null) {
+          return res.status(403).json({ error: 'Cannot manage company users from platform' });
+        }
+        if (user.role === 'system_owner' && req.user.role !== 'system_owner') {
+          return res.status(403).json({ error: 'Cannot edit system owner' });
+        }
+      } else if (user.companyId !== req.user.companyId) {
         return res.status(403).json({ error: 'Access denied' });
       }
 
       const data = {};
       if (req.body.name?.trim()) data.name = req.body.name.trim();
-      if (req.body.zone !== undefined) data.zone = req.body.zone?.trim() || null;
+      if (!actorIsPlatform && req.body.zone !== undefined) {
+        data.zone = req.body.zone?.trim() || null;
+      }
       if (req.body.status && ['active', 'invited', 'suspended'].includes(req.body.status)) {
+        if (user.role === 'system_owner' && req.body.status !== 'active') {
+          return res.status(400).json({ error: 'Cannot suspend system owner' });
+        }
         data.status = req.body.status;
       }
 
@@ -202,7 +220,7 @@ router.patch(
         data
       });
 
-      if (updated.role === 'adr' && data.name && data.name !== user.name) {
+      if (!actorIsPlatform && updated.role === 'adr' && data.name && data.name !== user.name) {
         await prisma.agent.updateMany({
           where: { officerId: updated.id },
           data: { officer: updated.name }
@@ -210,7 +228,7 @@ router.patch(
       }
 
       await logAudit({
-        scope: 'company',
+        scope: user.companyId ? 'company' : 'platform',
         companyId: user.companyId,
         actor: req.user,
         action: 'user.updated',

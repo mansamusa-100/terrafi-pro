@@ -2,6 +2,8 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../lib/prisma.js';
 import { logAudit } from '../lib/audit.js';
+import { notifyCompanyRegistered } from '../lib/notifications.js';
+import { setupCompanyBilling } from '../lib/company-billing.js';
 
 const router = Router();
 
@@ -83,6 +85,16 @@ router.post('/register-company', async (req, res, next) => {
       details: { companyName: result.company.name }
     });
 
+    await notifyCompanyRegistered(result.company);
+
+    // Self-service DirectPay setup: provision + start CORPORATE + pay link.
+    // Best-effort — never blocks registration if DirectPay is unavailable.
+    const billing = await setupCompanyBilling({
+      companyId: result.company.id,
+      ownerEmail: result.user.email,
+      ownerName: result.user.name
+    });
+
     res.status(201).json({
       message: 'Registration successful. You can sign in and set up your network.',
       company: {
@@ -94,6 +106,10 @@ router.post('/register-company', async (req, res, next) => {
         email: result.user.email,
         name: result.user.name,
         role: result.user.role
+      },
+      billing: {
+        payUrl: billing.ok ? billing.payUrl : null,
+        configured: !billing.skipped
       }
     });
   } catch (err) {
