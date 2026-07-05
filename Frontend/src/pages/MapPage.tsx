@@ -7,6 +7,7 @@ import type { Agent } from '../lib/api';
 import { cn } from '../lib/utils';
 import { useUserLocation } from '../lib/useUserLocation';
 import { compareAgentDistance, formatDistance, agentDistanceMeters } from '../lib/agent-distance';
+import { GoVisitButton } from '../components/GoVisitButton';
 
 interface MapPageProps {
   setSelectedAgent: (agent: Agent) => void;
@@ -214,10 +215,18 @@ export function MapPage({ setSelectedAgent }: MapPageProps) {
             {filtered.map((a) => {
               const dist = agentDistanceMeters(a, userCoords);
               return (
-                <button
+                <div
                   key={a.id}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => setSelectedAgent(a)}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 border-b border-slate-50 hover:bg-slate-50 transition-colors text-left">
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setSelectedAgent(a);
+                    }
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 border-b border-slate-50 hover:bg-slate-50 transition-colors text-left cursor-pointer">
                   {a.location_photo_url ? (
                     <img
                       src={a.location_photo_url}
@@ -239,10 +248,11 @@ export function MapPage({ setSelectedAgent }: MapPageProps) {
                       {dist != null ? ` · ${formatDistance(dist)}` : ''}
                     </div>
                   </div>
-                  <div className="text-[11px] font-semibold text-slate-700">
+                  <GoVisitButton agent={a} variant="compact" />
+                  <div className="text-[11px] font-semibold text-slate-700 shrink-0">
                     {fmt(a.efloat)}
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>

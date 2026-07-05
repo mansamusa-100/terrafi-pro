@@ -5,6 +5,7 @@ import { ProgressBar } from './ProgressBar';
 import type { Agent } from '../lib/api';
 import { agentDistanceMeters, formatDistance } from '../lib/agent-distance';
 import type { GeoCoords } from '../lib/geolocation';
+import { GoVisitButton } from './GoVisitButton';
 import { Navigation } from 'lucide-react';
 
 interface AgentCardProps {
@@ -91,7 +92,7 @@ export function AgentCard({ agent, userCoords = null, onClick }: AgentCardProps)
           <ProgressBar value={floatPct} color={floatBgClass} height="h-1.5" />
         </div>
 
-        <div className="flex justify-between text-xs text-slate-500">
+        <div className="flex justify-between items-center text-xs text-slate-500">
           <span>
             Score: <b className="text-slate-900">{agent.score}%</b>
           </span>
@@ -101,6 +102,10 @@ export function AgentCard({ agent, userCoords = null, onClick }: AgentCardProps)
           <span>
             Last: <b className="text-slate-900">{agent.last_visit ?? '—'}</b>
           </span>
+        </div>
+
+        <div className="mt-3 pt-3 border-t border-slate-100">
+          <GoVisitButton agent={agent} variant="compact" fullWidth />
         </div>
       </div>
     </div>

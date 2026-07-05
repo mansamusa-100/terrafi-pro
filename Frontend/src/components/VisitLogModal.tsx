@@ -20,6 +20,7 @@ import {
   GPS_VERIFY_RADIUS_M
 } from '../lib/geolocation';
 import { isBrowserOnline } from '../lib/offline-visits';
+import { GoVisitButton } from './GoVisitButton';
 interface VisitLogModalProps {
   open: boolean;
   onClose: () => void;
@@ -276,6 +277,21 @@ export function VisitLogModal({
                 </select>
               </div>
             </div>
+
+            {agent && (
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-apsBlue/20 bg-apsBlueLt/30 px-4 py-3">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-slate-900 truncate">
+                    {agent.outlet_name || agent.name}
+                  </div>
+                  <div className="text-xs text-slate-500 truncate">
+                    {agent.zone}
+                    {agent.town_village ? ` · ${agent.town_village}` : ''}
+                  </div>
+                </div>
+                <GoVisitButton agent={agent} variant="outline" />
+              </div>
+            )}
 
             {/* GPS check-in */}
             <div

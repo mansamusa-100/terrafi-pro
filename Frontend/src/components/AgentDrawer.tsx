@@ -28,6 +28,7 @@ import { can } from '../lib/rbac';
 import { useAppData } from '../lib/data-context';
 import { Pencil } from 'lucide-react';
 import { AgentOnboardingEdit } from './AgentOnboardingEdit';
+import { GoVisitButton } from './GoVisitButton';
 
 interface AgentDrawerProps {
   agent: Agent | null;
@@ -251,6 +252,8 @@ export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
               </div>
             ))}
           </div>
+
+          <GoVisitButton agent={data} variant="ghost" fullWidth className="mt-4" />
         </div>
 
         <div className="flex border-b border-slate-200 px-4 shrink-0">
