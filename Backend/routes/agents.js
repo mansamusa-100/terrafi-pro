@@ -11,7 +11,7 @@ import {
   resolveOfficerAssignment
 } from '../middleware/user.js';
 import { requireRoles } from '../middleware/auth.js';
-import { kycUpload, bulkKycUpload, kycUploadDir } from '../middleware/upload.js';
+import { kycUpload, bulkKycUpload, kycUploadDir, locationPhotoUpload } from '../middleware/upload.js';
 import { KYC_DOC_TYPES, KYC_DOC_LABELS, parseKycFilename } from '../lib/kyc.js';
 import { syncKycStatus } from '../lib/kyc-status.js';
 import { notifyAgentOnboarded } from '../lib/notifications.js';
@@ -69,7 +69,7 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-router.get('/import/template', requireRoles('manager', 'adr'), (_req, res) => {
+router.get('/import/template', requireRoles('manager', 'team_lead', 'adr'), (_req, res) => {
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader(
     'Content-Disposition',
@@ -78,7 +78,7 @@ router.get('/import/template', requireRoles('manager', 'adr'), (_req, res) => {
   res.send(AGENT_IMPORT_TEMPLATE);
 });
 
-router.post('/import', requireRoles('manager', 'adr'), async (req, res, next) => {
+router.post('/import', requireRoles('manager', 'team_lead', 'adr'), async (req, res, next) => {
   try {
     const { csv } = req.body;
     if (!csv?.trim()) {
@@ -186,7 +186,7 @@ router.post('/import', requireRoles('manager', 'adr'), async (req, res, next) =>
 
 router.post(
   '/kyc-docs/bulk',
-  requireRoles('manager', 'adr'),
+  requireRoles('manager', 'team_lead', 'adr'),
   bulkKycUpload.array('files', 100),
   async (req, res, next) => {
     try {
@@ -261,7 +261,7 @@ router.post(
   }
 );
 
-router.post('/', requireRoles('manager', 'adr'), async (req, res, next) => {
+router.post('/', requireRoles('manager', 'team_lead', 'adr'), async (req, res, next) => {
   try {
     const companyId = req.user.companyId || 'co-aps';
     const {
@@ -273,13 +273,25 @@ router.post('/', requireRoles('manager', 'adr'), async (req, res, next) => {
       officer,
       officer_id,
       nationalId,
-      businessType
+      businessType,
+      businessTypeOther,
+      outletName,
+      personalPhone,
+      townVillage,
+      competitorsPresent,
+      brandingPresent
     } = req.body;
 
     if (!name?.trim() || !phone?.trim() || !zone) {
       return res
         .status(400)
-        .json({ error: 'Name, phone, and zone are required' });
+        .json({ error: 'Name, business phone, and zone are required' });
+    }
+    if (!outletName?.trim()) {
+      return res.status(400).json({ error: 'Outlet / business name is required' });
+    }
+    if (!townVillage?.trim()) {
+      return res.status(400).json({ error: 'Town / village is required' });
     }
 
     const agentLat = lat != null ? Number(lat) : NaN;
@@ -303,17 +315,59 @@ router.post('/', requireRoles('manager', 'adr'), async (req, res, next) => {
       return res.status(400).json({ error: phoneFields.error });
     }
 
+    if (!personalPhone?.trim()) {
+      return res.status(400).json({ error: 'Personal contact number is required' });
+    }
+    const resolvedPersonal = resolveAgentPhone(personalPhone);
+    if (resolvedPersonal.error) {
+      return res.status(400).json({ error: `Personal phone: ${resolvedPersonal.error}` });
+    }
+    const personalFields = {
+      personalPhone: resolvedPersonal.phone,
+      personalPhoneNormalized: resolvedPersonal.phoneNormalized
+    };
+
+    let resolvedBusinessType = businessType || null;
+    let resolvedBusinessOther = null;
+    if (businessType === 'Others') {
+      if (!businessTypeOther?.trim()) {
+        return res.status(400).json({
+          error: 'Please specify the business type when selecting Others'
+        });
+      }
+      resolvedBusinessType = 'Others';
+      resolvedBusinessOther = businessTypeOther.trim();
+    }
+
+    const competitors = Array.isArray(competitorsPresent)
+      ? competitorsPresent.map(String).filter(Boolean)
+      : [];
+    const branding = Array.isArray(brandingPresent)
+      ? brandingPresent.map(String).filter(Boolean)
+      : [];
+
     let assignment;
     if (req.user.role === 'adr') {
       assignment = { officerId: req.user.id, officer: req.user.name };
     } else {
-      assignment = await resolveOfficerAssignment(companyId, {
-        officerId: officer_id,
-        officerName: officer,
-        fallback: { officerId: null, officer: 'Unassigned' }
-      });
+      const allowedAdrIds =
+        req.user.role === 'team_lead' ? req.user.supervisedAdrIds : null;
+      assignment = await resolveOfficerAssignment(
+        companyId,
+        {
+          officerId: officer_id,
+          officerName: officer,
+          fallback: { officerId: null, officer: 'Unassigned' }
+        },
+        { allowedAdrIds }
+      );
       if (!assignment) {
         return res.status(400).json({ error: 'Invalid ADR assignment' });
+      }
+      if (req.user.role === 'team_lead' && !assignment.officerId) {
+        return res.status(400).json({
+          error: 'Team leads must assign the agent to one of their ADRs'
+        });
       }
     }
 
@@ -341,7 +395,14 @@ router.post('/', requireRoles('manager', 'adr'), async (req, res, next) => {
           kyc: 'pending',
           lastVisit: 'Never',
           nationalId: nationalId || null,
-          businessType: businessType || null
+          businessType: resolvedBusinessType,
+          businessTypeOther: resolvedBusinessOther,
+          outletName: outletName.trim(),
+          personalPhone: personalFields.personalPhone,
+          personalPhoneNormalized: personalFields.personalPhoneNormalized,
+          townVillage: townVillage.trim(),
+          competitorsPresent: competitors,
+          brandingPresent: branding
         }
       });
       await tx.company.update({
@@ -415,8 +476,42 @@ router.get('/:id', async (req, res, next) => {
 });
 
 router.post(
+  '/:id/location-photo',
+  requireRoles('manager', 'team_lead', 'adr'),
+  locationPhotoUpload.single('file'),
+  async (req, res, next) => {
+    try {
+      const agent = await prisma.agent.findUnique({ where: { id: req.params.id } });
+      const access = await assertAgentAccess(req, agent);
+      if (access) return res.status(access.status).json({ error: access.error });
+
+      if (!req.file) {
+        return res.status(400).json({ error: 'Location photo is required' });
+      }
+
+      if (agent.locationPhotoPath) {
+        const oldPath = path.join(kycUploadDir, '..', agent.locationPhotoPath);
+        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+      }
+
+      const filePath = path.posix.join('location', req.file.filename);
+      const updated = await prisma.agent.update({
+        where: { id: agent.id },
+        data: { locationPhotoPath: filePath }
+      });
+
+      res.status(201).json({
+        location_photo_url: `/uploads/${updated.locationPhotoPath}`
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+router.post(
   '/:id/kyc-docs',
-  requireRoles('manager', 'adr'),
+  requireRoles('manager', 'team_lead', 'adr'),
   kycUpload.single('file'),
   async (req, res, next) => {
     try {
@@ -523,6 +618,7 @@ router.patch('/:id', async (req, res, next) => {
     if (access) return res.status(access.status).json({ error: access.error });
 
     const isManager = req.user.role === 'manager';
+    const isTeamLead = req.user.role === 'team_lead';
     const profileKeys = [
       'name',
       'phone',
@@ -532,11 +628,28 @@ router.patch('/:id', async (req, res, next) => {
       'business_type',
       'officer_id'
     ];
+    const onboardingKeys = [
+      'outlet_name',
+      'town_village',
+      'personal_phone',
+      'business_type_other',
+      'competitors_present',
+      'branding_present'
+    ];
+
     if (
       !isManager &&
       profileKeys.some((k) => req.body[k] !== undefined)
     ) {
       return res.status(403).json({ error: 'Only managers can edit agent profiles' });
+    }
+
+    if (
+      !isManager &&
+      !isTeamLead &&
+      onboardingKeys.some((k) => req.body[k] !== undefined)
+    ) {
+      return res.status(403).json({ error: 'Not allowed to edit onboarding details' });
     }
 
     const data = {};
@@ -550,10 +663,24 @@ router.patch('/:id', async (req, res, next) => {
       last_visit: 'lastVisit',
       visits: 'visits',
       national_id: 'nationalId',
-      business_type: 'businessType'
+      business_type: 'businessType',
+      business_type_other: 'businessTypeOther',
+      outlet_name: 'outletName',
+      town_village: 'townVillage'
     };
     for (const [key, field] of Object.entries(map)) {
       if (req.body[key] !== undefined) data[field] = req.body[key];
+    }
+
+    if (req.body.competitors_present !== undefined) {
+      data.competitorsPresent = Array.isArray(req.body.competitors_present)
+        ? req.body.competitors_present.map(String).filter(Boolean)
+        : [];
+    }
+    if (req.body.branding_present !== undefined) {
+      data.brandingPresent = Array.isArray(req.body.branding_present)
+        ? req.body.branding_present.map(String).filter(Boolean)
+        : [];
     }
 
     if (req.body.phone !== undefined) {
@@ -563,6 +690,15 @@ router.patch('/:id', async (req, res, next) => {
       }
       data.phone = phoneFields.phone;
       data.phoneNormalized = phoneFields.phoneNormalized;
+    }
+
+    if (req.body.personal_phone !== undefined) {
+      const personalFields = resolveAgentPhone(req.body.personal_phone);
+      if (personalFields.error) {
+        return res.status(400).json({ error: personalFields.error });
+      }
+      data.personalPhone = personalFields.phone;
+      data.personalPhoneNormalized = personalFields.phoneNormalized;
     }
 
     if (req.body.officer_id !== undefined && isManager) {

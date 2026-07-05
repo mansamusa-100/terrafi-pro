@@ -25,7 +25,7 @@ router.get('/', async (req, res, next) => {
     }
 
     const row = await getOrCreateCompanySettings(companyId);
-    res.json(serializeCompanySettings(row));
+    res.json(await serializeCompanySettings(row));
   } catch (err) {
     next(err);
   }
@@ -45,7 +45,7 @@ router.patch('/', async (req, res, next) => {
       update: data
     });
 
-    res.json(serializeCompanySettings(row));
+    res.json(await serializeCompanySettings(row));
   } catch (err) {
     if (err.message?.startsWith('Invalid') || err.message?.includes('not editable') || err.message?.includes('No editable')) {
       return res.status(400).json({ error: err.message });

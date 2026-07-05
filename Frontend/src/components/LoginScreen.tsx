@@ -89,6 +89,7 @@ export function LoginScreen() {
     'platform_staff',
     'manager',
     'internal',
+    'team_lead',
     'adr',
     'agent',
     'teller'

@@ -1,15 +1,28 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
-import { companyFilter, todayISO, agentWhereForUser } from '../middleware/user.js';
+import { companyFilter, todayISO, agentWhereForUser, applyVisitOfficerFilter } from '../middleware/user.js';
 import { syncFloatAlerts } from '../lib/float-alerts.js';
 import { relativeTime } from '../lib/visit-utils.js';
+import { getOnboardingConfig } from '../lib/onboarding-config.js';
+import { requireRoles } from '../middleware/auth.js';
 
 const router = Router();
 
-router.get('/zones', async (_req, res, next) => {
+router.get('/zones', async (req, res, next) => {
   try {
-    const zones = await prisma.zone.findMany({ orderBy: { name: 'asc' } });
-    res.json(zones.map((z) => z.name));
+    const companyId = companyFilter(req.user) || 'co-aps';
+    const config = await getOnboardingConfig(companyId);
+    res.json(config.zone_names);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/onboarding-config', requireRoles('manager', 'team_lead', 'adr'), async (req, res, next) => {
+  try {
+    const companyId = companyFilter(req.user) || 'co-aps';
+    const config = await getOnboardingConfig(companyId);
+    res.json(config);
   } catch (err) {
     next(err);
   }
@@ -120,7 +133,7 @@ router.get('/stats', async (req, res, next) => {
     const today = todayISO();
     const visitWhere = { visitDate: today };
     if (companyId) visitWhere.companyId = companyId;
-    if (req.user.role === 'adr') visitWhere.officer = req.user.name;
+    applyVisitOfficerFilter(visitWhere, req.user);
 
     const visits = await prisma.visit.findMany({ where: visitWhere });
 

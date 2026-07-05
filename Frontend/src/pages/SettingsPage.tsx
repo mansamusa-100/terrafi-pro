@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { ApiError, api, CompanySettings } from '../lib/api';
+import { ApiError, api, CompanySettings, OnboardingConfig } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { can } from '../lib/rbac';
 import { cn } from '../lib/utils';
@@ -106,6 +106,148 @@ function displayValue(field: FieldConfig, settings: CompanySettings) {
   const raw = field.getValue(settings);
   const formatted = field.format(raw);
   return field.suffix ? `${formatted} ${field.suffix}` : formatted;
+}
+
+type ListKey = keyof OnboardingConfig;
+
+const ONBOARDING_LISTS: {
+  key: ListKey;
+  apiKey: 'business_types' | 'zone_names' | 'competitor_names' | 'branding_types';
+  label: string;
+  hint: string;
+}[] = [
+  {
+    key: 'business_types',
+    apiKey: 'business_types',
+    label: 'Business types',
+    hint: 'One per line. "Others" is always kept for custom entries.'
+  },
+  {
+    key: 'zone_names',
+    apiKey: 'zone_names',
+    label: 'Zone names',
+    hint: 'One per line. Used in agent onboarding zone dropdown.'
+  },
+  {
+    key: 'competitor_names',
+    apiKey: 'competitor_names',
+    label: 'Competitor names',
+    hint: 'One per line. Shown when logging competitors at a location.'
+  },
+  {
+    key: 'branding_types',
+    apiKey: 'branding_types',
+    label: 'Branding types',
+    hint: 'One per line. e.g. Poster, Sticker, Banner.'
+  }
+];
+
+function OnboardingListsSection({
+  onboarding,
+  onSaved
+}: {
+  onboarding: OnboardingConfig;
+  onSaved: (onboarding: OnboardingConfig) => void;
+}) {
+  const [editingKey, setEditingKey] = useState<ListKey | null>(null);
+  const [draft, setDraft] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const startEdit = (key: ListKey) => {
+    setEditingKey(key);
+    setDraft(onboarding[key].join('\n'));
+  };
+
+  const cancelEdit = () => {
+    setEditingKey(null);
+    setDraft('');
+  };
+
+  const saveList = async (apiKey: (typeof ONBOARDING_LISTS)[number]['apiKey']) => {
+    setSaving(true);
+    try {
+      const updated = await api.settings.update({ [apiKey]: draft });
+      onSaved(updated.onboarding);
+      setEditingKey(null);
+      setDraft('');
+      toast.success('Onboarding list saved');
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm mb-4">
+      <h3 className="text-sm font-semibold text-slate-900 mb-1">
+        Agent onboarding lists
+      </h3>
+      <p className="text-xs text-slate-500 mb-4">
+        Configure dropdowns and checklists used when registering new agents.
+      </p>
+      {ONBOARDING_LISTS.map(({ key, apiKey, label, hint }) => {
+        const isEditing = editingKey === key;
+        return (
+          <div
+            key={key}
+            className="py-4 border-b border-slate-100 last:border-0">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium text-slate-900">{label}</div>
+                <p className="text-xs text-slate-500 mt-0.5">{hint}</p>
+                {isEditing ? (
+                  <textarea
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    rows={5}
+                    className="mt-3 w-full text-sm border border-slate-200 rounded-lg px-3 py-2 font-mono resize-y"
+                  />
+                ) : (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {onboarding[key].map((item) => (
+                      <span
+                        key={item}
+                        className="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {isEditing ? (
+                  <>
+                    <button
+                      type="button"
+                      disabled={saving}
+                      onClick={() => saveList(apiKey)}
+                      className="text-xs text-white bg-apsBlue hover:bg-apsBlue/90 px-3 py-1 rounded-md font-medium disabled:opacity-50">
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      disabled={saving}
+                      onClick={cancelEdit}
+                      className="text-xs text-slate-600 hover:bg-slate-100 px-3 py-1 rounded-md font-medium">
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => startEdit(key)}
+                    className="text-xs text-apsBlue bg-apsBlueLt hover:bg-apsBlue/20 px-3 py-1 rounded-md font-medium transition-colors">
+                    Edit
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 export function SettingsPage() {
@@ -258,6 +400,15 @@ export function SettingsPage() {
           })}
         </div>
       ))}
+
+      {canEdit && settings.onboarding && (
+        <OnboardingListsSection
+          onboarding={settings.onboarding}
+          onSaved={(onboarding) =>
+            setSettings((prev) => (prev ? { ...prev, onboarding } : prev))
+          }
+        />
+      )}
 
       <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
         <div className="flex items-center justify-between gap-3 mb-4">

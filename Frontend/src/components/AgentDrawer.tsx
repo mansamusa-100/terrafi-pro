@@ -27,6 +27,7 @@ import { useAuth } from '../lib/auth';
 import { can } from '../lib/rbac';
 import { useAppData } from '../lib/data-context';
 import { Pencil } from 'lucide-react';
+import { AgentOnboardingEdit } from './AgentOnboardingEdit';
 
 interface AgentDrawerProps {
   agent: Agent | null;
@@ -40,6 +41,9 @@ export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
   const { users, updateAgent, reviewKyc } = useAppData();
   const canUploadKyc = user ? can(user.role, 'onboardAgent') : false;
   const canEdit = user ? can(user.role, 'editAgent') : false;
+  const canEditOnboarding = user
+    ? can(user.role, 'editAgent') || can(user.role, 'editAgentOnboarding')
+    : false;
   const canReview = user ? can(user.role, 'reviewKyc') : false;
   const adrs = users.filter((u) => u.role === 'adr' && u.id);
   const [mounted, setMounted] = useState(false);
@@ -273,10 +277,33 @@ export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
             </div>
           ) : tab === 'overview' ? (
             <div className="space-y-6">
+              {data.location_photo_url && (
+                <div className="rounded-xl overflow-hidden border border-slate-200 shadow-sm">
+                  <img
+                    src={data.location_photo_url}
+                    alt={`${data.outlet_name || data.name} location`}
+                    className="w-full h-44 object-cover"
+                  />
+                </div>
+              )}
+
               <div className="space-y-3">
+                {data.outlet_name && (
+                  <div className="flex items-center gap-3 text-sm">
+                    <Wallet className="w-4 h-4 text-slate-400 shrink-0" />
+                    <span className="text-slate-500 w-28">Outlet</span>
+                    <span className="font-medium text-slate-900">{data.outlet_name}</span>
+                  </div>
+                )}
                 {[
                   [MapPin, 'Zone', data.zone],
-                  [Phone, 'Phone', data.phone],
+                  ...(data.town_village
+                    ? [[MapPin, 'Town / village', data.town_village] as const]
+                    : []),
+                  [Phone, 'Business phone', data.phone],
+                  ...(data.personal_phone
+                    ? [[Phone, 'Personal', data.personal_phone] as const]
+                    : []),
                   [User, 'Field officer', data.officer],
                   [Calendar, 'Joined', data.joined],
                   [Clock, 'Last visit', lastVisit],
@@ -285,7 +312,15 @@ export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
                   <div key={label as string} className="flex items-center gap-3 text-sm">
                     <Icon className="w-4 h-4 text-slate-400 shrink-0" />
                     <span className="text-slate-500 w-28">{label as string}</span>
-                    <span className="font-medium text-slate-900">{value as string}</span>
+                    {label === 'Personal' && data.personal_phone ? (
+                      <a
+                        href={`tel:${data.personal_phone.replace(/\s/g, '')}`}
+                        className="font-medium text-apsBlue hover:underline">
+                        {value as string}
+                      </a>
+                    ) : (
+                      <span className="font-medium text-slate-900">{value as string}</span>
+                    )}
                   </div>
                 ))}
                 {data.national_id && (
@@ -299,7 +334,39 @@ export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
                   <div className="flex items-center gap-3 text-sm">
                     <Wallet className="w-4 h-4 text-slate-400 shrink-0" />
                     <span className="text-slate-500 w-28">Business type</span>
-                    <span className="font-medium text-slate-900">{data.business_type}</span>
+                    <span className="font-medium text-slate-900">
+                      {data.business_type === 'Others' && data.business_type_other
+                        ? data.business_type_other
+                        : data.business_type}
+                    </span>
+                  </div>
+                )}
+                {(data.competitors_present?.length ?? 0) > 0 && (
+                  <div className="text-sm">
+                    <div className="text-slate-500 mb-1.5">Competitors at location</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {data.competitors_present!.map((c) => (
+                        <span
+                          key={c}
+                          className="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                          {c}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {(data.branding_present?.length ?? 0) > 0 && (
+                  <div className="text-sm">
+                    <div className="text-slate-500 mb-1.5">Branding at location</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {data.branding_present!.map((b) => (
+                        <span
+                          key={b}
+                          className="text-xs font-medium px-2 py-0.5 rounded-full bg-apsGreenLt text-apsGreen">
+                          {b}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 )}
                 <div className="flex items-center gap-3 text-sm">
@@ -329,6 +396,15 @@ export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
                   <span>D 100,000</span>
                 </div>
               </div>
+
+              {canEditOnboarding && (
+                <AgentOnboardingEdit
+                  agent={data}
+                  onUpdated={(updated) => {
+                    setDetail((prev) => (prev ? { ...prev, ...updated } : prev));
+                  }}
+                />
+              )}
 
               {canEdit && (
                 <div className="border border-slate-200 rounded-xl p-4">

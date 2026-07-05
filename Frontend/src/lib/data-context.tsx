@@ -59,7 +59,8 @@ interface AppDataContextValue {
   refresh: () => Promise<void>;
   createAgent: (
     body: Record<string, unknown>,
-    kycFiles?: Record<string, File>
+    kycFiles?: Record<string, File>,
+    locationPhoto?: File
   ) => Promise<Agent>;
   logVisit: (body: Record<string, unknown>) => Promise<Visit>;
   scheduleVisit: (body: Record<string, unknown>) => Promise<Visit>;
@@ -76,12 +77,14 @@ interface AppDataContextValue {
     email: string,
     body: { name?: string; zone?: string; status?: string }
   ) => Promise<void>;
+  updateSupervisedAdrs: (email: string, adrIds: string[]) => Promise<void>;
   inviteUser: (body: {
     name: string;
     email: string;
     role: string;
     zone?: string;
-  }  ) => Promise<CompanyUser & { temporaryPassword?: string }>;
+    supervised_adr_ids?: string[];
+  }) => Promise<CompanyUser & { temporaryPassword?: string }>;
   importAgents: (csv: string) => Promise<BulkImportResult>;
   bulkUploadKyc: (files: File[]) => Promise<BulkKycResult>;
   updateAgent: (id: string, body: Record<string, unknown>) => Promise<void>;
@@ -110,11 +113,11 @@ function isPlatformRole(role: Role) {
 }
 
 function needsVisits(role: Role) {
-  return ['manager', 'internal', 'adr', 'agent'].includes(role);
+  return ['manager', 'internal', 'team_lead', 'adr', 'agent'].includes(role);
 }
 
 function needsNetworkData(role: Role) {
-  return ['manager', 'internal', 'adr', 'agent', 'teller'].includes(role);
+  return ['manager', 'internal', 'team_lead', 'adr', 'agent', 'teller'].includes(role);
 }
 
 export function AppDataProvider({ children }: { children: React.ReactNode }) {
@@ -191,6 +194,10 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         fetches.push(api.audit().then(setAuditLogs));
       }
 
+      if (user.role === 'team_lead') {
+        fetches.push(api.users().then(setUsers));
+      }
+
       if (needsAgents(user.role)) {
         fetches.push(api.agents.list().then(setAgents));
         fetches.push(api.zones().then(setZones));
@@ -209,17 +216,20 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         );
       }
 
-      if (['manager', 'internal', 'adr', 'agent'].includes(user.role)) {
+      if (['manager', 'internal', 'team_lead', 'adr', 'agent'].includes(user.role)) {
         fetches.push(
           api.officers().then(setOfficers),
           api.training().then(setTraining)
         );
       }
 
+      if (['manager', 'internal', 'team_lead'].includes(user.role)) {
+        fetches.push(api.performance.adr().then(setAdrPerformance));
+      }
+
       if (['manager', 'internal'].includes(user.role)) {
         fetches.push(api.kyc.stats().then(setKycStats));
         fetches.push(api.kyc.reviewQueue().then(setKycReviewQueue));
-        fetches.push(api.performance.adr().then(setAdrPerformance));
       }
 
       if (user.role === 'adr') {
@@ -241,16 +251,30 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const createAgent = useCallback(
     async (
       body: Record<string, unknown>,
-      kycFiles?: Record<string, File>
+      kycFiles?: Record<string, File>,
+      locationPhoto?: File
     ) => {
       const agent = await api.agents.create(body);
-      if (kycFiles) {
-        for (const [docType, file] of Object.entries(kycFiles)) {
-          await api.agents.uploadKyc(agent.id, docType, file);
+      try {
+        if (locationPhoto) {
+          await api.agents.uploadLocationPhoto(agent.id, locationPhoto);
         }
+        if (kycFiles && Object.keys(kycFiles).length > 0) {
+          for (const [docType, file] of Object.entries(kycFiles)) {
+            await api.agents.uploadKyc(agent.id, docType, file);
+          }
+        }
+      } catch (err) {
+        const detail =
+          err instanceof ApiError ? err.message : 'Upload failed';
+        throw new ApiError(
+          `${agent.name} (${agent.id}) was created, but upload failed: ${detail}. Open the agent profile to retry.`,
+          err instanceof ApiError ? err.status : 0
+        );
       }
       await refresh();
-      return agent;
+      const refreshed = await api.agents.get(agent.id);
+      return refreshed;
     },
     [refresh]
   );
@@ -415,6 +439,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       email: string;
       role: string;
       zone?: string;
+      supervised_adr_ids?: string[];
     }) => {
       const created = await api.inviteUser(body);
       await refresh();
@@ -447,6 +472,14 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       body: { name?: string; zone?: string; status?: string }
     ) => {
       await api.updateUser(email, body);
+      await refresh();
+    },
+    [refresh]
+  );
+
+  const updateSupervisedAdrs = useCallback(
+    async (email: string, adrIds: string[]) => {
+      await api.updateSupervisedAdrs(email, adrIds);
       await refresh();
     },
     [refresh]
@@ -525,6 +558,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         importAgents,
         bulkUploadKyc,
         updateUser,
+        updateSupervisedAdrs,
         updateAgent,
         reviewKyc,
         notifications,

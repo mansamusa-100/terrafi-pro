@@ -20,6 +20,7 @@ export type Role =
 'platform_staff' |
 'manager' |
 'internal' |
+'team_lead' |
 'adr' |
 'agent' |
 'teller';
@@ -31,6 +32,8 @@ export interface AppUser {
   role: Role;
   company: string;
   scope: string;
+  zone?: string | null;
+  supervised_adr_ids?: string[];
 }
 
 export const ROLE_META: Record<
@@ -60,6 +63,12 @@ export const ROLE_META: Record<
     short: 'Internal',
     description: 'Back-office staff — compliance, float & performance',
     level: 'Company'
+  },
+  team_lead: {
+    label: 'Team Lead (Regional)',
+    short: 'Team Lead',
+    description: 'Supervises assigned ADRs — field ops, onboarding & visits',
+    level: 'Field'
   },
   adr: {
     label: 'ADR / Field Officer',
@@ -117,6 +126,7 @@ export const PAGE_ACCESS: Record<Role, string[]> = {
   'settings'],
 
   internal: ['dashboard', 'float', 'performance', 'compliance'],
+  team_lead: ['dashboard', 'agents', 'map', 'visits', 'performance'],
   adr: ['dashboard', 'agents', 'map', 'visits'],
   agent: ['dashboard', 'float', 'visits', 'training'],
   teller: ['dashboard', 'float']
@@ -145,12 +155,21 @@ export const CAPABILITIES: Record<Role, Record<string, boolean>> = {
     logVisit: true,
     scheduleVisit: true,
     editAgent: true,
+    editAgentOnboarding: true,
     editUsers: true,
     reviewKyc: true,
     exportData: true
   },
   internal: {
     viewKycCompliance: true,
+    exportData: true
+  },
+  team_lead: {
+    onboardAgent: true,
+    logVisit: true,
+    scheduleVisit: true,
+    assignAdr: true,
+    editAgentOnboarding: true,
     exportData: true
   },
   adr: { onboardAgent: true, logVisit: true, scheduleVisit: true },
@@ -172,5 +191,9 @@ export function firstPageFor(role: Role): string {
 
 export function navFor(role: Role) {
   const allowed = PAGE_ACCESS[role] || [];
-  return PAGES.filter((p) => allowed.includes(p.id));
+  return PAGES.filter((p) => allowed.includes(p.id)).map((p) =>
+    role === 'team_lead' && p.id === 'dashboard'
+      ? { ...p, label: 'Regional hub' }
+      : p
+  );
 }

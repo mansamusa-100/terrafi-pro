@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Plus, Users, Upload, FileSpreadsheet } from 'lucide-react';
+import { Plus, Users, Upload, FileSpreadsheet, Navigation } from 'lucide-react';
 import { AgentCard } from '../components/AgentCard';
 import { OnboardingModal } from '../components/OnboardingModal';
 import { BulkImportModal } from '../components/BulkImportModal';
@@ -9,25 +9,32 @@ import type { Agent } from '../lib/api';
 import { cn } from '../lib/utils';
 import { useAuth } from '../lib/auth';
 import { can } from '../lib/rbac';
+import { useUserLocation } from '../lib/useUserLocation';
+import { compareAgentDistance } from '../lib/agent-distance';
+
 interface AgentsPageProps {
   searchQ: string;
   onAgentClick: (agent: Agent) => void;
 }
+
 export function AgentsPage({ searchQ, onAgentClick }: AgentsPageProps) {
   const { agents, createAgent } = useAppData();
   const { user } = useAuth();
+  const { coords: userCoords } = useUserLocation();
   const canOnboard = user ? can(user.role, 'onboardAgent') : false;
   const [filter, setFilter] = useState('all');
-  const [sort, setSort] = useState('name');
+  const [sort, setSort] = useState('distance');
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [kycBulkOpen, setKycBulkOpen] = useState(false);
+
   const tabs = [
-  ['all', 'All agents'],
-  ['active', 'Active'],
-  ['low_float', 'Low float'],
-  ['critical', 'Critical'],
-  ['suspended', 'Suspended']];
+    ['all', 'All agents'],
+    ['active', 'Active'],
+    ['low_float', 'Low float'],
+    ['critical', 'Critical'],
+    ['suspended', 'Suspended']
+  ];
 
   const filteredAndSortedAgents = useMemo(() => {
     let list = agents.filter((a) => filter === 'all' || a.status === filter);
@@ -35,58 +42,63 @@ export function AgentsPage({ searchQ, onAgentClick }: AgentsPageProps) {
       const q = searchQ.toLowerCase();
       list = list.filter(
         (a) =>
-        a.name.toLowerCase().includes(q) ||
-        a.id.toLowerCase().includes(q) ||
-        a.zone.toLowerCase().includes(q)
+          a.name.toLowerCase().includes(q) ||
+          a.id.toLowerCase().includes(q) ||
+          a.zone.toLowerCase().includes(q) ||
+          (a.outlet_name?.toLowerCase().includes(q) ?? false) ||
+          (a.town_village?.toLowerCase().includes(q) ?? false)
       );
     }
     return [...list].sort((a, b) => {
+      if (sort === 'distance') return compareAgentDistance(a, b, userCoords);
       if (sort === 'name') return a.name.localeCompare(b.name);
       if (sort === 'float') return b.efloat - a.efloat;
       return b.score - a.score;
     });
-  }, [filter, searchQ, sort, agents]);
+  }, [filter, searchQ, sort, agents, userCoords]);
+
   const handleAddAgent = () => setOnboardingOpen(true);
+
   return (
     <div className="page-pad">
       <div className="flex flex-col gap-3 mb-5 sm:flex-row sm:flex-wrap sm:items-center">
         <div className="flex bg-slate-100 rounded-lg p-1 gap-1 overflow-x-auto max-w-full">
-          {tabs.map(([id, label]) =>
-          <button
-            key={id}
-            onClick={() => setFilter(id)}
-            className={cn(
-              'px-3 py-1.5 rounded-md text-xs font-medium transition-all',
-              filter === id ?
-              'bg-white text-slate-900 shadow-sm' :
-              'text-slate-600 hover:text-slate-900'
-            )}>
-            
+          {tabs.map(([id, label]) => (
+            <button
+              key={id}
+              onClick={() => setFilter(id)}
+              className={cn(
+                'px-3 py-1.5 rounded-md text-xs font-medium transition-all',
+                filter === id
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              )}>
               {label}
             </button>
-          )}
+          ))}
         </div>
 
         <div className="flex flex-wrap gap-2 items-center sm:ml-auto">
           <span className="text-xs text-slate-500 font-medium">Sort by:</span>
           {[
-          ['name', 'Name'],
-          ['float', 'Float'],
-          ['score', 'Score']].
-          map(([id, label]) =>
-          <button
-            key={id}
-            onClick={() => setSort(id)}
-            className={cn(
-              'px-3 py-1.5 rounded-lg text-xs font-medium border transition-all',
-              sort === id ?
-              'border-apsBlue bg-apsBlueLt text-apsBlue' :
-              'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-            )}>
-            
+            ['distance', 'Nearest'],
+            ['name', 'Name'],
+            ['float', 'Float'],
+            ['score', 'Score']
+          ].map(([id, label]) => (
+            <button
+              key={id}
+              onClick={() => setSort(id)}
+              className={cn(
+                'px-3 py-1.5 rounded-lg text-xs font-medium border transition-all flex items-center gap-1',
+                sort === id
+                  ? 'border-apsBlue bg-apsBlueLt text-apsBlue'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+              )}>
+              {id === 'distance' && <Navigation className="w-3 h-3" />}
               {label}
             </button>
-          )}
+          ))}
           {canOnboard && (
             <>
               <button
@@ -114,31 +126,38 @@ export function AgentsPage({ searchQ, onAgentClick }: AgentsPageProps) {
 
       <div className="text-xs text-slate-500 mb-4 font-medium">
         {filteredAndSortedAgents.length} agents found
+        {sort === 'distance' && userCoords && (
+          <span className="text-slate-400"> · sorted by your GPS location</span>
+        )}
       </div>
 
-      {filteredAndSortedAgents.length > 0 ?
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filteredAndSortedAgents.map((agent) =>
-        <AgentCard key={agent.id} agent={agent} onClick={onAgentClick} />
-        )}
-        </div> :
-
-      <div className="text-center py-16 text-slate-500">
+      {filteredAndSortedAgents.length > 0 ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          {filteredAndSortedAgents.map((agent) => (
+            <AgentCard
+              key={agent.id}
+              agent={agent}
+              userCoords={userCoords}
+              onClick={onAgentClick}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-16 text-slate-500">
           <Users className="w-12 h-12 mx-auto mb-3 text-slate-300" />
           <p className="text-sm font-medium">No agents match your search</p>
-          <p className="text-xs mt-1">
-            Try adjusting your filters or search query
-          </p>
+          <p className="text-xs mt-1">Try adjusting your filters or search query</p>
         </div>
-      }
+      )}
 
       <OnboardingModal
         open={onboardingOpen}
         onClose={() => setOnboardingOpen(false)}
         onSubmit={createAgent}
+        onCreated={onAgentClick}
       />
       <BulkImportModal open={importOpen} onClose={() => setImportOpen(false)} />
       <BulkKycModal open={kycBulkOpen} onClose={() => setKycBulkOpen(false)} />
-    </div>);
-
+    </div>
+  );
 }

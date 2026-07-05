@@ -6,10 +6,47 @@ const prisma = new PrismaClient();
 const APS_COMPANY = 'co-aps';
 const DEMO_PASSWORD = 'demo';
 
+async function ensureTeamLeadDemo() {
+  const hash = bcrypt.hashSync(DEMO_PASSWORD, 10);
+  const lead = await prisma.user.upsert({
+    where: { email: 'lamin@apswallet.gm' },
+    create: {
+      id: 'usr-lead',
+      name: 'Lamin Ceesay',
+      email: 'lamin@apswallet.gm',
+      passwordHash: hash,
+      role: 'team_lead',
+      companyId: APS_COMPANY,
+      scope: 'Regional oversight',
+      zone: 'West Coast Region',
+      status: 'active'
+    },
+    update: {
+      role: 'team_lead',
+      status: 'active'
+    }
+  });
+
+  const adrIds = ['usr-adr', 'usr-adr2'];
+  await prisma.leadAdrAssignment.deleteMany({ where: { leadId: lead.id } });
+  if (adrIds.length > 0) {
+    await prisma.leadAdrAssignment.createMany({
+      data: adrIds.map((adrId) => ({
+        id: `la-${lead.id}-${adrId}`,
+        leadId: lead.id,
+        adrId,
+        companyId: APS_COMPANY
+      })),
+      skipDuplicates: true
+    });
+  }
+}
+
 async function main() {
   const existing = await prisma.user.count();
   if (existing > 0) {
-    console.log('Database already seeded');
+    await ensureTeamLeadDemo();
+    console.log('Database already seeded — demo team lead ensured');
     return;
   }
 
@@ -121,6 +158,17 @@ async function main() {
         companyId: APS_COMPANY,
         scope: 'Serrekunda / Banjul',
         zone: 'Serrekunda / Banjul',
+        status: 'active'
+      },
+      {
+        id: 'usr-lead',
+        name: 'Lamin Ceesay',
+        email: 'lamin@apswallet.gm',
+        passwordHash: hash,
+        role: 'team_lead',
+        companyId: APS_COMPANY,
+        scope: 'Regional oversight',
+        zone: 'West Coast Region',
         status: 'active'
       },
       {
@@ -644,6 +692,8 @@ async function main() {
   await prisma.companySettings.create({
     data: { companyId: APS_COMPANY }
   });
+
+  await ensureTeamLeadDemo();
 
   console.log('Database seeded successfully');
 }

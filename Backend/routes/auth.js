@@ -2,20 +2,16 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../lib/prisma.js';
 import { signToken, authMiddleware } from '../middleware/auth.js';
-import { loadUser } from '../middleware/user.js';
+import { loadUser, serializeAppUser } from '../middleware/user.js';
+import { loadSupervisedAdrs } from '../lib/team-lead.js';
 import { cachedCompanySubscription } from '../lib/company-billing.js';
 
 const router = Router();
 
-function toAppUser(row) {
-  return {
-    id: row.id,
-    name: row.name,
-    email: row.email,
-    role: row.role,
-    company: row.company?.name || 'ANMS Platform',
-    scope: row.scope
-  };
+async function toAppUser(row) {
+  const supervised =
+    row.role === 'team_lead' ? await loadSupervisedAdrs(row.id) : null;
+  return serializeAppUser(row, supervised);
 }
 
 router.post('/login', async (req, res, next) => {
@@ -44,7 +40,7 @@ router.post('/login', async (req, res, next) => {
       });
     }
 
-    res.json({ token: signToken(row), user: toAppUser(row) });
+    res.json({ token: signToken(row), user: await toAppUser(row) });
   } catch (err) {
     next(err);
   }
@@ -60,14 +56,25 @@ router.get('/me', authMiddleware, loadUser, async (req, res, next) => {
       if (company) subscription = cachedCompanySubscription(company);
     }
 
+    const supervised =
+      req.user.role === 'team_lead'
+        ? await loadSupervisedAdrs(req.user.id)
+        : null;
+
     res.json({
       user: {
-        id: req.user.id,
-        name: req.user.name,
-        email: req.user.email,
-        role: req.user.role,
-        company: req.user.company,
-        scope: req.user.scope
+        ...serializeAppUser(
+          {
+            id: req.user.id,
+            name: req.user.name,
+            email: req.user.email,
+            role: req.user.role,
+            company: { name: req.user.company },
+            scope: req.user.scope,
+            zone: req.user.zone
+          },
+          supervised
+        )
       },
       subscription
     });
@@ -82,11 +89,12 @@ router.get('/demo-users', async (_req, res, next) => {
     'system_owner',
     'platform_staff',
     'manager',
-      'internal',
-      'adr',
-      'agent',
-      'teller'
-    ];
+    'internal',
+    'team_lead',
+    'adr',
+    'agent',
+    'teller'
+  ];
     const users = await prisma.user.findMany({
       where: { role: { in: order } },
       include: { company: true }

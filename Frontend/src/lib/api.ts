@@ -33,7 +33,15 @@ async function request<T>(
   }
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(`/api${path}`, { ...options, headers });
+  let res: Response;
+  try {
+    res = await fetch(`/api${path}`, { ...options, headers });
+  } catch {
+    throw new ApiError(
+      'Cannot reach the server. Start the backend with npm run dev in the Backend folder.',
+      0
+    );
+  }
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
@@ -46,8 +54,11 @@ export interface Agent {
   id: string;
   company_id: string;
   name: string;
+  outlet_name?: string | null;
   zone: string;
+  town_village?: string | null;
   phone: string;
+  personal_phone?: string | null;
   status: string;
   efloat: number;
   cash: number;
@@ -64,6 +75,10 @@ export interface Agent {
   last_visit: string | null;
   national_id?: string | null;
   business_type?: string | null;
+  business_type_other?: string | null;
+  competitors_present?: string[];
+  branding_present?: string[];
+  location_photo_url?: string | null;
   kyc_doc_count?: number;
   visit_count?: number;
 }
@@ -278,6 +293,7 @@ export interface CompanyUser {
   zone: string | null;
   status: string;
   scope?: string;
+  supervised_adr_ids?: string[];
 }
 
 export interface AuditEntry {
@@ -345,6 +361,13 @@ export interface NetworkStats {
   visitsToday: Record<string, number>;
 }
 
+export interface OnboardingConfig {
+  business_types: string[];
+  zone_names: string[];
+  competitor_names: string[];
+  branding_types: string[];
+}
+
 export interface CompanySettings {
   company_id: string;
   network: {
@@ -358,6 +381,7 @@ export interface CompanySettings {
     sub_territories: number;
     coverage_model: string;
   };
+  onboarding: OnboardingConfig;
   integration: {
     core_wallet_api: string;
     sms_gateway: string;
@@ -409,6 +433,10 @@ export type CompanySettingsUpdate = Partial<{
   active_zones: number;
   sub_territories: number;
   coverage_model: string;
+  business_types: string[] | string;
+  zone_names: string[] | string;
+  competitor_names: string[] | string;
+  branding_types: string[] | string;
 }>;
 
 export interface DemoUser {
@@ -476,6 +504,15 @@ export const api = {
       form.append('file', file);
       return request<KycDocument>(
         `/agents/${id}/kyc-docs`,
+        { method: 'POST', body: form },
+        false
+      );
+    },
+    uploadLocationPhoto: (id: string, file: File) => {
+      const form = new FormData();
+      form.append('file', file);
+      return request<{ location_photo_url: string }>(
+        `/agents/${id}/location-photo`,
         { method: 'POST', body: form },
         false
       );
@@ -557,6 +594,7 @@ export const api = {
     email: string;
     role: string;
     zone?: string;
+    supervised_adr_ids?: string[];
   }) =>
     request<CompanyUser & { temporaryPassword?: string }>('/users/invite', {
       method: 'POST',
@@ -566,6 +604,11 @@ export const api = {
     request<CompanyUser>(`/users/${encodeURIComponent(email)}/role`, {
       method: 'PATCH',
       body: JSON.stringify({ role })
+    }),
+  updateSupervisedAdrs: (email: string, adr_ids: string[]) =>
+    request<CompanyUser>(`/users/${encodeURIComponent(email)}/supervised-adrs`, {
+      method: 'PATCH',
+      body: JSON.stringify({ adr_ids })
     }),
   updateUser: (email: string, body: { name?: string; zone?: string; status?: string }) =>
     request<CompanyUser>(`/users/${encodeURIComponent(email)}`, {
@@ -581,6 +624,7 @@ export const api = {
   },
 
   zones: () => request<string[]>('/zones'),
+  onboardingConfig: () => request<OnboardingConfig>('/onboarding-config'),
   officers: () => request<Officer[]>('/officers'),
   alerts: () => request<Alert[]>('/alerts'),
   dismissAlert: (id: number) =>

@@ -1,5 +1,5 @@
 import { prisma } from './prisma.js';
-import { todayISO } from '../middleware/user.js';
+import { todayISO, visitOfficerFilter } from '../middleware/user.js';
 
 export function relativeTime(iso) {
   const diff = Date.now() - new Date(iso).getTime();
@@ -75,14 +75,14 @@ export async function buildWeeklyVolume(baseWhere, weekCount = 7) {
 }
 
 /** Mark pending visits before today as missed. */
-export async function markOverdueVisits(companyId, officerName = null) {
+export async function markOverdueVisits(companyId, officerFilter = null) {
   const today = todayISO();
   const where = {
     status: 'pending',
     visitDate: { lt: today }
   };
   if (companyId) where.companyId = companyId;
-  if (officerName) where.officer = officerName;
+  if (officerFilter) where.officer = officerFilter;
 
   const result = await prisma.visit.updateMany({
     where,
@@ -93,7 +93,7 @@ export async function markOverdueVisits(companyId, officerName = null) {
 
 export async function buildVisitSummary(reqUser) {
   const companyId = reqUser.companyId || 'co-aps';
-  const officerFilter = reqUser.role === 'adr' ? reqUser.name : null;
+  const officerFilter = visitOfficerFilter(reqUser);
 
   await markOverdueVisits(companyId, officerFilter);
 

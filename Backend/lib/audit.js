@@ -29,4 +29,4 @@ export function isPlatformRole(role) {
 }
 
 export const PLATFORM_ROLES = ['system_owner', 'platform_staff'];
-export const COMPANY_ROLES = ['manager', 'internal', 'adr', 'agent', 'teller'];
+export const COMPANY_ROLES = ['manager', 'internal', 'team_lead', 'adr', 'agent', 'teller'];

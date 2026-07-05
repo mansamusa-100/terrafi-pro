@@ -14,7 +14,10 @@ function pct(numerator, denominator) {
 }
 
 /** Live ADR / field-officer performance from assignments and visits. */
-export async function buildAdrPerformance(companyId, { officerName = null } = {}) {
+export async function buildAdrPerformance(
+  companyId,
+  { officerName = null, officerIds = null } = {}
+) {
   const settings = await getOrCreateCompanySettings(companyId);
   const visitTarget = settings.visitFrequencyTarget || 25;
   const { start: monthStart, end: monthEnd } = monthRange();
@@ -31,6 +34,9 @@ export async function buildAdrPerformance(companyId, { officerName = null } = {}
   let officers = adrUsers;
   if (officerName) {
     officers = adrUsers.filter((u) => u.name === officerName);
+  } else if (officerIds?.length) {
+    const idSet = new Set(officerIds);
+    officers = adrUsers.filter((u) => idSet.has(u.id));
   }
 
   const agents = await prisma.agent.findMany({

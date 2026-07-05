@@ -12,6 +12,7 @@ import { SubscriptionBanner } from './components/SubscriptionBanner';
 import { PlatformDashboardPage } from './pages/PlatformDashboardPage';
 import { LoginScreen } from './components/LoginScreen';
 import { DashboardPage } from './pages/DashboardPage';
+import { TeamLeadDashboardPage } from './pages/TeamLeadDashboardPage';
 import { AgentsPage } from './pages/AgentsPage';
 import { MapPage } from './pages/MapPage';
 import { VisitsPage } from './pages/VisitsPage';
@@ -89,6 +90,11 @@ function AuthenticatedApp({
         <PlatformDashboardPage
           setActive={handleSetPage}
           onOpenCompany={setSelectedCompanyId}
+        />
+      ) : user.role === 'team_lead' ? (
+        <TeamLeadDashboardPage
+          setActive={handleSetPage}
+          setSelectedAgent={setSelectedAgent}
         />
       ) : (
         <DashboardPage

@@ -5,10 +5,14 @@ import { buildAdrPerformance } from '../lib/performance.js';
 
 const router = Router();
 
-router.get('/adr', requireRoles('manager', 'internal'), async (req, res, next) => {
+router.get('/adr', requireRoles('manager', 'internal', 'team_lead'), async (req, res, next) => {
   try {
     const companyId = companyFilter(req.user) || 'co-aps';
-    const rows = await buildAdrPerformance(companyId);
+    const options = {};
+    if (req.user.role === 'team_lead') {
+      options.officerIds = req.user.supervisedAdrIds || [];
+    }
+    const rows = await buildAdrPerformance(companyId, options);
     res.json(rows);
   } catch (err) {
     next(err);

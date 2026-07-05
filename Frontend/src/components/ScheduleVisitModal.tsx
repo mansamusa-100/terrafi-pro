@@ -33,8 +33,13 @@ export function ScheduleVisitModal({
 }: ScheduleVisitModalProps) {
   const { user } = useAuth();
   const { agents, users } = useAppData();
-  const isManager = user ? can(user.role, 'editAgent') : false;
+  const canAssignOfficer =
+    user && (can(user.role, 'editAgent') || can(user.role, 'assignAdr'));
   const adrs = users.filter((u) => u.role === 'adr' && u.id);
+  const assignableAdrs =
+    user?.role === 'team_lead' && user.supervised_adr_ids?.length
+      ? adrs.filter((a) => a.id && user.supervised_adr_ids!.includes(a.id))
+      : adrs;
 
   const [agentId, setAgentId] = useState(presetAgentId || '');
   const [visitType, setVisitType] = useState(VISIT_TYPES[0]);
@@ -85,7 +90,7 @@ export function ScheduleVisitModal({
         visitDate,
         time,
         notes: notes.trim() || undefined,
-        ...(isManager && officerId ? { officer_id: officerId } : {})
+        ...(canAssignOfficer && officerId ? { officer_id: officerId } : {})
       });
       toast.success('Visit scheduled');
       onClose();
@@ -142,7 +147,7 @@ export function ScheduleVisitModal({
               </select>
             </div>
 
-            {isManager && (
+            {canAssignOfficer && (
               <div>
                 <label className="text-xs font-semibold text-slate-600 mb-1.5 block">
                   Assign to ADR
@@ -153,7 +158,7 @@ export function ScheduleVisitModal({
                   aria-label="ADR"
                   className={inputClass}>
                   <option value="">Use agent&apos;s ADR</option>
-                  {adrs.map((a) => (
+                  {assignableAdrs.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.name} · {a.zone || 'No zone'}
                     </option>

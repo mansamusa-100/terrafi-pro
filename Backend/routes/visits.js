@@ -4,7 +4,10 @@ import {
   companyFilter,
   todayISO,
   isAgentAssignedToUser,
-  resolveOfficerAssignment
+  resolveOfficerAssignment,
+  visitOfficerFilter,
+  applyVisitOfficerFilter,
+  canAccessVisit
 } from '../middleware/user.js';
 import { requireRoles } from '../middleware/auth.js';
 import { verifyGpsCheckIn } from '../lib/geo.js';
@@ -41,15 +44,12 @@ router.get('/', async (req, res, next) => {
         : String(req.query.date);
 
     if (companyId) {
-      await markOverdueVisits(
-        companyId,
-        req.user.role === 'adr' ? req.user.name : null
-      );
+      await markOverdueVisits(companyId, visitOfficerFilter(req.user));
     }
 
     const where = { visitDate };
     if (companyId) where.companyId = companyId;
-    if (req.user.role === 'adr') where.officer = req.user.name;
+    applyVisitOfficerFilter(where, req.user);
 
     const visits = await prisma.visit.findMany({
       where,
@@ -81,7 +81,7 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-router.post('/schedule', requireRoles('manager', 'adr'), async (req, res, next) => {
+router.post('/schedule', requireRoles('manager', 'team_lead', 'adr'), async (req, res, next) => {
   try {
     const companyId = req.user.companyId || 'co-aps';
     const { agentId, type, visitDate, time, notes, officer_id } = req.body;
@@ -127,11 +127,17 @@ router.post('/schedule', requireRoles('manager', 'adr'), async (req, res, next) 
     if (req.user.role === 'adr') {
       officer = { officerId: req.user.id, officer: req.user.name };
     } else {
-      officer = await resolveOfficerAssignment(companyId, {
-        officerId: officer_id,
-        officerName: agent.officer,
-        fallback: { officerId: agent.officerId, officer: agent.officer }
-      });
+      const allowedAdrIds =
+        req.user.role === 'team_lead' ? req.user.supervisedAdrIds : null;
+      officer = await resolveOfficerAssignment(
+        companyId,
+        {
+          officerId: officer_id,
+          officerName: agent.officer,
+          fallback: { officerId: agent.officerId, officer: agent.officer }
+        },
+        { allowedAdrIds }
+      );
       if (!officer) {
         return res.status(400).json({ error: 'Invalid ADR assignment' });
       }
@@ -188,7 +194,7 @@ router.post('/schedule', requireRoles('manager', 'adr'), async (req, res, next) 
   }
 });
 
-router.post('/', requireRoles('manager', 'adr'), async (req, res, next) => {
+router.post('/', requireRoles('manager', 'team_lead', 'adr'), async (req, res, next) => {
   try {
     const companyId = req.user.companyId || 'co-aps';
     const {
@@ -355,7 +361,7 @@ router.post('/', requireRoles('manager', 'adr'), async (req, res, next) => {
   }
 });
 
-router.patch('/:id', requireRoles('manager', 'adr'), async (req, res, next) => {
+router.patch('/:id', requireRoles('manager', 'team_lead', 'adr'), async (req, res, next) => {
   try {
     const companyId = req.user.companyId || 'co-aps';
     const visit = await prisma.visit.findFirst({
@@ -363,7 +369,7 @@ router.patch('/:id', requireRoles('manager', 'adr'), async (req, res, next) => {
     });
     if (!visit) return res.status(404).json({ error: 'Visit not found' });
 
-    if (req.user.role === 'adr' && visit.officer !== req.user.name) {
+    if (!canAccessVisit(visit, req.user)) {
       return res.status(403).json({ error: 'Visit is not assigned to you' });
     }
 

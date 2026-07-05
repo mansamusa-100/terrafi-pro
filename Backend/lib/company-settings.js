@@ -1,4 +1,11 @@
 import { prisma } from './prisma.js';
+import {
+  DEFAULT_BRANDING_TYPES,
+  DEFAULT_BUSINESS_TYPES,
+  DEFAULT_COMPETITORS,
+  getOnboardingConfig,
+  parseStringArray
+} from './onboarding-config.js';
 
 export const COVERAGE_MODELS = ['Officer-based', 'Zone-based', 'Hybrid'];
 
@@ -9,7 +16,11 @@ export const EDITABLE_FIELDS = new Set([
   'auto_suspend_missed_visits_days',
   'active_zones',
   'sub_territories',
-  'coverage_model'
+  'coverage_model',
+  'business_types',
+  'zone_names',
+  'competitor_names',
+  'branding_types'
 ]);
 
 const FIELD_TO_COLUMN = {
@@ -19,7 +30,18 @@ const FIELD_TO_COLUMN = {
   auto_suspend_missed_visits_days: 'autoSuspendMissedVisitsDays',
   active_zones: 'activeZones',
   sub_territories: 'subTerritories',
-  coverage_model: 'coverageModel'
+  coverage_model: 'coverageModel',
+  business_types: 'businessTypes',
+  zone_names: 'zoneNames',
+  competitor_names: 'competitorNames',
+  branding_types: 'brandingTypes'
+};
+
+const ARRAY_DEFAULTS = {
+  business_types: DEFAULT_BUSINESS_TYPES,
+  zone_names: [],
+  competitor_names: DEFAULT_COMPETITORS,
+  branding_types: DEFAULT_BRANDING_TYPES
 };
 
 export function resolveSettingsCompanyId(user, queryCompanyId) {
@@ -35,12 +57,20 @@ export function resolveSettingsCompanyId(user, queryCompanyId) {
 export async function getOrCreateCompanySettings(companyId) {
   let row = await prisma.companySettings.findUnique({ where: { companyId } });
   if (!row) {
-    row = await prisma.companySettings.create({ data: { companyId } });
+    row = await prisma.companySettings.create({
+      data: {
+        companyId,
+        businessTypes: DEFAULT_BUSINESS_TYPES,
+        competitorNames: DEFAULT_COMPETITORS,
+        brandingTypes: DEFAULT_BRANDING_TYPES
+      }
+    });
   }
   return row;
 }
 
-export function serializeCompanySettings(row) {
+export async function serializeCompanySettings(row) {
+  const onboarding = await getOnboardingConfig(row.companyId);
   return {
     company_id: row.companyId,
     network: {
@@ -54,6 +84,7 @@ export function serializeCompanySettings(row) {
       sub_territories: row.subTerritories,
       coverage_model: row.coverageModel
     },
+    onboarding,
     integration: {
       core_wallet_api: row.coreWalletApiStatus,
       sms_gateway: row.smsGatewayStatus,
@@ -86,6 +117,17 @@ export function buildSettingsUpdate(body) {
         throw new Error('Invalid coverage model');
       }
       data[column] = value;
+      continue;
+    }
+    if (ARRAY_DEFAULTS[apiKey] !== undefined) {
+      const arr = parseStringArray(body[apiKey], ARRAY_DEFAULTS[apiKey]);
+      if (arr.length === 0) {
+        throw new Error(`${apiKey} must include at least one item`);
+      }
+      if (apiKey === 'business_types' && !arr.includes('Others')) {
+        arr.push('Others');
+      }
+      data[column] = arr;
       continue;
     }
     data[column] = parseIntField(apiKey, body[apiKey]);

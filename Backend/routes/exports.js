@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
-import { companyFilter } from '../middleware/user.js';
+import { companyFilter, visitOfficerFilter } from '../middleware/user.js';
 import { requireRoles } from '../middleware/auth.js';
 import { toCsv, csvResponse } from '../lib/csv-export.js';
 import { buildAdrPerformance } from '../lib/performance.js';
@@ -66,7 +66,7 @@ router.get(
 
 router.get(
   '/visits',
-  requireRoles('manager', 'internal', 'adr'),
+  requireRoles('manager', 'internal', 'team_lead', 'adr'),
   async (req, res, next) => {
     try {
       const companyId = companyFilter(req.user) || 'co-aps';
@@ -76,9 +76,8 @@ router.get(
         companyId,
         visitDate: { gte: from, lte: to }
       };
-      if (req.user.role === 'adr') {
-        where.officer = req.user.name;
-      }
+      const filter = visitOfficerFilter(req.user);
+      if (filter) where.officer = filter;
 
       const visits = await prisma.visit.findMany({
         where,

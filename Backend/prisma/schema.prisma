@@ -41,6 +41,7 @@ model Company {
   auditLogs     AuditLog[]
   settings      CompanySettings?
   notifications Notification[]
+  leadAdrAssignments LeadAdrAssignment[]
 }
 
 model CompanySettings {
@@ -57,6 +58,10 @@ model CompanySettings {
   smsGatewayStatus               String  @default("Active") @map("sms_gateway_status")
   emailNotificationsStatus       String  @default("Active") @map("email_notifications_status")
   exportFormat                   String  @default("Excel, PDF") @map("export_format")
+  businessTypes                  Json?   @map("business_types")
+  zoneNames                      Json?   @map("zone_names")
+  competitorNames                Json?   @map("competitor_names")
+  brandingTypes                  Json?   @map("branding_types")
   updatedAt                      DateTime @updatedAt @map("updated_at")
 }
 
@@ -75,6 +80,23 @@ model User {
   assignedAgents Agent[]  @relation("AgentOfficer")
   kycReviews     Agent[]  @relation("KycReviewer")
   notifications  Notification[]
+  supervisedAdrs LeadAdrAssignment[] @relation("LeadSupervisor")
+  leadOf         LeadAdrAssignment[] @relation("LeadAdr")
+}
+
+model LeadAdrAssignment {
+  id        String  @id @default(cuid())
+  leadId    String  @map("lead_id")
+  lead      User    @relation("LeadSupervisor", fields: [leadId], references: [id], onDelete: Cascade)
+  adrId     String  @map("adr_id")
+  adr       User    @relation("LeadAdr", fields: [adrId], references: [id], onDelete: Cascade)
+  companyId String  @map("company_id")
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([leadId, adrId])
+  @@index([leadId])
+  @@index([adrId])
+  @@map("LeadAdrAssignment")
 }
 
 model AuditLog {
@@ -124,6 +146,14 @@ model Agent {
   lastVisit           String?       @map("last_visit")
   nationalId          String?       @map("national_id")
   businessType        String?       @map("business_type")
+  businessTypeOther   String?       @map("business_type_other")
+  outletName          String?       @map("outlet_name")
+  personalPhone       String?       @map("personal_phone")
+  personalPhoneNormalized String?   @map("personal_phone_normalized")
+  townVillage         String?       @map("town_village")
+  competitorsPresent  Json          @default("[]") @map("competitors_present")
+  brandingPresent     Json          @default("[]") @map("branding_present")
+  locationPhotoPath   String?       @map("location_photo_path")
   lastFloatSnapshotAt DateTime?     @map("last_float_snapshot_at")
   floatBalanceAsOf    DateTime?     @map("float_balance_as_of")
   lastFloatDeliveryId String?       @map("last_float_delivery_id")

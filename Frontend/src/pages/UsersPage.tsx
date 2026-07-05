@@ -14,6 +14,7 @@ const ROLE_BADGE: Record<string, string> = {
   platform_staff: 'bg-indigo-100 text-indigo-700',
   manager: 'bg-apsBlueLt text-apsBlue',
   internal: 'bg-purple-100 text-purple-700',
+  team_lead: 'bg-teal-100 text-teal-800',
   adr: 'bg-apsAmberLt text-amber-700',
   agent: 'bg-apsTealLt text-apsTeal',
   teller: 'bg-slate-100 text-slate-600'
@@ -23,6 +24,7 @@ const PLATFORM_INVITE_ROLES: Role[] = ['platform_staff'];
 const COMPANY_INVITE_ROLES: Role[] = [
   'manager',
   'internal',
+  'team_lead',
   'adr',
   'agent',
   'teller'
@@ -30,16 +32,24 @@ const COMPANY_INVITE_ROLES: Role[] = [
 
 export function UsersPage() {
   const { user } = useAuth();
-  const { users, updateUserRole, inviteUser, updateUser } = useAppData();
+  const { users, updateUserRole, inviteUser, updateUser, updateSupervisedAdrs } =
+    useAppData();
+  const adrUsers = users.filter((u) => u.role === 'adr' && u.id);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<CompanyUser | null>(null);
-  const [editForm, setEditForm] = useState({ name: '', zone: '', status: 'active' });
+  const [editForm, setEditForm] = useState({
+    name: '',
+    zone: '',
+    status: 'active',
+    supervisedAdrIds: [] as string[]
+  });
   const [savingEdit, setSavingEdit] = useState(false);
   const [inviteForm, setInviteForm] = useState({
     name: '',
     email: '',
     role: 'platform_staff' as Role,
-    zone: ''
+    zone: '',
+    supervisedAdrIds: [] as string[]
   });
   const [inviting, setInviting] = useState(false);
 
@@ -62,8 +72,15 @@ export function UsersPage() {
     setEditForm({
       name: u.name,
       zone: u.zone || '',
-      status: u.status
+      status: u.status,
+      supervisedAdrIds: u.supervised_adr_ids || []
     });
+  };
+
+  const toggleSupervisedAdr = (adrId: string, list: string[], setter: (v: string[]) => void) => {
+    setter(
+      list.includes(adrId) ? list.filter((id) => id !== adrId) : [...list, adrId]
+    );
   };
 
   const submitEdit = async (e: React.FormEvent) => {
@@ -76,6 +93,9 @@ export function UsersPage() {
         ...(isPlatform ? {} : { zone: editForm.zone.trim() }),
         status: editForm.status
       });
+      if (!isPlatform && editTarget.role === 'team_lead') {
+        await updateSupervisedAdrs(editTarget.email, editForm.supervisedAdrIds);
+      }
       toast.success('User updated');
       setEditTarget(null);
     } catch (err) {
@@ -100,7 +120,10 @@ export function UsersPage() {
         name: inviteForm.name.trim(),
         email: inviteForm.email.trim(),
         role: inviteForm.role,
-        zone: inviteForm.zone.trim() || undefined
+        zone: inviteForm.zone.trim() || undefined,
+        ...(inviteForm.role === 'team_lead'
+          ? { supervised_adr_ids: inviteForm.supervisedAdrIds }
+          : {})
       });
       toast.success('User invited', {
         description: created.temporaryPassword
@@ -112,7 +135,8 @@ export function UsersPage() {
         name: '',
         email: '',
         role: isPlatform ? 'platform_staff' : 'internal',
-        zone: ''
+        zone: '',
+        supervisedAdrIds: []
       });
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Invite failed');
@@ -234,7 +258,11 @@ export function UsersPage() {
                   </div>
                 </div>
               </div>
-              <div className="text-xs text-slate-600">{u.zone || '—'}</div>
+              <div className="text-xs text-slate-600">
+                {u.role === 'team_lead' && u.supervised_adr_ids?.length
+                  ? `${u.supervised_adr_ids.length} ADR(s) · ${u.zone || '—'}`
+                  : u.zone || '—'}
+              </div>
               <div>
                 {roleLocked ? (
                   <span
@@ -359,6 +387,36 @@ export function UsersPage() {
                   />
                 </div>
               )}
+              {!isPlatform && inviteForm.role === 'team_lead' && (
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 mb-2 block">
+                    Supervised ADRs
+                  </label>
+                  <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
+                    {adrUsers.map((a) => (
+                      <button
+                        key={a.id}
+                        type="button"
+                        onClick={() =>
+                          toggleSupervisedAdr(
+                            a.id!,
+                            inviteForm.supervisedAdrIds,
+                            (ids) =>
+                              setInviteForm((f) => ({ ...f, supervisedAdrIds: ids }))
+                          )
+                        }
+                        className={cn(
+                          'px-2.5 py-1 rounded-full text-[11px] font-medium border',
+                          inviteForm.supervisedAdrIds.includes(a.id!)
+                            ? 'bg-teal-600 text-white border-teal-600'
+                            : 'bg-white text-slate-600 border-slate-200'
+                        )}>
+                        {a.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <button
                 type="submit"
                 disabled={inviting}
@@ -428,6 +486,36 @@ export function UsersPage() {
                   <option value="suspended">Suspended</option>
                 </select>
               </div>
+              {!isPlatform && editTarget.role === 'team_lead' && (
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 mb-2 block">
+                    Supervised ADRs
+                  </label>
+                  <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
+                    {adrUsers.map((a) => (
+                      <button
+                        key={a.id}
+                        type="button"
+                        onClick={() =>
+                          toggleSupervisedAdr(
+                            a.id!,
+                            editForm.supervisedAdrIds,
+                            (ids) =>
+                              setEditForm((f) => ({ ...f, supervisedAdrIds: ids }))
+                          )
+                        }
+                        className={cn(
+                          'px-2.5 py-1 rounded-full text-[11px] font-medium border',
+                          editForm.supervisedAdrIds.includes(a.id!)
+                            ? 'bg-teal-600 text-white border-teal-600'
+                            : 'bg-white text-slate-600 border-slate-200'
+                        )}>
+                        {a.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <button
                 type="submit"
                 disabled={savingEdit}

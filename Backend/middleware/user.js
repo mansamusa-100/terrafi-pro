@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma.js';
+import { loadSupervisedAdrs, isTeamLeadRole } from '../lib/team-lead.js';
 
 export async function loadUser(req, res, next) {
   try {
@@ -11,6 +12,11 @@ export async function loadUser(req, res, next) {
       return res.status(401).json({ error: 'User not found' });
     }
 
+    const supervised =
+      row.role === 'team_lead'
+        ? await loadSupervisedAdrs(row.id)
+        : { supervisedAdrIds: [], supervisedAdrNames: [] };
+
     req.user = {
       id: row.id,
       name: row.name,
@@ -20,7 +26,8 @@ export async function loadUser(req, res, next) {
       company: row.company?.name || 'ANMS Platform',
       scope: row.scope,
       zone: row.zone,
-      status: row.status
+      status: row.status,
+      ...supervised
     };
     next();
   } catch (err) {
@@ -45,17 +52,70 @@ export function agentWhereForUser(user) {
       { officerId: null, officer: user.name }
     ];
   }
+  if (isTeamLeadRole(user.role)) {
+    const adrIds = user.supervisedAdrIds || [];
+    const adrNames = user.supervisedAdrNames || [];
+    if (adrIds.length === 0) {
+      where.officerId = '__none__';
+    } else {
+      where.OR = [
+        { officerId: { in: adrIds } },
+        { officerId: null, officer: { in: adrNames } }
+      ];
+    }
+  }
   return where;
 }
 
 export function isAgentAssignedToUser(agent, user) {
-  if (!agent || user.role !== 'adr') return true;
-  if (agent.officerId) return agent.officerId === user.id;
-  return agent.officer === user.name;
+  if (!agent) return false;
+  if (user.role === 'adr') {
+    if (agent.officerId) return agent.officerId === user.id;
+    return agent.officer === user.name;
+  }
+  if (isTeamLeadRole(user.role)) {
+    const adrIds = user.supervisedAdrIds || [];
+    const adrNames = user.supervisedAdrNames || [];
+    if (agent.officerId) return adrIds.includes(agent.officerId);
+    return adrNames.includes(agent.officer);
+  }
+  return true;
 }
 
-export async function resolveOfficerAssignment(companyId, { officerId, officerName, fallback }) {
+/** Visit officer filter: string name, { in: names }, or null for all. */
+export function visitOfficerFilter(user) {
+  if (user.role === 'adr') return user.name;
+  if (isTeamLeadRole(user.role)) {
+    const names = user.supervisedAdrNames || [];
+    return names.length ? { in: names } : { in: ['__none__'] };
+  }
+  return null;
+}
+
+export function applyVisitOfficerFilter(where, user) {
+  const filter = visitOfficerFilter(user);
+  if (filter) where.officer = filter;
+  return where;
+}
+
+export function canAccessVisit(visit, user) {
+  if (!visit) return false;
+  if (user.role === 'adr') return visit.officer === user.name;
+  if (isTeamLeadRole(user.role)) {
+    return (user.supervisedAdrNames || []).includes(visit.officer);
+  }
+  return true;
+}
+
+export async function resolveOfficerAssignment(
+  companyId,
+  { officerId, officerName, fallback },
+  { allowedAdrIds = null } = {}
+) {
   if (officerId) {
+    if (allowedAdrIds && !allowedAdrIds.includes(officerId)) {
+      return null;
+    }
     const adr = await prisma.user.findFirst({
       where: { id: officerId, companyId, role: 'adr' }
     });
@@ -70,7 +130,10 @@ export async function resolveOfficerAssignment(companyId, { officerId, officerNa
         name: { equals: officerName.trim(), mode: 'insensitive' }
       }
     });
-    if (adr) return { officerId: adr.id, officer: adr.name };
+    if (adr) {
+      if (allowedAdrIds && !allowedAdrIds.includes(adr.id)) return null;
+      return { officerId: adr.id, officer: adr.name };
+    }
     return { officerId: null, officer: officerName.trim() };
   }
   return fallback;
@@ -97,8 +160,11 @@ export function serializeAgent(agent, extra = {}) {
     id: agent.id,
     company_id: agent.companyId,
     name: agent.name,
+    outlet_name: agent.outletName ?? null,
     zone: agent.zone,
+    town_village: agent.townVillage ?? null,
     phone: agent.phone,
+    personal_phone: agent.personalPhone ?? null,
     status: agent.status,
     efloat: agent.efloat,
     cash: agent.cash,
@@ -115,6 +181,29 @@ export function serializeAgent(agent, extra = {}) {
     last_visit: agent.lastVisit,
     national_id: agent.nationalId ?? null,
     business_type: agent.businessType ?? null,
+    business_type_other: agent.businessTypeOther ?? null,
+    competitors_present: Array.isArray(agent.competitorsPresent)
+      ? agent.competitorsPresent
+      : [],
+    branding_present: Array.isArray(agent.brandingPresent)
+      ? agent.brandingPresent
+      : [],
+    location_photo_url: agent.locationPhotoPath
+      ? `/uploads/${agent.locationPhotoPath}`
+      : null,
     ...extra
+  };
+}
+
+export function serializeAppUser(row, supervised = null) {
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    role: row.role,
+    company: row.company?.name || 'ANMS Platform',
+    scope: row.scope,
+    zone: row.zone ?? null,
+    supervised_adr_ids: supervised?.supervisedAdrIds ?? []
   };
 }

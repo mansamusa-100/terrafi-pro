@@ -70,7 +70,9 @@ export function Topbar({
     page === 'dashboard'
       ? isPlatform
         ? 'Platform Overview'
-        : 'Network Overview'
+        : user.role === 'team_lead'
+          ? 'Regional hub'
+          : 'Network Overview'
       : TITLES[page] || 'Dashboard';
 
   return (
