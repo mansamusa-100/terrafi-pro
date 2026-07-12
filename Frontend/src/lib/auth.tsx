@@ -5,16 +5,21 @@ import React, {
   useEffect,
   useState
 } from 'react';
-import { api, setToken, getToken } from './api';
+import { api, setToken, getToken, type LoginResponse } from './api';
 import { AppUser, Role, firstPageFor } from './rbac';
 
 interface AuthContextValue {
   user: AppUser | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (
+    email: string,
+    password: string,
+    userId?: string
+  ) => Promise<LoginResponse | void>;
   logout: () => void;
   switchRole: (email: string) => Promise<void>;
   refreshProfile: () => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -44,11 +49,14 @@ export function AuthProvider({
   }, []);
 
   const login = useCallback(
-    async (email: string, password: string) => {
-      const { token, user: u } = await api.login(email, password);
-      setToken(token);
-      setUser(u);
-      onUserChange?.(firstPageFor(u.role));
+    async (email: string, password: string, userId?: string) => {
+      const result = await api.login(email, password, userId);
+      if (result.requiresWorkspaceSelection) {
+        return result;
+      }
+      setToken(result.token);
+      setUser(result.user);
+      onUserChange?.(firstPageFor(result.user.role));
     },
     [onUserChange]
   );
@@ -73,9 +81,29 @@ export function AuthProvider({
     setUser(u);
   }, []);
 
+  const changePassword = useCallback(
+    async (currentPassword: string, newPassword: string) => {
+      const { user: u } = await api.changePassword({
+        currentPassword,
+        newPassword
+      });
+      setUser(u);
+      onUserChange?.(firstPageFor(u.role));
+    },
+    [onUserChange]
+  );
+
   return (
     <AuthContext.Provider
-      value={{ user, loading, login, logout, switchRole, refreshProfile }}>
+      value={{
+        user,
+        loading,
+        login,
+        logout,
+        switchRole,
+        refreshProfile,
+        changePassword
+      }}>
       {children}
     </AuthContext.Provider>
   );

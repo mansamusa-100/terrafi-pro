@@ -40,6 +40,8 @@ export interface AppUser {
   company_id?: string | null;
   scope: string;
   zone?: string | null;
+  status?: string;
+  must_change_password?: boolean;
   supervised_adr_ids?: string[];
   branding: AppBranding;
 }

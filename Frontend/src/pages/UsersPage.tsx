@@ -30,6 +30,70 @@ const COMPANY_INVITE_ROLES: Role[] = [
   'teller'
 ];
 
+const DESKTOP_GRID = 'md:grid-cols-[2fr_1.5fr_1.5fr_1fr_0.5fr]';
+const DESKTOP_GRID_NO_EDIT = 'md:grid-cols-[2fr_1.5fr_1.5fr_1fr]';
+
+function zoneLabel(u: CompanyUser) {
+  if (u.role === 'team_lead' && u.supervised_adr_ids?.length) {
+    return `${u.supervised_adr_ids.length} ADR(s) · ${u.zone || '—'}`;
+  }
+  return u.zone || '—';
+}
+
+function UserRoleControl({
+  u,
+  roleLocked,
+  editableRoles,
+  onRoleChange
+}: {
+  u: CompanyUser;
+  roleLocked: boolean;
+  editableRoles: Role[];
+  onRoleChange: (email: string, role: string) => void;
+}) {
+  if (roleLocked) {
+    return (
+      <span
+        className={cn(
+          'text-[11px] font-semibold px-2.5 py-1 rounded-full',
+          ROLE_BADGE[u.role]
+        )}>
+        {ROLE_META[u.role as Role].label}
+      </span>
+    );
+  }
+  return (
+    <select
+      value={u.role}
+      onChange={(e) => onRoleChange(u.email, e.target.value)}
+      aria-label={`Role for ${u.name}`}
+      className={cn(
+        'text-[11px] font-semibold px-2.5 py-1 rounded-full border-none outline-none cursor-pointer appearance-none max-w-full',
+        ROLE_BADGE[u.role]
+      )}>
+      {editableRoles.map((r) => (
+        <option key={r} value={r}>
+          {ROLE_META[r].label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function UserStatusBadge({ status }: { status: string }) {
+  return (
+    <span
+      className={cn(
+        'text-[11px] font-semibold px-2.5 py-1 rounded-full w-fit border capitalize shrink-0',
+        status === 'active'
+          ? 'bg-apsGreenLt text-apsGreen border-apsGreen/20'
+          : 'bg-apsAmberLt text-amber-700 border-apsAmber/20'
+      )}>
+      {status}
+    </span>
+  );
+}
+
 export function UsersPage() {
   const { user } = useAuth();
   const { users, updateUserRole, inviteUser, updateUser, updateSupervisedAdrs } =
@@ -127,8 +191,13 @@ export function UsersPage() {
       });
       toast.success('User invited', {
         description: created.temporaryPassword
-          ? `${created.email} — temp password: ${created.temporaryPassword}`
-          : created.email
+          ? `${created.email} — temp password: ${created.temporaryPassword}${
+              created.credentialDelivery === 'log_only'
+                ? ' (also logged in backend console & audit)'
+                : ''
+            }`
+          : created.email,
+        duration: 12000
       });
       setInviteOpen(false);
       setInviteForm({
@@ -188,9 +257,9 @@ export function UsersPage() {
         />
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <div>
+      <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <div className="min-w-0">
             <h3 className="text-sm font-semibold text-slate-900">
               {isPlatform ? 'Platform users' : 'Company users & roles'}
             </h3>
@@ -203,112 +272,150 @@ export function UsersPage() {
           {canInvite && (
             <button
               onClick={() => setInviteOpen(true)}
-              className="flex items-center gap-2 px-4 py-1.5 rounded-lg bg-navy text-white text-xs font-medium hover:bg-navyMid transition-colors">
+              className="flex items-center justify-center gap-2 px-4 py-2.5 sm:py-1.5 rounded-lg bg-navy text-white text-xs font-medium hover:bg-navyMid transition-colors shrink-0 w-full sm:w-auto">
               <UserPlus className="w-4 h-4" />
               Invite user
             </button>
           )}
         </div>
 
-        <div
-          className={cn(
-            'grid gap-4 pb-3 mb-2 border-b border-slate-200',
-            canEditUsers
-              ? 'grid-cols-[2fr_1.5fr_1.5fr_1fr_0.5fr]'
-              : 'grid-cols-[2fr_1.5fr_1.5fr_1fr]'
-          )}>
-          {[...['User', 'Zone / scope', 'Role', 'Status'], ...(canEditUsers ? [''] : [])].map(
-            (h, i) => (
-              <div
-                key={h || `col-${i}`}
-                className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                {h}
-              </div>
-            )
-          )}
-        </div>
-
-        {users.map((u) => {
-          const ac = avatarColor(u.name);
-          const roleLocked = u.role === 'system_owner';
-          return (
-            <div
-              key={u.email}
-              className={cn(
-                'grid gap-4 py-3 border-b border-slate-100 last:border-0 items-center',
-                canEditUsers
-                  ? 'grid-cols-[2fr_1.5fr_1.5fr_1fr_0.5fr]'
-                  : 'grid-cols-[2fr_1.5fr_1.5fr_1fr]'
-              )}>
-              <div className="flex items-center gap-3 min-w-0">
+        {/* Desktop table */}
+        <div className="hidden md:block">
+          <div
+            className={cn(
+              'grid gap-4 pb-3 mb-2 border-b border-slate-200',
+              canEditUsers ? DESKTOP_GRID : DESKTOP_GRID_NO_EDIT
+            )}>
+            {[...['User', 'Zone / scope', 'Role', 'Status'], ...(canEditUsers ? [''] : [])].map(
+              (h, i) => (
                 <div
-                  className={cn(
-                    'w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold shrink-0',
-                    ac.bg,
-                    ac.text
-                  )}>
-                  {initials(u.name)}
+                  key={h || `col-${i}`}
+                  className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                  {h}
                 </div>
-                <div className="min-w-0">
-                  <div className="text-sm font-medium text-slate-900 truncate">
-                    {u.name}
+              )
+            )}
+          </div>
+
+          {users.map((u) => {
+            const ac = avatarColor(u.name);
+            const roleLocked = u.role === 'system_owner';
+            return (
+              <div
+                key={u.id || u.email}
+                className={cn(
+                  'grid gap-4 py-3 border-b border-slate-100 last:border-0 items-center',
+                  canEditUsers ? DESKTOP_GRID : DESKTOP_GRID_NO_EDIT
+                )}>
+                <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    className={cn(
+                      'w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold shrink-0',
+                      ac.bg,
+                      ac.text
+                    )}>
+                    {initials(u.name)}
                   </div>
-                  <div className="text-[10px] text-slate-500 truncate">
-                    {u.email}
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-slate-900 truncate">
+                      {u.name}
+                    </div>
+                    <div className="text-[10px] text-slate-500 truncate">{u.email}</div>
                   </div>
                 </div>
-              </div>
-              <div className="text-xs text-slate-600">
-                {u.role === 'team_lead' && u.supervised_adr_ids?.length
-                  ? `${u.supervised_adr_ids.length} ADR(s) · ${u.zone || '—'}`
-                  : u.zone || '—'}
-              </div>
-              <div>
-                {roleLocked ? (
-                  <span
-                    className={cn(
-                      'text-[11px] font-semibold px-2.5 py-1 rounded-full',
-                      ROLE_BADGE[u.role]
-                    )}>
-                    {ROLE_META[u.role as Role].label}
-                  </span>
-                ) : (
-                  <select
-                    value={u.role}
-                    onChange={(e) => changeRole(u.email, e.target.value)}
-                    className={cn(
-                      'text-[11px] font-semibold px-2.5 py-1 rounded-full border-none outline-none cursor-pointer appearance-none',
-                      ROLE_BADGE[u.role]
-                    )}>
-                    {editableRoles.map((r) => (
-                      <option key={r} value={r}>
-                        {ROLE_META[r].label}
-                      </option>
-                    ))}
-                  </select>
+                <div className="text-xs text-slate-600">{zoneLabel(u)}</div>
+                <div>
+                  <UserRoleControl
+                    u={u}
+                    roleLocked={roleLocked}
+                    editableRoles={editableRoles}
+                    onRoleChange={changeRole}
+                  />
+                </div>
+                <UserStatusBadge status={u.status} />
+                {canEditUsers && u.role !== 'manager' && (
+                  <button
+                    type="button"
+                    title="Edit user"
+                    onClick={() => openEdit(u)}
+                    className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500">
+                    <Pencil className="w-4 h-4" />
+                  </button>
                 )}
               </div>
-              <span
-                className={cn(
-                  'text-[11px] font-semibold px-2.5 py-1 rounded-full w-fit border capitalize',
-                  u.status === 'active'
-                    ? 'bg-apsGreenLt text-apsGreen border-apsGreen/20'
-                    : 'bg-apsAmberLt text-amber-700 border-apsAmber/20'
-                )}>
-                {u.status}
-              </span>
-              {canEditUsers && u.role !== 'manager' && (
-                <button
-                  type="button"
-                  title="Edit user"
-                  onClick={() => openEdit(u)}
-                  className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500">
-                  <Pencil className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
+
+        {/* Mobile cards */}
+        <div className="md:hidden space-y-3">
+          {users.length === 0 ? (
+            <p className="text-sm text-slate-500 text-center py-8">No users yet</p>
+          ) : (
+            users.map((u) => {
+              const ac = avatarColor(u.name);
+              const roleLocked = u.role === 'system_owner';
+              return (
+                <div
+                  key={u.id || u.email}
+                  className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={cn(
+                        'w-10 h-10 rounded-lg flex items-center justify-center text-sm font-bold shrink-0',
+                        ac.bg,
+                        ac.text
+                      )}>
+                      {initials(u.name)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold text-slate-900 truncate">
+                        {u.name}
+                      </div>
+                      <div className="text-xs text-slate-500 truncate mt-0.5">{u.email}</div>
+                    </div>
+                    {canEditUsers && u.role !== 'manager' && (
+                      <button
+                        type="button"
+                        title="Edit user"
+                        onClick={() => openEdit(u)}
+                        className="p-2 rounded-lg hover:bg-white text-slate-500 shrink-0">
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                        Zone / scope
+                      </div>
+                      <div className="text-slate-700 leading-snug">{zoneLabel(u)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                        Status
+                      </div>
+                      <UserStatusBadge status={u.status} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                      Role
+                    </div>
+                    <UserRoleControl
+                      u={u}
+                      roleLocked={roleLocked}
+                      editableRoles={editableRoles}
+                      onRoleChange={changeRole}
+                    />
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
 
       {inviteOpen && (

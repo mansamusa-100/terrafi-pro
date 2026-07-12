@@ -17,7 +17,8 @@ const ACTION_LABELS: Record<string, string> = {
   'visit.scheduled': 'Visit scheduled',
   'visit.logged': 'Visit logged',
   'visit.logged_offline': 'Offline visit synced',
-  'auth.login': 'Sign in'
+  'auth.login': 'Sign in',
+  'auth.password_set': 'Password set'
 };
 
 const ACTION_FILTERS = [
@@ -45,9 +46,13 @@ function formatDetails(details: Record<string, unknown> | null) {
   if (!details) return '—';
   const parts: string[] = [];
   if (details.companyName) parts.push(String(details.companyName));
+  if (details.invitedName) parts.push(String(details.invitedName));
   if (details.email) parts.push(String(details.email));
   if (details.from && details.to) parts.push(`${details.from} → ${details.to}`);
   if (details.role) parts.push(String(details.role));
+  if (details.temporaryPassword) {
+    parts.push(`temp password: ${details.temporaryPassword}`);
+  }
   if (details.reason) parts.push(String(details.reason));
   return parts.length > 0 ? parts.join(' · ') : JSON.stringify(details);
 }

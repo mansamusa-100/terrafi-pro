@@ -450,11 +450,23 @@ export interface DemoUser {
   company: string;
 }
 
+export interface LoginWorkspace {
+  userId: string;
+  name: string;
+  role: Role;
+  companyId: string | null;
+  companyName: string;
+}
+
+export type LoginResponse =
+  | { token: string; user: AppUser; requiresWorkspaceSelection?: false }
+  | { requiresWorkspaceSelection: true; workspaces: LoginWorkspace[] };
+
 export const api = {
-  login(email: string, password: string) {
-    return request<{ token: string; user: AppUser }>('/auth/login', {
+  login(email: string, password: string, userId?: string) {
+    return request<LoginResponse>('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password })
+      body: JSON.stringify({ email, password, userId })
     });
   },
 
@@ -462,6 +474,13 @@ export const api = {
     return request<{ user: AppUser; subscription: SubscriptionView | null }>(
       '/auth/me'
     );
+  },
+
+  changePassword(body: { currentPassword: string; newPassword: string }) {
+    return request<{ user: AppUser }>('/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify(body)
+    });
   },
 
   demoUsers() {
@@ -600,7 +619,12 @@ export const api = {
     zone?: string;
     supervised_adr_ids?: string[];
   }) =>
-    request<CompanyUser & { temporaryPassword?: string }>('/users/invite', {
+    request<
+      CompanyUser & {
+        temporaryPassword?: string;
+        credentialDelivery?: 'log_only' | 'email';
+      }
+    >('/users/invite', {
       method: 'POST',
       body: JSON.stringify(body)
     }),

@@ -6,8 +6,33 @@ import { requireRoles } from '../middleware/auth.js';
 import { logAudit, isPlatformRole, PLATFORM_ROLES, COMPANY_ROLES } from '../lib/audit.js';
 import { notifyUserInvited } from '../lib/notifications.js';
 import { loadSupervisedAdrs, setSupervisedAdrs } from '../lib/team-lead.js';
+import {
+  generateTemporaryPassword,
+  logInviteCredentials
+} from '../lib/invite-credentials.js';
+import { findInviteEmailConflict } from '../lib/user-email.js';
 
 const router = Router();
+
+async function findUserInScope(req, email) {
+  const normalized = email.trim().toLowerCase();
+  if (isPlatformRole(req.user.role)) {
+    return prisma.user.findFirst({
+      where: {
+        email: { equals: normalized, mode: 'insensitive' },
+        companyId: null
+      }
+    });
+  }
+  const companyId = req.user.companyId;
+  if (!companyId) return null;
+  return prisma.user.findFirst({
+    where: {
+      email: { equals: normalized, mode: 'insensitive' },
+      companyId
+    }
+  });
+}
 
 async function mapUser(u) {
   const base = {
@@ -59,18 +84,20 @@ router.post('/invite', requireRoles('system_owner', 'platform_staff', 'manager')
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-    const exists = await prisma.user.findFirst({
-      where: { email: { equals: normalizedEmail, mode: 'insensitive' } }
-    });
-    if (exists) {
-      return res.status(409).json({ error: 'User with this email already exists' });
+    const emailConflict = await findInviteEmailConflict(
+      normalizedEmail,
+      role,
+      isPlatformRole(req.user.role) ? null : req.user.companyId
+    );
+    if (emailConflict) {
+      return res.status(409).json({ error: emailConflict });
     }
 
     const isPlatform = isPlatformRole(req.user.role);
     let companyId = null;
     let allowedRoles;
     let auditScope;
-    let tempPassword = 'changeme';
+    const tempPassword = generateTemporaryPassword();
 
     if (isPlatform) {
       if (!PLATFORM_ROLES.includes(role) || role === 'system_owner') {
@@ -108,6 +135,26 @@ router.post('/invite', requireRoles('system_owner', 'platform_staff', 'manager')
       }
     });
 
+    if (role === 'team_lead' && companyId && Array.isArray(supervised_adr_ids)) {
+      await setSupervisedAdrs(user.id, companyId, supervised_adr_ids);
+    }
+
+    await notifyUserInvited(user, req.user);
+
+    const company = companyId
+      ? await prisma.company.findUnique({
+          where: { id: companyId },
+          select: { id: true, name: true }
+        })
+      : null;
+
+    const { credentialDelivery } = logInviteCredentials({
+      user,
+      actor: req.user,
+      company,
+      temporaryPassword: tempPassword
+    });
+
     await logAudit({
       scope: auditScope,
       companyId,
@@ -115,22 +162,26 @@ router.post('/invite', requireRoles('system_owner', 'platform_staff', 'manager')
       action: 'user.invited',
       entityType: 'user',
       entityId: user.id,
-      details: { email: user.email, role: user.role, invitedName: user.name }
+      details: {
+        email: user.email,
+        role: user.role,
+        invitedName: user.name,
+        credentialDelivery,
+        ...(credentialDelivery === 'log_only'
+          ? { temporaryPassword: tempPassword }
+          : {})
+      }
     });
 
-    await notifyUserInvited(user, req.user);
-
-    if (role === 'team_lead' && companyId && Array.isArray(supervised_adr_ids)) {
-      await setSupervisedAdrs(user.id, companyId, supervised_adr_ids);
-    }
-
     res.status(201).json({
+      id: user.id,
       name: user.name,
       email: user.email,
       role: user.role,
       zone: user.zone,
       status: user.status,
-      temporaryPassword: tempPassword
+      temporaryPassword: tempPassword,
+      credentialDelivery
     });
   } catch (err) {
     next(err);
@@ -143,9 +194,7 @@ router.patch(
   async (req, res, next) => {
     try {
       const { role } = req.body;
-      const user = await prisma.user.findFirst({
-        where: { email: { equals: req.params.email, mode: 'insensitive' } }
-      });
+      const user = await findUserInScope(req, req.params.email);
 
       if (!user) return res.status(404).json({ error: 'User not found' });
 
@@ -196,9 +245,7 @@ router.patch(
   requireRoles('manager'),
   async (req, res, next) => {
     try {
-      const user = await prisma.user.findFirst({
-        where: { email: { equals: req.params.email, mode: 'insensitive' } }
-      });
+      const user = await findUserInScope(req, req.params.email);
       if (!user) return res.status(404).json({ error: 'User not found' });
       if (user.companyId !== req.user.companyId) {
         return res.status(403).json({ error: 'Access denied' });
@@ -235,9 +282,7 @@ router.patch(
   requireRoles('system_owner', 'platform_staff', 'manager'),
   async (req, res, next) => {
     try {
-      const user = await prisma.user.findFirst({
-        where: { email: { equals: req.params.email, mode: 'insensitive' } }
-      });
+      const user = await findUserInScope(req, req.params.email);
       if (!user) return res.status(404).json({ error: 'User not found' });
 
       const actorIsPlatform = isPlatformRole(req.user.role);

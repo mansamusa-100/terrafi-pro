@@ -12,6 +12,7 @@ import { OfflineVisitBanner } from './components/OfflineVisitBanner';
 import { SubscriptionBanner } from './components/SubscriptionBanner';
 import { PlatformDashboardPage } from './pages/PlatformDashboardPage';
 import { LoginScreen } from './components/LoginScreen';
+import { SetPasswordScreen } from './components/SetPasswordScreen';
 import { DashboardPage } from './pages/DashboardPage';
 import { TeamLeadDashboardPage } from './pages/TeamLeadDashboardPage';
 import { AgentsPage } from './pages/AgentsPage';
@@ -239,6 +240,10 @@ function AppShell({
   }
 
   if (!user) return <LoginScreen />;
+
+  if (user.must_change_password || user.status === 'invited') {
+    return <SetPasswordScreen />;
+  }
 
   return (
     <AppDataProvider>

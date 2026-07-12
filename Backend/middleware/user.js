@@ -156,8 +156,9 @@ export function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function serializeAgent(agent, extra = {}) {
-  return {
+export function serializeAgent(agent, extra = {}, options = {}) {
+  const { includeLocationPhoto = true } = options;
+  const base = {
     id: agent.id,
     company_id: agent.companyId,
     name: agent.name,
@@ -189,11 +190,14 @@ export function serializeAgent(agent, extra = {}) {
     branding_present: Array.isArray(agent.brandingPresent)
       ? agent.brandingPresent
       : [],
-    location_photo_url: agent.locationPhotoPath
-      ? `/uploads/${agent.locationPhotoPath}`
-      : null,
     ...extra
   };
+  if (includeLocationPhoto) {
+    base.location_photo_url = agent.locationPhotoPath
+      ? `/uploads/${agent.locationPhotoPath}`
+      : null;
+  }
+  return base;
 }
 
 export function serializeAppUser(row, supervised = null) {
@@ -207,6 +211,8 @@ export function serializeAppUser(row, supervised = null) {
     company_id: row.companyId ?? null,
     scope: row.scope,
     zone: row.zone ?? null,
+    status: row.status,
+    must_change_password: row.status === 'invited',
     supervised_adr_ids: supervised?.supervisedAdrIds ?? [],
     branding
   };

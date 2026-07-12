@@ -61,7 +61,11 @@ router.get('/', async (req, res, next) => {
     });
     res.json(
       agents.map((a) =>
-        serializeAgent(a, { kyc_doc_count: a._count.kycDocs })
+        serializeAgent(
+          a,
+          { kyc_doc_count: a._count.kycDocs },
+          { includeLocationPhoto: false }
+        )
       )
     );
   } catch (err) {
@@ -430,7 +434,7 @@ router.get('/:id', async (req, res, next) => {
     const agent = await prisma.agent.findUnique({
       where: { id: req.params.id },
       include: {
-        kycDocs: { orderBy: { uploadedAt: 'desc' } },
+        kycDocs: { orderBy: [{ docType: 'asc' }, { id: 'asc' }] },
         _count: { select: { visitsRel: true } }
       }
     });
@@ -565,7 +569,7 @@ router.get('/:id/kyc-docs', async (req, res, next) => {
 
     const docs = await prisma.kycDocument.findMany({
       where: { agentId: agent.id },
-      orderBy: { uploadedAt: 'desc' }
+      orderBy: [{ docType: 'asc' }, { id: 'asc' }]
     });
 
     res.json(

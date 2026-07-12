@@ -34,16 +34,6 @@ export function AgentCard({ agent, userCoords = null, onClick }: AgentCardProps)
     <div
       className="bg-white border border-slate-200 rounded-xl overflow-hidden cursor-pointer transition-all duration-200 hover:shadow-md hover:border-apsBlue hover:-translate-y-0.5 group"
       onClick={() => onClick(agent)}>
-      {agent.location_photo_url && (
-        <div className="h-24 overflow-hidden border-b border-slate-100">
-          <img
-            src={agent.location_photo_url}
-            alt=""
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-          />
-        </div>
-      )}
-
       <div className="p-4">
         <div className="flex items-start gap-3 mb-3">
           <div

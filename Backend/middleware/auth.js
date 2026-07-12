@@ -36,3 +36,14 @@ export function requireRoles(...roles) {
     next();
   };
 }
+
+/** Invited users must set a password before using the rest of the API. */
+export function requireActiveAccount(req, res, next) {
+  if (req.user?.status === 'invited') {
+    return res.status(403).json({
+      error: 'Set a new password before continuing',
+      code: 'PASSWORD_CHANGE_REQUIRED'
+    });
+  }
+  next();
+}

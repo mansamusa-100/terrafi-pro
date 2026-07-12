@@ -59,7 +59,7 @@ interface AppDataContextValue {
   refresh: () => Promise<void>;
   createAgent: (
     body: Record<string, unknown>,
-    kycFiles?: Record<string, File>,
+    kycFiles?: Record<string, File | File[]>,
     locationPhoto?: File
   ) => Promise<Agent>;
   logVisit: (body: Record<string, unknown>) => Promise<Visit>;
@@ -251,7 +251,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const createAgent = useCallback(
     async (
       body: Record<string, unknown>,
-      kycFiles?: Record<string, File>,
+      kycFiles?: Record<string, File | File[]>,
       locationPhoto?: File
     ) => {
       const agent = await api.agents.create(body);
@@ -260,8 +260,11 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
           await api.agents.uploadLocationPhoto(agent.id, locationPhoto);
         }
         if (kycFiles && Object.keys(kycFiles).length > 0) {
-          for (const [docType, file] of Object.entries(kycFiles)) {
-            await api.agents.uploadKyc(agent.id, docType, file);
+          for (const [docType, value] of Object.entries(kycFiles)) {
+            const files = Array.isArray(value) ? value : [value];
+            for (const file of files) {
+              await api.agents.uploadKyc(agent.id, docType, file);
+            }
           }
         }
       } catch (err) {

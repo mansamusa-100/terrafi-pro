@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   X,
   MapPin,
@@ -16,11 +16,11 @@ import {
   AlertCircle,
   Navigation
 } from 'lucide-react';
-import { STATUS_META, avatarColor, initials, fmt } from '../lib/data';
+import { STATUS_META, fmt } from '../lib/data';
 import { cn } from '../lib/utils';
 import { ProgressBar } from './ProgressBar';
 import { api, Agent, AgentDetail } from '../lib/api';
-import { KYC_DOCS } from '../lib/kyc';
+import { KYC_DOCS, isMultiPageKycDoc } from '../lib/kyc';
 import { downloadAuthenticated } from '../lib/download';
 import { toast } from 'sonner';
 import { useAuth } from '../lib/auth';
@@ -124,7 +124,6 @@ export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
 
   const data = detail || agent;
   const s = STATUS_META[data.status];
-  const ac = avatarColor(data.name);
   const lastVisit = data.last_visit ?? 'Never';
 
   let floatColorClass = 'text-apsGreen';
@@ -146,10 +145,19 @@ export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
   const floatPct = Math.min(100, Math.round(data.efloat / 100000 * 100));
 
   const kycDocs = detail?.kyc_docs ?? [];
-  const docsByType = Object.fromEntries(
-    kycDocs.map((d) => [d.docType, d])
+  const docsGrouped = useMemo(() => {
+    const grouped: Record<string, typeof kycDocs> = {};
+    for (const d of kycDocs) {
+      (grouped[d.docType] ??= []).push(d);
+    }
+    for (const list of Object.values(grouped)) {
+      list.sort((a, b) => a.id - b.id);
+    }
+    return grouped;
+  }, [kycDocs]);
+  const allKycDocsReady = KYC_DOCS.every(
+    (d) => (docsGrouped[d.key]?.length ?? 0) >= 1
   );
-  const allKycDocsReady = KYC_DOCS.every((d) => docsByType[d.key]);
 
   const handleDownload = async (docId: number, fileName: string) => {
     try {
@@ -197,23 +205,25 @@ export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
           mounted ? 'translate-x-0' : 'translate-x-full'
         )}>
         <div className="bg-gradient-to-br from-navy to-navyMid p-6 shrink-0">
-          <div className="flex justify-between items-start mb-4">
-            <div className="flex gap-4 items-start flex-1 min-w-0">
-              <div
-                className={cn(
-                  'w-14 h-14 rounded-xl flex items-center justify-center text-xl font-bold shrink-0 shadow-inner',
-                  ac.bg,
-                  ac.text
-                )}>
-                {initials(data.name)}
-              </div>
-              <div className="min-w-0">
-                <h2 className="text-white text-xl font-bold tracking-tight truncate">
-                  {data.name}
+          <div className="relative mb-4">
+            <button
+              onClick={onClose}
+              aria-label="Close agent details"
+              className="absolute top-0 right-0 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors z-10">
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-start gap-4 pr-10">
+              <div className="flex-1 min-w-0">
+                <h2 className="text-white text-xl sm:text-2xl font-bold tracking-tight leading-snug break-words">
+                  {data.outlet_name || data.name}
                 </h2>
-                <div className="text-white/60 text-sm mt-0.5 font-medium">
-                  {data.id}
-                </div>
+                {data.outlet_name && data.outlet_name !== data.name && (
+                  <div className="text-white/70 text-sm mt-1 leading-snug break-words">
+                    {data.name}
+                  </div>
+                )}
+                <div className="text-white/50 text-xs mt-1 font-medium">{data.id}</div>
                 <span
                   className={cn(
                     'text-[10px] font-bold px-2.5 py-0.5 rounded-full inline-block mt-2 uppercase tracking-wider',
@@ -225,12 +235,18 @@ export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
                   {s?.label}
                 </span>
               </div>
+
+              {data.location_photo_url && (
+                <figure className="shrink-0 w-32 sm:w-36 rounded-xl overflow-hidden border-2 border-white/25 shadow-lg ring-1 ring-black/10">
+                  <img
+                    src={data.location_photo_url}
+                    alt={`${data.outlet_name || data.name} outlet`}
+                    className="w-full aspect-[4/3] object-cover"
+                  />
+                  <figcaption className="sr-only">Outlet location photo</figcaption>
+                </figure>
+              )}
             </div>
-            <button
-              onClick={onClose}
-              className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors shrink-0">
-              <X className="w-4 h-4" />
-            </button>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -280,16 +296,6 @@ export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
             </div>
           ) : tab === 'overview' ? (
             <div className="space-y-6">
-              {data.location_photo_url && (
-                <div className="rounded-xl overflow-hidden border border-slate-200 shadow-sm">
-                  <img
-                    src={data.location_photo_url}
-                    alt={`${data.outlet_name || data.name} location`}
-                    className="w-full h-44 object-cover"
-                  />
-                </div>
-              )}
-
               <div className="space-y-3">
                 {data.outlet_name && (
                   <div className="flex items-center gap-3 text-sm">
@@ -593,14 +599,17 @@ export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
                 upload missing documents.
               </p>
               {KYC_DOCS.map((doc) => {
-                const uploaded = docsByType[doc.key];
+                const pages = docsGrouped[doc.key] ?? [];
+                const uploaded = pages[pages.length - 1];
+                const multiPage = isMultiPageKycDoc(doc.key);
+
                 return (
                   <div
                     key={doc.key}
                     className="border border-slate-200 rounded-xl p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-start gap-2 min-w-0">
-                        {uploaded ? (
+                        {pages.length > 0 ? (
                           <CheckCircle2 className="w-5 h-5 text-apsGreen shrink-0 mt-0.5" />
                         ) : (
                           <AlertCircle className="w-5 h-5 text-apsAmber shrink-0 mt-0.5" />
@@ -612,15 +621,12 @@ export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
                               <span className="text-apsRed ml-1">*</span>
                             )}
                           </div>
-                          {uploaded ? (
-                            <>
-                              <div className="text-xs text-slate-500 truncate mt-0.5">
-                                {uploaded.fileName}
-                              </div>
-                              <div className="text-[10px] text-slate-400 mt-0.5">
-                                {new Date(uploaded.uploadedAt).toLocaleString()}
-                              </div>
-                            </>
+                          {pages.length > 0 ? (
+                            <div className="text-xs text-slate-500 mt-0.5">
+                              {multiPage
+                                ? `${pages.length} page${pages.length === 1 ? '' : 's'} uploaded`
+                                : uploaded.fileName}
+                            </div>
                           ) : (
                             <div className="text-xs text-apsAmber mt-0.5">
                               Not uploaded
@@ -628,40 +634,122 @@ export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
                           )}
                         </div>
                       </div>
-                      <div className="flex gap-2 shrink-0">
-                        {uploaded && (
-                          <button
-                            onClick={() =>
-                              handleDownload(uploaded.id, uploaded.fileName)
-                            }
-                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50">
-                            <Download className="w-3.5 h-3.5" />
-                            Download
-                          </button>
-                        )}
-                        {canUploadKyc && (
-                          <label className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-apsBlue text-white text-xs font-medium hover:bg-apsBlueMid cursor-pointer">
-                            {uploading === doc.key ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <Upload className="w-3.5 h-3.5" />
-                            )}
-                            {uploaded ? 'Replace' : 'Upload'}
-                            <input
-                              type="file"
-                              accept=".pdf,.jpg,.jpeg,.png,.webp"
-                              className="hidden"
-                              disabled={uploading === doc.key}
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) handleUpload(doc.key, file);
-                                e.target.value = '';
-                              }}
-                            />
-                          </label>
-                        )}
-                      </div>
+                      {canUploadKyc && !multiPage && (
+                        <label className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-apsBlue text-white text-xs font-medium hover:bg-apsBlueMid cursor-pointer shrink-0">
+                          {uploading === doc.key ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Upload className="w-3.5 h-3.5" />
+                          )}
+                          {uploaded ? 'Replace' : 'Upload'}
+                          <input
+                            type="file"
+                            accept=".pdf,.jpg,.jpeg,.png,.webp"
+                            className="hidden"
+                            disabled={uploading === doc.key}
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) handleUpload(doc.key, file);
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+                      )}
                     </div>
+
+                    {multiPage && pages.length > 0 && (
+                      <div className="grid grid-cols-2 gap-2 mt-3">
+                        {pages.map((page, index) => (
+                          <div
+                            key={page.id}
+                            className="rounded-lg border border-slate-200 overflow-hidden bg-slate-50">
+                            {page.mimeType?.startsWith('image/') ? (
+                              <img
+                                src={page.url}
+                                alt={`${doc.label} page ${index + 1}`}
+                                className="w-full aspect-[3/4] object-cover"
+                              />
+                            ) : (
+                              <div className="w-full aspect-[3/4] flex items-center justify-center text-slate-500 text-xs p-2 text-center">
+                                {page.fileName}
+                              </div>
+                            )}
+                            <div className="flex items-center justify-between gap-2 px-2 py-1.5 border-t border-slate-200 bg-white">
+                              <span className="text-[10px] font-semibold text-slate-600">
+                                {page.mimeType === 'application/pdf'
+                                  ? 'PDF'
+                                  : `Page ${index + 1}`}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleDownload(page.id, page.fileName)
+                                }
+                                className="text-[10px] font-medium text-apsBlue hover:underline">
+                                Download
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {canUploadKyc && multiPage && (
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        <label className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-apsBlue text-white text-xs font-medium hover:bg-apsBlueMid cursor-pointer">
+                          {uploading === doc.key ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Upload className="w-3.5 h-3.5" />
+                          )}
+                          Add page (camera)
+                          <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            className="hidden"
+                            disabled={uploading === doc.key}
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) handleUpload(doc.key, file);
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+                        <label className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50 cursor-pointer">
+                          <Upload className="w-3.5 h-3.5" />
+                          Upload PDF
+                          <input
+                            type="file"
+                            accept="application/pdf"
+                            className="hidden"
+                            disabled={uploading === doc.key}
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) handleUpload(doc.key, file);
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+                      </div>
+                    )}
+
+                    {!multiPage && uploaded && (
+                      <div className="flex gap-2 mt-3">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleDownload(uploaded.id, uploaded.fileName)
+                          }
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50">
+                          <Download className="w-3.5 h-3.5" />
+                          Download
+                        </button>
+                        <span className="text-[10px] text-slate-400 self-center">
+                          {new Date(uploaded.uploadedAt).toLocaleString()}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 );
               })}

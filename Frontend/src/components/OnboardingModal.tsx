@@ -21,13 +21,15 @@ import { can } from '../lib/rbac';
 import { LocationPicker } from './LocationPicker';
 import { formatCoords } from '../lib/geolocation';
 import { AgentCreatedSuccess } from './AgentCreatedSuccess';
+import { MultiPageKycCapture } from './MultiPageKycCapture';
+import { KYC_DOCS, isMultiPageKycDoc } from '../lib/kyc';
 
 interface OnboardingModalProps {
   open: boolean;
   onClose: () => void;
   onSubmit: (
     body: Record<string, unknown>,
-    kycFiles?: Record<string, File>,
+    kycFiles?: Record<string, File | File[]>,
     locationPhoto?: File
   ) => Promise<Agent>;
   onCreated?: (agent: Agent) => void;
@@ -39,12 +41,6 @@ const STEPS = [
   { id: 2, label: 'Location', icon: MapPin },
   { id: 3, label: 'Branding', icon: Tag },
   { id: 4, label: 'Review', icon: ClipboardCheck }
-];
-
-const KYC_DOCS = [
-  { key: 'nationalId', label: 'National ID card', required: true },
-  { key: 'businessPermit', label: 'Business permit', required: true },
-  { key: 'agentAgreement', label: 'Signed agent agreement', required: true }
 ];
 
 export function OnboardingModal({
@@ -84,6 +80,7 @@ export function OnboardingModal({
   const [officerId, setOfficerId] = useState('');
 
   const [docs, setDocs] = useState<Record<string, File | null>>({});
+  const [agreementPages, setAgreementPages] = useState<File[]>([]);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [locationPhoto, setLocationPhoto] = useState<File | null>(null);
   const [locationPreview, setLocationPreview] = useState<string | null>(null);
@@ -156,6 +153,7 @@ export function OnboardingModal({
     setTownVillage('');
     setOfficerId('');
     setDocs({});
+    setAgreementPages([]);
     setCoords(null);
     setLocationPhoto(null);
     setCompetitors([]);
@@ -188,6 +186,7 @@ export function OnboardingModal({
     setTownVillage('');
     setOfficerId('');
     setDocs({});
+    setAgreementPages([]);
     setCoords(null);
     setLocationPhoto(null);
     setCompetitors([]);
@@ -211,7 +210,11 @@ export function OnboardingModal({
       user?.role !== 'team_lead' ||
       officerId.length > 0);
 
-  const kycValid = KYC_DOCS.filter((d) => d.required).every((d) => docs[d.key]);
+  const kycValid = KYC_DOCS.filter((d) => d.required).every((d) =>
+    isMultiPageKycDoc(d.key)
+      ? agreementPages.length > 0
+      : !!docs[d.key]
+  );
   const locationValid = !!coords && !!locationPhoto;
 
   const canAdvance =
@@ -230,9 +233,13 @@ export function OnboardingModal({
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
-      const kycFiles = Object.fromEntries(
-        Object.entries(docs).filter(([, file]) => file) as [string, File][]
-      );
+      const kycFiles: Record<string, File | File[]> = {};
+      for (const [key, file] of Object.entries(docs)) {
+        if (file) kycFiles[key] = file;
+      }
+      if (agreementPages.length > 0) {
+        kycFiles.agentAgreement = agreementPages;
+      }
       const agent = await onSubmit(
         {
           outletName: outletName.trim(),
@@ -493,10 +500,21 @@ export function OnboardingModal({
                 {step === 1 && (
                   <div className="space-y-3">
                     <p className="text-xs text-slate-500">
-                      Upload clear photos of each required document. All three are
-                      mandatory for KYC.
+                      Upload clear photos of each required document. For the signed
+                      agreement you can snap multiple pages if it is not a PDF.
                     </p>
                     {KYC_DOCS.map((d) => {
+                      if (isMultiPageKycDoc(d.key)) {
+                        return (
+                          <MultiPageKycCapture
+                            key={d.key}
+                            label={d.label}
+                            pages={agreementPages}
+                            onChange={setAgreementPages}
+                            required={d.required}
+                          />
+                        );
+                      }
                       const uploaded = docs[d.key];
                       return (
                         <label
@@ -510,6 +528,7 @@ export function OnboardingModal({
                           <input
                             type="file"
                             accept="image/*,application/pdf"
+                            capture="environment"
                             className="hidden"
                             onChange={(e) => {
                               const file = e.target.files?.[0] || null;
@@ -536,7 +555,7 @@ export function OnboardingModal({
                             <div className="text-xs text-slate-500">
                               {uploaded
                                 ? `${uploaded.name} · tap to replace`
-                                : 'Tap to upload photo or PDF'}
+                                : 'Tap to snap or upload photo/PDF'}
                             </div>
                           </div>
                           {d.required && (
@@ -705,7 +724,10 @@ export function OnboardingModal({
                     </div>
                     <div className="flex items-center gap-2 text-xs text-apsGreen bg-apsGreenLt/50 border border-apsGreen/20 rounded-lg px-3 py-2.5">
                       <Check className="w-4 h-4 shrink-0" />
-                      All {KYC_DOCS.length} KYC documents uploaded and ready for review
+                      All KYC documents ready — agreement has{' '}
+                      {agreementPages.length === 1 && agreementPages[0]?.type === 'application/pdf'
+                        ? '1 PDF'
+                        : `${agreementPages.length} page${agreementPages.length === 1 ? '' : 's'}`}
                     </div>
                   </div>
                 )}

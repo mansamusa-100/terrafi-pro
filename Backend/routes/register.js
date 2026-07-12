@@ -4,6 +4,7 @@ import { prisma } from '../lib/prisma.js';
 import { logAudit } from '../lib/audit.js';
 import { notifyCompanyRegistered } from '../lib/notifications.js';
 import { setupCompanyBilling } from '../lib/company-billing.js';
+import { findRegistrationEmailConflict } from '../lib/user-email.js';
 
 const router = Router();
 
@@ -29,11 +30,9 @@ router.post('/register-company', async (req, res, next) => {
     }
 
     const email = adminEmail.trim().toLowerCase();
-    const existing = await prisma.user.findFirst({
-      where: { email: { equals: email, mode: 'insensitive' } }
-    });
-    if (existing) {
-      return res.status(409).json({ error: 'An account with this email already exists' });
+    const emailConflict = await findRegistrationEmailConflict(email);
+    if (emailConflict) {
+      return res.status(409).json({ error: emailConflict });
     }
 
     const now = new Date();

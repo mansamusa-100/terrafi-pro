@@ -4,7 +4,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { prisma } from './lib/prisma.js';
-import { authMiddleware } from './middleware/auth.js';
+import { authMiddleware, requireActiveAccount } from './middleware/auth.js';
 import { loadUser } from './middleware/user.js';
 import authRoutes from './routes/auth.js';
 import agentsRoutes from './routes/agents.js';
@@ -67,7 +67,7 @@ app.get('/api/health', async (_req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/auth', registerRoutes);
 
-app.use('/api', authMiddleware, loadUser);
+app.use('/api', authMiddleware, loadUser, requireActiveAccount);
 
 app.use('/api/agents', agentsRoutes);
 app.use('/api/visits', visitsRoutes);

@@ -3,7 +3,7 @@ import { Lock, Mail, ArrowRight, Loader2, Building2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ROLE_META, Role } from '../lib/rbac';
 import { useAuth } from '../lib/auth';
-import { api, DemoUser, ApiError } from '../lib/api';
+import { api, DemoUser, ApiError, LoginWorkspace } from '../lib/api';
 import { cn } from '../lib/utils';
 import { BrandMark } from './BrandMark';
 
@@ -22,6 +22,7 @@ export function LoginScreen() {
   const [password, setPassword] = useState('demo');
   const [loading, setLoading] = useState(false);
   const [demoUsers, setDemoUsers] = useState<DemoUser[]>([]);
+  const [workspaces, setWorkspaces] = useState<LoginWorkspace[] | null>(null);
   const [registerForm, setRegisterForm] = useState({
     companyName: '',
     adminName: '',
@@ -38,7 +39,24 @@ export function LoginScreen() {
     e.preventDefault();
     setLoading(true);
     try {
-      await login(email.trim(), password);
+      const result = await login(email.trim(), password);
+      if (result?.requiresWorkspaceSelection) {
+        setWorkspaces(result.workspaces);
+        return;
+      }
+      setWorkspaces(null);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Sign in failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const selectWorkspace = async (userId: string) => {
+    setLoading(true);
+    try {
+      await login(email.trim(), password, userId);
+      setWorkspaces(null);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Sign in failed');
     } finally {
@@ -205,6 +223,41 @@ export function LoginScreen() {
                 <code className="font-mono">owner@anms.platform</code> / demo
               </div>
 
+              {workspaces ? (
+                <div className="space-y-4">
+                  <div className="rounded-lg border border-apsBlue/25 bg-apsBlueLt/30 px-3 py-3 text-sm text-slate-700">
+                    This email is linked to more than one organisation. Choose
+                    which workspace to open.
+                  </div>
+                  <div className="space-y-2">
+                    {workspaces.map((ws) => {
+                      const rm = ROLE_META[ws.role];
+                      return (
+                        <button
+                          key={ws.userId}
+                          type="button"
+                          disabled={loading}
+                          onClick={() => selectWorkspace(ws.userId)}
+                          className="w-full text-left px-4 py-3 rounded-lg border border-slate-200 bg-white hover:border-apsBlue hover:bg-apsBlueLt/20 transition-all disabled:opacity-60">
+                          <div className="text-sm font-semibold text-slate-900">
+                            {ws.companyName}
+                          </div>
+                          <div className="text-xs text-slate-500 mt-0.5">
+                            {ws.name} · {rm?.label || ws.role}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setWorkspaces(null)}
+                    className="text-xs font-medium text-slate-500 hover:text-slate-800">
+                    ← Back to sign in
+                  </button>
+                </div>
+              ) : (
+              <>
               <form onSubmit={handleSignIn} className="space-y-4">
                 <div>
                   <label className="text-xs font-semibold text-slate-600 mb-1.5 block">
@@ -280,6 +333,8 @@ export function LoginScreen() {
                   })}
                 </div>
               </div>
+              </>
+              )}
             </>
           ) : (
             <>

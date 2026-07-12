@@ -156,13 +156,6 @@ export function MapPage({ setSelectedAgent }: MapPageProps) {
                   }}>
                   <Tooltip direction="top" offset={[0, -4]}>
                     <div className="text-xs min-w-[140px]">
-                      {a.location_photo_url && (
-                        <img
-                          src={a.location_photo_url}
-                          alt=""
-                          className="w-full h-16 object-cover rounded mb-1.5 -mx-1 -mt-1"
-                        />
-                      )}
                       <div className="font-semibold">{a.outlet_name || a.name}</div>
                       {a.outlet_name && (
                         <div className="text-slate-500 text-[10px]">{a.name}</div>
@@ -227,18 +220,10 @@ export function MapPage({ setSelectedAgent }: MapPageProps) {
                     }
                   }}
                   className="w-full flex items-center gap-3 px-4 py-2.5 border-b border-slate-50 hover:bg-slate-50 transition-colors text-left cursor-pointer">
-                  {a.location_photo_url ? (
-                    <img
-                      src={a.location_photo_url}
-                      alt=""
-                      className="w-9 h-9 rounded-lg object-cover shrink-0"
-                    />
-                  ) : (
-                    <span
-                      className="w-2.5 h-2.5 rounded-full shrink-0"
-                      style={{ background: colorFor(a) }}
-                    />
-                  )}
+                  <span
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ background: colorFor(a) }}
+                  />
                   <div className="flex-1 min-w-0">
                     <div className="text-xs font-medium text-slate-900 truncate">
                       {a.outlet_name || a.name}
