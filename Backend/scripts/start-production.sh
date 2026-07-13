@@ -3,26 +3,49 @@ set -e
 
 TRIES="${DB_CONNECT_RETRIES:-30}"
 SLEEP="${DB_CONNECT_SLEEP:-3}"
+REPAIRED=0
+
+run_migrate() {
+  OUTPUT=$(npx prisma migrate deploy 2>&1) && {
+    echo "$OUTPUT"
+    return 0
+  }
+  MIGRATE_EXIT=$?
+  echo "$OUTPUT"
+  return "$MIGRATE_EXIT"
+}
+
+try_repair_p3009() {
+  if [ "$REPAIRED" = "1" ]; then
+    return 1
+  fi
+  REPAIRED=1
+  echo ""
+  echo "P3009 detected — running automatic migration repair..."
+  sh scripts/repair-migration.sh || return 1
+  return 0
+}
 
 echo "Terrafi Pro — waiting for database..."
 
 i=1
 while [ "$i" -le "$TRIES" ]; do
   echo "Migration attempt $i/$TRIES..."
-  OUTPUT=$(npx prisma migrate deploy 2>&1) || MIGRATE_EXIT=$?
-  if [ -z "${MIGRATE_EXIT:-}" ]; then
-    echo "$OUTPUT"
+
+  if run_migrate; then
     echo "Database ready. Starting API..."
     exec node index.js
   fi
 
-  echo "$OUTPUT"
-
   if echo "$OUTPUT" | grep -q "P3009"; then
+    if try_repair_p3009 && run_migrate; then
+      echo "Database ready after repair. Starting API..."
+      exec node index.js
+    fi
     echo ""
-    echo "ERROR: Failed migration recorded in the database (P3009)."
-    echo "On a fresh deploy, reset Postgres or run: sh scripts/repair-migration.sh"
-    echo "See: https://www.prisma.io/docs/guides/migrate/production-troubleshooting"
+    echo "ERROR: Migration repair failed (P3009)."
+    echo "Run this SQL in the Coolify POSTGRES terminal, then redeploy:"
+    echo '  DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
     exit 1
   fi
 
@@ -39,6 +62,4 @@ while [ "$i" -le "$TRIES" ]; do
 done
 
 echo "ERROR: Could not reach database after $TRIES attempts."
-echo "Check Coolify: app and PostgreSQL must be in the same project/environment/server,"
-echo "and DATABASE_URL must use the Postgres INTERNAL connection URL."
 exit 1
