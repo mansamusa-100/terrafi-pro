@@ -10,7 +10,7 @@ import {
   canAccessVisit
 } from '../middleware/user.js';
 import { requireRoles } from '../middleware/auth.js';
-import { verifyGpsCheckIn } from '../lib/geo.js';
+import { verifyGpsCheckIn, GPS_VERIFY_RADIUS_M } from '../lib/geo.js';
 import { notifyVisitLogged, notifyVisitScheduled } from '../lib/notifications.js';
 import { syncFloatAlertsForAgent } from '../lib/float-alerts.js';
 import { buildVisitSummary, markOverdueVisits } from '../lib/visit-utils.js';
@@ -230,7 +230,7 @@ router.post('/', requireRoles('manager', 'team_lead', 'adr'), async (req, res, n
     const gps = verifyGpsCheckIn(agent.lat, agent.lng, checkInLat, checkInLng);
     if (!gps.verified) {
       return res.status(400).json({
-        error: `GPS check-in failed — you are ${gps.distanceMeters}m from the agent (max 250m)`
+        error: `GPS check-in failed — you are ${gps.distanceMeters}m from the agent (max ${GPS_VERIFY_RADIUS_M}m)`
       });
     }
 

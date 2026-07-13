@@ -1,4 +1,4 @@
-# Field-Pro
+# Terrafi Pro
 
 Agent Network Management System for mobile money operators — field visit monitoring, float health, compliance, and performance tracking.
 
@@ -93,7 +93,7 @@ Use the login screen quick-access buttons to switch personas.
 - **Tenant model** — platform users vs company users; companies self-register
 - **Scoped audit logs** — separate platform and organisation audit trails
 - **KYC file uploads** — onboard agents with document uploads (JPEG, PNG, WebP, PDF)
-- **GPS visit check-in** — field officers must be within 250m of the agent to log a visit (browser geolocation)
+- **GPS visit check-in** — field officers must be within 50m of the agent to log a visit (browser geolocation)
 
 ## Scripts
 

@@ -6,11 +6,12 @@ import { useAuth } from '../lib/auth';
 import { api, DemoUser, ApiError, LoginWorkspace } from '../lib/api';
 import { cn } from '../lib/utils';
 import { BrandMark } from './BrandMark';
+import { PwaInstallBanner } from './PwaInstallBanner';
 
 const PLATFORM_BRANDING = {
-  title: 'Field-Pro',
+  title: 'Terrafi Pro',
   subtitle: 'Agent Network Management',
-  logo_url: null as string | null
+  logo_url: '/icons/terrafi-logo.svg' as string | null
 };
 
 type Mode = 'signin' | 'register';
@@ -179,7 +180,9 @@ export function LoginScreen() {
         </div>
       </div>
 
-      <div className="flex-1 flex items-center justify-center p-4 sm:p-8 lg:p-16 bg-slate-50">
+      <div className="flex-1 flex flex-col bg-slate-50">
+        <PwaInstallBanner />
+        <div className="flex-1 flex items-center justify-center p-4 sm:p-8 lg:p-16">
         <div className="w-full max-w-md">
           <div className="flex gap-2 mb-6 p-1 bg-slate-200 rounded-lg">
             <button
@@ -445,6 +448,7 @@ export function LoginScreen() {
               </form>
             </>
           )}
+        </div>
         </div>
       </div>
     </div>

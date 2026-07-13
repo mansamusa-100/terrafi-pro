@@ -1,9 +1,9 @@
 import { isPlatformRole } from './audit.js';
 
 export const PLATFORM_BRANDING = {
-  title: 'Field-Pro',
+  title: 'Terrafi Pro',
   subtitle: 'Agent Network Management',
-  logo_url: null
+  logo_url: '/icons/terrafi-logo.svg'
 };
 
 export const COMPANY_SUBTITLE = 'Agent Network';
@@ -17,7 +17,7 @@ export function resolveBranding(role, company) {
     return { ...PLATFORM_BRANDING };
   }
   return {
-    title: company?.name || 'Field-Pro',
+    title: company?.name || 'Terrafi Pro',
     subtitle: COMPANY_SUBTITLE,
     logo_url: companyLogoUrl(company?.logoPath ?? null)
   };

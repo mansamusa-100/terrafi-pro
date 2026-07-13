@@ -38,7 +38,7 @@ export function logInviteCredentials({
     const lines = [
       '',
       '══════════════════════════════════════════════════════════',
-      ' Field-Pro — user invited (no email provider configured)',
+      ' Terrafi Pro — user invited (no email provider configured)',
       '══════════════════════════════════════════════════════════',
       `  Name:            ${user.name}`,
       `  Email:           ${user.email}`,

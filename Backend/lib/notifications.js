@@ -289,7 +289,7 @@ export async function notifyUserInvited(user, actor) {
     userId: user.id,
     companyId: user.companyId,
     type: 'user.invited',
-    title: 'Welcome to Field-Pro',
+    title: 'Welcome to Terrafi Pro',
     body: `${actor.name} invited you as ${user.role}. Sign in with your email to get started.`,
     entityType: 'user',
     entityId: user.id

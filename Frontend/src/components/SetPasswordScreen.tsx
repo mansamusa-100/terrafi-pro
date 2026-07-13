@@ -35,7 +35,7 @@ export function SetPasswordScreen() {
     setLoading(true);
     try {
       await changePassword(currentPassword, newPassword);
-      toast.success('Password set — welcome to Field-Pro');
+      toast.success('Password set — welcome to Terrafi Pro');
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not set password');
     } finally {

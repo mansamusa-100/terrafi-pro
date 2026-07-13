@@ -1,12 +1,16 @@
 {
-  "name": "Field-Pro — Agent Network Management",
-  "short_name": "Field-Pro",
+  "id": "/",
+  "name": "Terrafi Pro — Agent Network Management",
+  "short_name": "Terrafi Pro",
   "description": "Field visits, float health, and agent network management for mobile money operators.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#0A1628",
-  "theme_color": "#0A1628",
+  "display_override": ["standalone", "minimal-ui"],
+  "background_color": "#0B1F3A",
+  "theme_color": "#0B1F3A",
   "orientation": "portrait-primary",
+  "categories": ["business", "finance", "productivity"],
   "icons": [
     {
       "src": "/icons/icon-192.svg",
@@ -18,7 +22,13 @@
       "src": "/icons/icon-512.svg",
       "sizes": "512x512",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
     }
   ]
 }

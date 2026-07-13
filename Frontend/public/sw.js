@@ -1,5 +1,5 @@
-const CACHE = 'field-pro-v2';
-const SHELL = ['/', '/index.html', '/manifest.webmanifest'];
+const CACHE = 'terrafi-pro-v1';
+const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icons/icon-192.svg', '/icons/icon-512.svg', '/icons/terrafi-logo.svg'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

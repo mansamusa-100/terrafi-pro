@@ -1,5 +1,5 @@
 const EARTH_RADIUS_M = 6371000;
-const GPS_VERIFY_RADIUS_M = 250;
+const GPS_VERIFY_RADIUS_M = Number(process.env.GPS_VERIFY_RADIUS_M) || 50;
 
 export function distanceMeters(lat1, lng1, lat2, lng2) {
   const toRad = (deg) => (deg * Math.PI) / 180;

@@ -88,6 +88,6 @@ export function serializeWorkspace(user) {
     name: user.name,
     role: user.role,
     companyId: user.companyId,
-    companyName: user.company?.name || 'Field-Pro Platform'
+    companyName: user.company?.name || 'Terrafi Pro Platform'
   };
 }

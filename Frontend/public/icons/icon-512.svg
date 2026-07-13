@@ -1,5 +1,28 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
-  <rect width="512" height="512" rx="96" fill="#0A1628"/>
-  <rect x="96" y="96" width="320" height="320" rx="64" fill="#1565C0"/>
-  <text x="256" y="320" text-anchor="middle" fill="white" font-family="system-ui,sans-serif" font-size="200" font-weight="700">A</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none" role="img" aria-label="Terrafi Pro">
+  <defs>
+    <linearGradient id="bg512" x1="64" y1="48" x2="448" y2="464" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B1F3A"/>
+      <stop offset="1" stop-color="#0F2847"/>
+    </linearGradient>
+    <linearGradient id="accent512" x1="128" y1="96" x2="384" y2="416" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#14B8A6"/>
+      <stop offset="1" stop-color="#2563EB"/>
+    </linearGradient>
+    <linearGradient id="pin512" x1="256" y1="140" x2="256" y2="372" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5EEAD4"/>
+      <stop offset="1" stop-color="#60A5FA"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg512)"/>
+  <circle cx="256" cy="234" r="138" stroke="url(#accent512)" stroke-width="8" opacity="0.35"/>
+  <ellipse cx="256" cy="234" rx="138" ry="54" stroke="url(#accent512)" stroke-width="6" opacity="0.55"/>
+  <ellipse cx="256" cy="234" rx="54" ry="138" stroke="url(#accent512)" stroke-width="6" opacity="0.55"/>
+  <path d="M118 234h276" stroke="url(#accent512)" stroke-width="6" opacity="0.45"/>
+  <path d="M256 96v276" stroke="url(#accent512)" stroke-width="6" opacity="0.45"/>
+  <path
+    d="M256 150c-32.5 0-58.8 26.3-58.8 58.8 0 44 58.8 112 58.8 112s58.8-68 58.8-112c0-32.5-26.3-58.8-58.8-58.8z"
+    fill="url(#pin512)"/>
+  <circle cx="256" cy="208" r="18" fill="#0B1F3A"/>
+  <path d="M192 352h136" stroke="#94A3B8" stroke-width="10" stroke-linecap="round"/>
+  <path d="M208 384h104" stroke="#64748B" stroke-width="8" stroke-linecap="round"/>
 </svg>

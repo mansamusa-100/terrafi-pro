@@ -181,7 +181,7 @@ router.get('/demo-users', async (_req, res, next) => {
         email: u.email,
         role: u.role,
         name: u.name,
-        company: u.company?.name || 'Field-Pro Platform'
+        company: u.company?.name || 'Terrafi Pro Platform'
       }))
     );
   } catch (err) {

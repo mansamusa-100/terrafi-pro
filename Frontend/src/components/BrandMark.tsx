@@ -10,7 +10,7 @@ interface BrandMarkProps {
 
 export function brandInitial(title: string) {
   const trimmed = title.trim();
-  if (!trimmed) return 'F';
+  if (!trimmed) return 'TP';
   const words = trimmed.split(/\s+/).filter(Boolean);
   if (words.length >= 2) {
     return (words[0][0] + words[1][0]).toUpperCase();
@@ -27,7 +27,7 @@ export function BrandMark({ branding, size = 'md', className }: BrandMarkProps) 
       <img
         src={branding.logo_url}
         alt=""
-        className={cn(dim, 'rounded-lg object-cover shrink-0 bg-white shadow-sm', className)}
+        className={cn(dim, 'rounded-lg object-contain shrink-0 bg-white shadow-sm p-0.5', className)}
       />
     );
   }

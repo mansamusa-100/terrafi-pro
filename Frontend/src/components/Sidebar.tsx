@@ -37,7 +37,7 @@ export function Sidebar({
   const branding =
     user.branding ??
     ({
-      title: user.company || 'Field-Pro',
+      title: user.company || 'Terrafi Pro',
       subtitle: 'Agent Network',
       logo_url: null
     } as const);

@@ -54,7 +54,7 @@ export function PlatformDashboardPage({
       <div className="mb-6">
         <h2 className="text-lg font-semibold text-slate-900">Platform overview</h2>
         <p className="text-xs text-slate-500 mt-0.5">
-          Subscriber health, signups, and billing status across Field-Pro
+          Subscriber health, signups, and billing status across Terrafi Pro
         </p>
       </div>
 

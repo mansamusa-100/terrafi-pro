@@ -175,7 +175,7 @@ function AuthenticatedApp({
           setPage={handleSetPage}
           setSelectedAgent={setSelectedAgent}
         />
-        {isFieldMobile && <PwaInstallBanner />}
+        <PwaInstallBanner />
         {canLogVisit && (
           <OfflineVisitBanner
             count={queuedVisitCount}

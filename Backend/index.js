@@ -112,7 +112,7 @@ async function start() {
   }
 
   const server = app.listen(PORT, () => {
-    console.log(`Field-Pro API running on http://localhost:${PORT}`);
+    console.log(`Terrafi Pro API running on http://localhost:${PORT}`);
   });
 
   server.on('error', (err) => {

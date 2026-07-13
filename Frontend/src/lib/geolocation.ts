@@ -78,7 +78,7 @@ export function formatCoords(coords: GeoCoords): string {
 const EARTH_RADIUS_M = 6371000;
 
 /** Must match Backend/lib/geo.js */
-export const GPS_VERIFY_RADIUS_M = 250;
+export const GPS_VERIFY_RADIUS_M = 50;
 
 export function distanceMeters(
   lat1: number,
