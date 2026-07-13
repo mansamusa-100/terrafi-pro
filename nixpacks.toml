@@ -1,0 +1,21 @@
+# Coolify defaults to Nixpacks for Node repos. This config builds the monorepo correctly.
+# Prefer switching Coolify Build Pack to "Dockerfile" for production deploys.
+
+[variables]
+NPM_CONFIG_PRODUCTION = "false"
+PORT = "3001"
+
+[phases.install]
+cmds = [
+  "npm ci --prefix Backend",
+  "npm ci --prefix Frontend"
+]
+
+[phases.build]
+cmds = [
+  "npm run build --prefix Frontend",
+  "cd Backend && npx prisma generate"
+]
+
+[start]
+cmd = "cd Backend && npx prisma migrate deploy && NODE_ENV=production node index.js"
