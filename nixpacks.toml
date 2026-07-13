@@ -18,4 +18,4 @@ cmds = [
 ]
 
 [start]
-cmd = "cd Backend && npx prisma migrate deploy && NODE_ENV=production node index.js"
+cmd = "cd Backend && sh scripts/start-production.sh"

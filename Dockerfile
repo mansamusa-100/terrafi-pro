@@ -20,4 +20,4 @@ RUN mkdir -p uploads/kyc uploads/locations uploads/branding
 ENV NODE_ENV=production
 EXPOSE 3001
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node index.js"]
+CMD ["sh", "scripts/start-production.sh"]

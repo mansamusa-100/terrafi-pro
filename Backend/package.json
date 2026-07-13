@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "node --watch index.js",
     "start": "node index.js",
+    "start:production": "sh scripts/start-production.sh",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
