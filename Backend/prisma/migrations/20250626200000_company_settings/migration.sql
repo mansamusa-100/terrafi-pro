@@ -19,8 +19,3 @@ CREATE TABLE "CompanySettings" (
 
 -- AddForeignKey
 ALTER TABLE "CompanySettings" ADD CONSTRAINT "CompanySettings_company_id_fkey" FOREIGN KEY ("company_id") REFERENCES "Company"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- Seed defaults for demo company
-INSERT INTO "CompanySettings" ("company_id", "default_float_threshold", "visit_frequency_target", "alert_notification_delay_minutes", "auto_suspend_missed_visits_days", "active_zones", "sub_territories", "coverage_model", "core_wallet_api_status", "sms_gateway_status", "email_notifications_status", "export_format", "updated_at")
-VALUES ('co-aps', 5000, 25, 5, 14, 7, 24, 'Officer-based', 'Connected', 'Active', 'Active', 'Excel, PDF', CURRENT_TIMESTAMP)
-ON CONFLICT ("company_id") DO NOTHING;

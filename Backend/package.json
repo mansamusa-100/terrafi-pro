@@ -16,6 +16,7 @@
     "db:seed": "node prisma/seed.js",
     "db:seed:demo": "node prisma/seed-demo.js",
     "db:purge-demo": "node scripts/purge-demo-data.js",
+    "db:repair-migration": "sh scripts/repair-migration.sh",
     "db:studio": "prisma studio",
     "float:backfill-phones": "node scripts/backfill-phone-normalized.js",
     "float:simulate": "node scripts/simulate-float-delivery.js",
