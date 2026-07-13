@@ -120,6 +120,18 @@ export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
     }
   };
 
+  const kycDocs = detail?.kyc_docs ?? [];
+  const docsGrouped = useMemo(() => {
+    const grouped: Record<string, typeof kycDocs> = {};
+    for (const d of kycDocs) {
+      (grouped[d.docType] ??= []).push(d);
+    }
+    for (const list of Object.values(grouped)) {
+      list.sort((a, b) => a.id - b.id);
+    }
+    return grouped;
+  }, [kycDocs]);
+
   if (!agent) return null;
 
   const data = detail || agent;
@@ -144,17 +156,6 @@ export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
         : 'text-apsRed';
   const floatPct = Math.min(100, Math.round(data.efloat / 100000 * 100));
 
-  const kycDocs = detail?.kyc_docs ?? [];
-  const docsGrouped = useMemo(() => {
-    const grouped: Record<string, typeof kycDocs> = {};
-    for (const d of kycDocs) {
-      (grouped[d.docType] ??= []).push(d);
-    }
-    for (const list of Object.values(grouped)) {
-      list.sort((a, b) => a.id - b.id);
-    }
-    return grouped;
-  }, [kycDocs]);
   const allKycDocsReady = KYC_DOCS.every(
     (d) => (docsGrouped[d.key]?.length ?? 0) >= 1
   );
