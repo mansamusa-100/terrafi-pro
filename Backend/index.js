@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { prisma } from './lib/prisma.js';
+import { ensurePlatformOwner } from './lib/ensure-platform-owner.js';
 import { authMiddleware, requireActiveAccount } from './middleware/auth.js';
 import { loadUser } from './middleware/user.js';
 import authRoutes from './routes/auth.js';
@@ -119,6 +120,9 @@ async function start() {
   try {
     await prisma.$connect();
     console.log('Database connected');
+    if (process.env.NODE_ENV === 'production') {
+      await ensurePlatformOwner();
+    }
   } catch (err) {
     console.error('\nDatabase connection failed:', err.message);
     console.error('\nLocal PostgreSQL setup (run once):');

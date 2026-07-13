@@ -1,5 +1,5 @@
-import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
+import { ensurePlatformOwner } from '../lib/ensure-platform-owner.js';
 
 const prisma = new PrismaClient();
 
@@ -14,26 +14,9 @@ async function main() {
     return;
   }
 
-  const password = process.env.PLATFORM_OWNER_PASSWORD || 'demo';
-  const hash = bcrypt.hashSync(password, 10);
-
-  await prisma.user.create({
-    data: {
-      id: 'usr-owner',
-      name: 'Platform Owner',
-      email: 'owner@anms.platform',
-      passwordHash: hash,
-      role: 'system_owner',
-      scope: 'Platform administration',
-      status: 'active'
-    }
-  });
-
+  await ensurePlatformOwner();
   console.log('Terrafi Pro production bootstrap complete.');
   console.log('System owner: owner@anms.platform');
-  if (!process.env.PLATFORM_OWNER_PASSWORD) {
-    console.log('Default password: demo — set PLATFORM_OWNER_PASSWORD in production.');
-  }
 }
 
 main()

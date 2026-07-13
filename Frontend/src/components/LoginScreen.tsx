@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Lock, Mail, ArrowRight, Loader2, Building2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { ROLE_META, Role } from '../lib/rbac';
+import { ROLE_META } from '../lib/rbac';
 import { useAuth } from '../lib/auth';
-import { api, DemoUser, ApiError, LoginWorkspace } from '../lib/api';
+import { api, ApiError, LoginWorkspace } from '../lib/api';
 import { cn } from '../lib/utils';
 import { BrandMark } from './BrandMark';
 import { PwaInstallBanner } from './PwaInstallBanner';
@@ -19,10 +19,9 @@ type Mode = 'signin' | 'register';
 export function LoginScreen() {
   const { login } = useAuth();
   const [mode, setMode] = useState<Mode>('signin');
-  const [email, setEmail] = useState('adama@apswallet.gm');
-  const [password, setPassword] = useState('demo');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [demoUsers, setDemoUsers] = useState<DemoUser[]>([]);
   const [workspaces, setWorkspaces] = useState<LoginWorkspace[] | null>(null);
   const [registerForm, setRegisterForm] = useState({
     companyName: '',
@@ -31,10 +30,6 @@ export function LoginScreen() {
     password: '',
     zone: ''
   });
-
-  useEffect(() => {
-    api.demoUsers().then(setDemoUsers).catch(() => {});
-  }, []);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,32 +93,6 @@ export function LoginScreen() {
       setLoading(false);
     }
   };
-
-  const quickSignIn = async (demoEmail: string) => {
-    setLoading(true);
-    try {
-      await login(demoEmail, 'demo');
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Sign in failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const showcaseRoles: Role[] = [
-    'system_owner',
-    'platform_staff',
-    'manager',
-    'internal',
-    'team_lead',
-    'adr',
-    'agent',
-    'teller'
-  ];
-
-  const quickRoles = showcaseRoles
-    .map((role) => demoUsers.find((u) => u.role === role))
-    .filter(Boolean) as DemoUser[];
 
   return (
     <div className="min-h-screen w-full bg-navy flex flex-col lg:flex-row">
@@ -212,19 +181,9 @@ export function LoginScreen() {
 
           {mode === 'signin' ? (
             <>
-              <h2 className="text-2xl font-bold text-slate-900 mb-1">
+              <h2 className="text-2xl font-bold text-slate-900 mb-6">
                 Sign in to your workspace
               </h2>
-              <p className="text-slate-500 text-sm mb-2">
-                Demo password for all accounts:{' '}
-                <code className="bg-slate-200 px-1.5 py-0.5 rounded text-xs font-mono">
-                  demo
-                </code>
-              </p>
-              <div className="mb-6 rounded-lg border border-apsBlue/20 bg-apsBlueLt/40 px-3 py-2.5 text-xs text-slate-700">
-                <span className="font-semibold text-apsBlue">System Owner:</span>{' '}
-                <code className="font-mono">owner@anms.platform</code> / demo
-              </div>
 
               {workspaces ? (
                 <div className="space-y-4">
@@ -310,32 +269,6 @@ export function LoginScreen() {
                   )}
                 </button>
               </form>
-
-              <div className="mt-8">
-                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">
-                  Quick access by role
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  {quickRoles.map((u) => {
-                    const rm = ROLE_META[u.role];
-                    return (
-                      <button
-                        key={u.email}
-                        type="button"
-                        disabled={loading}
-                        onClick={() => quickSignIn(u.email)}
-                        className="text-left px-3 py-2.5 rounded-lg border border-slate-200 bg-white hover:border-apsBlue hover:bg-apsBlueLt/30 transition-all disabled:opacity-60">
-                        <div className="text-xs font-semibold text-slate-900">
-                          {rm.label}
-                        </div>
-                        <div className="text-[10px] text-slate-500 truncate">
-                          {u.name}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
               </>
               )}
             </>

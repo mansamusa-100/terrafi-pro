@@ -1,9 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Search, ChevronDown, LogOut, Repeat, Check, Menu } from 'lucide-react';
+import { Search, ChevronDown, LogOut, Menu } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { ROLE_META } from '../lib/rbac';
-import { api, DemoUser } from '../lib/api';
-import { cn } from '../lib/utils';
 import { NotificationBell } from './NotificationBell';
 import type { Agent } from '../lib/api';
 
@@ -40,16 +38,11 @@ export function Topbar({
   setPage,
   setSelectedAgent
 }: TopbarProps) {
-  const { user, logout, switchRole } = useAuth();
+  const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
-  const [demoUsers, setDemoUsers] = useState<DemoUser[]>([]);
   const ref = useRef<HTMLDivElement>(null);
   const showAgentSearch = page === 'agents';
-
-  useEffect(() => {
-    api.demoUsers().then(setDemoUsers).catch(() => {});
-  }, []);
 
   useEffect(() => {
     setMobileSearchOpen(false);
@@ -143,40 +136,7 @@ export function Topbar({
                   {user.name}
                 </div>
                 <div className="text-xs text-slate-500 truncate">{user.email}</div>
-              </div>
-
-              <div className="py-2 max-h-48 overflow-y-auto">
-                <div className="px-4 pb-1 flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  <Repeat className="w-3 h-3" />
-                  Switch role
-                </div>
-                {demoUsers.map((demo) => {
-                  const rm = ROLE_META[demo.role];
-                  const isCurrent = demo.email === user.email;
-                  return (
-                    <button
-                      key={demo.email}
-                      type="button"
-                      onClick={() => {
-                        switchRole(demo.email);
-                        setOpen(false);
-                      }}
-                      className={cn(
-                        'w-full flex items-center justify-between px-4 py-2 text-left hover:bg-slate-50 transition-colors',
-                        isCurrent && 'bg-slate-50'
-                      )}>
-                      <div className="min-w-0">
-                        <div className="text-xs font-medium text-slate-900 truncate">
-                          {rm.label}
-                        </div>
-                        <div className="text-[10px] text-slate-500">{rm.level}</div>
-                      </div>
-                      {isCurrent && (
-                        <Check className="w-4 h-4 text-apsBlue shrink-0" />
-                      )}
-                    </button>
-                  );
-                })}
+                <div className="text-[10px] text-slate-400 mt-1">{meta.label}</div>
               </div>
 
               <button

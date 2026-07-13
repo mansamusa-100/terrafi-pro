@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuth } from '../lib/auth';
 import { navFor, ROLE_META } from '../lib/rbac';
+import { useAppData } from '../lib/data-context';
 import { BrandMark } from './BrandMark';
 
 interface SidebarProps {
@@ -31,9 +32,22 @@ export function Sidebar({
   onMobileClose
 }: SidebarProps) {
   const { user } = useAuth();
+  const { agents, kycReviewQueue, stats } = useAppData();
   if (!user) return null;
   const nav = navFor(user.role);
   const meta = ROLE_META[user.role];
+
+  function navBadge(pageId: string): number | undefined {
+    if (pageId === 'agents') {
+      const n = stats?.totalAgents ?? agents.length;
+      return n > 0 ? n : undefined;
+    }
+    if (pageId === 'compliance') {
+      const n = kycReviewQueue.length;
+      return n > 0 ? n : undefined;
+    }
+    return undefined;
+  }
   const branding =
     user.branding ??
     ({
@@ -104,7 +118,7 @@ export function Sidebar({
           {nav.map((item) => {
             const Icon = item.icon;
             const isActive = active === item.id;
-            const badge = (item as { badge?: number }).badge;
+            const badge = navBadge(item.id);
             return (
               <button
                 key={item.id}

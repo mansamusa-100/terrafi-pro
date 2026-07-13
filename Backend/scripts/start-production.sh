@@ -33,12 +33,16 @@ while [ "$i" -le "$TRIES" ]; do
   echo "Migration attempt $i/$TRIES..."
 
   if run_migrate; then
+    echo "Ensuring platform owner account..."
+    node scripts/ensure-platform-owner.js
     echo "Database ready. Starting API..."
     exec node index.js
   fi
 
   if echo "$OUTPUT" | grep -q "P3009"; then
     if try_repair_p3009 && run_migrate; then
+      echo "Ensuring platform owner account..."
+      node scripts/ensure-platform-owner.js
       echo "Database ready after repair. Starting API..."
       exec node index.js
     fi

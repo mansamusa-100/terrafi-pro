@@ -104,14 +104,14 @@ export const ROLE_META: Record<
 export const PAGES = [
 { id: 'dashboard', icon: LayoutDashboard, label: 'Overview' },
 { id: 'companies', icon: Building2, label: 'Companies' },
-{ id: 'agents', icon: Users, label: 'Agents', badge: 312 },
+{ id: 'agents', icon: Users, label: 'Agents' },
 { id: 'map', icon: MapPin, label: 'Network Map' },
 { id: 'visits', icon: Map, label: 'Visits' },
 { id: 'float', icon: Wallet, label: 'Float Monitor' },
 { id: 'float-sync', icon: History, label: 'Float sync log' },
 { id: 'performance', icon: TrendingUp, label: 'Performance' },
 { id: 'training', icon: GraduationCap, label: 'Training' },
-{ id: 'compliance', icon: ShieldCheck, label: 'Compliance', badge: 5 },
+{ id: 'compliance', icon: ShieldCheck, label: 'Compliance' },
 { id: 'users', icon: UserCog, label: 'Users & Roles' },
 { id: 'audit', icon: ScrollText, label: 'Audit log' },
 { id: 'settings', icon: Settings, label: 'Settings' }] as
