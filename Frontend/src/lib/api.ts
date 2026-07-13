@@ -359,6 +359,19 @@ export interface NetworkStats {
   totalAgents: number;
   statusCounts: Record<string, number>;
   visitsToday: Record<string, number>;
+  activeCount?: number;
+  activityRate?: number;
+  agentsAddedThisMonth?: number;
+  networkFloat?: number;
+  floatChangePct?: number | null;
+  alertsCritical?: number;
+  alertsWarning?: number;
+  alertCount?: number;
+}
+
+export interface AgentSparklines {
+  labels: string[];
+  trends: Record<string, number[]>;
 }
 
 export interface OnboardingConfig {
@@ -597,7 +610,8 @@ export const api = {
   },
   performance: {
     adr: () => request<AdrPerformance[]>('/performance/adr'),
-    adrMe: () => request<AdrPerformance | null>('/performance/adr/me')
+    adrMe: () => request<AdrPerformance | null>('/performance/adr/me'),
+    agentSparklines: () => request<AgentSparklines>('/performance/agent-sparklines')
   },
   export: {
     agents: () => '/export/agents',

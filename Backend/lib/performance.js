@@ -82,7 +82,7 @@ export async function buildAdrPerformance(
       return joined.includes(monthStart.slice(0, 7)) || joined.includes(monthEnd.slice(0, 7));
     }).length;
 
-    const target = officerByName[name]?.target || visitTarget;
+    const target = visitTarget;
     const visitRate = pct(done, target);
     const kycRate = pct(kycVerified, assigned.length);
     const score = Math.round(visitRate * 0.6 + kycRate * 0.4);

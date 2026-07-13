@@ -12,6 +12,8 @@
     "db:init": "powershell -ExecutionPolicy Bypass -File scripts/setup-local-db.ps1",
     "db:setup-local": "powershell -ExecutionPolicy Bypass -File scripts/setup-local-db.ps1",
     "db:seed": "node prisma/seed.js",
+    "db:seed:demo": "node prisma/seed-demo.js",
+    "db:purge-demo": "node scripts/purge-demo-data.js",
     "db:studio": "prisma studio",
     "float:backfill-phones": "node scripts/backfill-phone-normalized.js",
     "float:simulate": "node scripts/simulate-float-delivery.js",

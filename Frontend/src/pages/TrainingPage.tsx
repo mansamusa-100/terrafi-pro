@@ -10,6 +10,11 @@ export function TrainingPage() {
   const totalCompleted = training.reduce((s, t) => s + t.completed, 0);
   const totalAssigned = training.reduce((s, t) => s + t.assigned, 0);
   const avgCompletion = totalAssigned ? Math.round(totalCompleted / totalAssigned * 100) : 0;
+  const enrolled = agents.length;
+  const enrolledPct =
+    enrolled > 0 && totalAssigned > 0
+      ? Math.round((totalCompleted / totalAssigned) * 100)
+      : 0;
   const totalPassing = training.reduce((s, t) => s + t.passing, 0);
   const avgPassRate = totalCompleted ? Math.round(totalPassing / totalCompleted * 100) : 0;
   return (
@@ -23,8 +28,8 @@ export function TrainingPage() {
         
         <MetricCard
           label="Agents enrolled"
-          value="312"
-          sub="100% of network"
+          value={String(enrolled)}
+          sub={enrolled ? `${enrolledPct}% completion across modules` : 'No agents yet'}
           icon={<Users className="w-5 h-5" />}
           accent="#00897B" />
         

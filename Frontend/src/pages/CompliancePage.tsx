@@ -70,21 +70,33 @@ export function CompliancePage({ onOpenAgent }: CompliancePageProps) {
         <MetricCard
           label="Awaiting KYC review"
           value={String(kycReviewQueue.length)}
-          sub="ready for manager decision"
+          sub={
+            kycReviewQueue.length
+              ? `${kycReviewQueue.length} in queue`
+              : 'Queue is clear'
+          }
           icon={<ClipboardList className="w-5 h-5" />}
           accent="#F59E0B"
         />
         <MetricCard
           label="KYC expired"
           value={String(counts.expired)}
-          sub="agents need renewal"
+          sub={
+            counts.expired
+              ? `${counts.expired} need renewal`
+              : 'No expired KYC'
+          }
           icon={<AlertCircle className="w-5 h-5" />}
           accent="#EF4444"
         />
         <MetricCard
           label="Suspended agents"
           value={String(suspended)}
-          sub="pending review"
+          sub={
+            suspended
+              ? `${suspended} suspended`
+              : 'None suspended'
+          }
           icon={<UserX className="w-5 h-5" />}
           accent="#64748B"
         />

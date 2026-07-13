@@ -1,6 +1,7 @@
 import { prisma } from './prisma.js';
 import { normalizePhone } from './phone.js';
 import { syncFloatAlerts } from './float-alerts.js';
+import { recordFloatTrendSnapshot } from './analytics.js';
 
 const BATCH_SIZE = 500;
 
@@ -125,6 +126,7 @@ export async function mergeAgentFloatSnapshot({
   });
 
   await syncFloatAlerts(companyId);
+  await recordFloatTrendSnapshot(companyId);
 
   return { updatedCount, skippedCount, unknownCount };
 }

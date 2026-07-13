@@ -11,6 +11,7 @@ import {
   agentHasAllKycDocs,
   buildKycStats
 } from '../lib/kyc-status.js';
+import { refreshAgentScore } from '../lib/agent-score.js';
 import { KYC_DOC_LABELS } from '../lib/kyc.js';
 
 const router = Router();
@@ -151,6 +152,8 @@ router.post(
       } else {
         await notifyKycRejected(agent, req.user, note.trim());
       }
+
+      await refreshAgentScore(agent.id);
 
       res.json({
         ...serializeAgent(updated),

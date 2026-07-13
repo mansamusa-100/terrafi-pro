@@ -26,12 +26,43 @@ export function DashboardPage({
   const { agents, alerts, visits, floatTrend, stats, dismissAlert, adrMyPerformance } =
     useAppData();
   const networkFloat = agents.reduce((s, a) => s + a.efloat + a.cash, 0);
-  const activeCount = agents.filter((a) => a.status === 'active').length;
-  const alertCount = alerts.length;
+  const activeCount = stats?.activeCount ?? agents.filter((a) => a.status === 'active').length;
+  const alertCount = stats?.alertCount ?? alerts.length;
   const totalAgents = stats?.totalAgents ?? agents.length;
   const statusCounts = stats?.statusCounts ?? {};
   const visitsToday = stats?.visitsToday ?? {};
   const floatData = floatTrend ?? { labels: [], efloat: [], cash: [] };
+
+  const agentsAddedSub =
+    (stats?.agentsAddedThisMonth ?? 0) > 0
+      ? `↑ ${stats!.agentsAddedThisMonth} added this month`
+      : 'No new agents this month';
+
+  const activitySub =
+    stats?.activityRate != null
+      ? `${stats.activityRate}% activity rate`
+      : totalAgents > 0
+        ? `${Math.round((activeCount / totalAgents) * 100)}% activity rate`
+        : 'No agents yet';
+
+  const floatSub = (() => {
+    const pct = stats?.floatChangePct;
+    if (pct == null) return 'Network float today';
+    if (pct === 0) return 'Unchanged vs yesterday';
+    return `${pct > 0 ? '↑' : '↓'} ${Math.abs(pct)}% vs yesterday`;
+  })();
+
+  const floatSubColor =
+    stats?.floatChangePct != null && stats.floatChangePct < 0
+      ? 'text-apsAmber'
+      : 'text-apsGreen';
+
+  const alertsSub = (() => {
+    const critical = stats?.alertsCritical ?? alerts.filter((a) => a.type === 'critical').length;
+    const warning = stats?.alertsWarning ?? alerts.filter((a) => a.type === 'warning').length;
+    if (critical === 0 && warning === 0) return alertCount ? `${alertCount} open` : 'All clear';
+    return `${critical} critical · ${warning} warnings`;
+  })();
   return (
     <div className="page-pad">
       {user?.role === 'adr' && adrMyPerformance && (
@@ -84,7 +115,7 @@ export function DashboardPage({
           animDelay={0}
           label="Total agents"
           value={String(totalAgents)}
-          sub="↑ 18 added this month"
+          sub={agentsAddedSub}
           subColor="text-apsGreen"
           icon={<Users className="w-5 h-5" />}
           accent="#1565C0"
@@ -94,7 +125,7 @@ export function DashboardPage({
           animDelay={80}
           label="Active today"
           value={activeCount}
-          sub="91% activity rate"
+          sub={activitySub}
           icon={<TrendingUp className="w-5 h-5" />}
           accent="#00897B"
           onClick={() => setActive('agents')} />
@@ -103,8 +134,8 @@ export function DashboardPage({
           animDelay={160}
           label="Network float"
           value={fmt(networkFloat)}
-          sub="↓ 3% vs yesterday"
-          subColor="text-apsAmber"
+          sub={floatSub}
+          subColor={floatSubColor}
           icon={<Wallet className="w-5 h-5" />}
           accent="#F59E0B"
           onClick={() => setActive('float')} />
@@ -113,7 +144,7 @@ export function DashboardPage({
           animDelay={240}
           label="Active alerts"
           value={alertCount}
-          sub="3 critical · 4 warnings"
+          sub={alertsSub}
           subColor="text-apsRed"
           icon={<AlertCircle className="w-5 h-5" />}
           accent="#EF4444"

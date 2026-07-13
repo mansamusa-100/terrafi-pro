@@ -1,5 +1,18 @@
 # Terrafi Pro
 
+Multi-tenant agent network operations platform (field visits, float, KYC, compliance).
+
+## Database seeding
+
+| Command | Use when |
+|---------|----------|
+| `npm run db:seed` | **Production** — empty DB; creates platform owner only |
+| `npm run db:seed:demo` | **Local dev** — full APS Wallet demo dataset |
+
+Production bootstrap creates `owner@anms.platform` (set `PLATFORM_OWNER_PASSWORD` in `.env`).
+
+| `npm run db:purge-demo` | Remove demo tenants from an existing DB before go-live |
+
 Agent Network Management System for mobile money operators — field visit monitoring, float health, compliance, and performance tracking.
 
 ## Project structure

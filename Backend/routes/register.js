@@ -5,6 +5,8 @@ import { logAudit } from '../lib/audit.js';
 import { notifyCompanyRegistered } from '../lib/notifications.js';
 import { setupCompanyBilling } from '../lib/company-billing.js';
 import { findRegistrationEmailConflict } from '../lib/user-email.js';
+import { ensureDefaultTrainingModules } from '../lib/analytics.js';
+import { getOrCreateCompanySettings } from '../lib/company-settings.js';
 
 const router = Router();
 
@@ -85,6 +87,8 @@ router.post('/register-company', async (req, res, next) => {
     });
 
     await notifyCompanyRegistered(result.company);
+    await getOrCreateCompanySettings(result.company.id);
+    await ensureDefaultTrainingModules(result.company.id);
 
     // Self-service DirectPay setup: provision + start CORPORATE + pay link.
     // Best-effort — never blocks registration if DirectPay is unavailable.

@@ -311,10 +311,15 @@ export function VisitsPage() {
 
         <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
           <h3 className="text-sm font-semibold text-slate-900 mb-4">
-            Completion rate
+            Visit completion by ADR
           </h3>
           <div className="space-y-4">
-            {officers.map((o) => {
+            {officers.length === 0 ? (
+              <p className="text-sm text-slate-500 py-6 text-center">
+                No ADR visit data yet this month.
+              </p>
+            ) : (
+              officers.map((o) => {
               const colorClass =
                 o.score >= 80
                   ? 'bg-apsGreen'
@@ -340,7 +345,8 @@ export function VisitsPage() {
                   <ProgressBar value={o.score} color={colorClass} height="h-2" />
                 </div>
               );
-            })}
+            })
+            )}
           </div>
         </div>
       </div>

@@ -23,7 +23,7 @@ function todayISO() {
 }
 
 export function PerformancePage() {
-  const { agents, adrPerformance } = useAppData();
+  const { agents, adrPerformance, agentSparklines } = useAppData();
 
   if (!agents.length) {
     return (
@@ -94,7 +94,7 @@ export function PerformancePage() {
     ['zone', 'Zone'],
     ['score', 'Score'],
     ['visits', 'Visits'],
-    ['score', 'Trend']
+    ['score', '7-day visits']
   ];
 
   const monthStart = `${todayISO().slice(0, 7)}-01`;
@@ -333,15 +333,10 @@ export function PerformancePage() {
                   : 'text-apsRed';
             const hexColor =
               a.score >= 80 ? '#22C55E' : a.score >= 60 ? '#F59E0B' : '#EF4444';
-            const sparkData = [
-              a.score - 8,
-              a.score - 3,
-              a.score + 2,
-              a.score - 1,
-              a.score + 4,
-              a.score - 2,
-              a.score
-            ].map((v) => Math.max(0, Math.min(100, v)));
+            const sparkData =
+              agentSparklines?.trends[a.id] ??
+              agentSparklines?.labels.map(() => 0) ??
+              [0, 0, 0, 0, 0, 0, 0];
             return (
               <div
                 key={a.id}

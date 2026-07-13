@@ -25,7 +25,8 @@ import {
   Notification,
   PlatformStats,
   VisitSummary,
-  AdrPerformance
+  AdrPerformance,
+  AgentSparklines
 } from './api';
 import { useAuth } from './auth';
 import { Role } from './rbac';
@@ -69,6 +70,7 @@ interface AppDataContextValue {
   visitSummary: VisitSummary | null;
   adrPerformance: AdrPerformance[];
   adrMyPerformance: AdrPerformance | null;
+  agentSparklines: AgentSparklines | null;
   queuedVisitCount: number;
   visitSyncing: boolean;
   syncQueuedVisits: () => Promise<{ synced: number; failed: number }>;
@@ -141,6 +143,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [visitSummary, setVisitSummary] = useState<VisitSummary | null>(null);
   const [adrPerformance, setAdrPerformance] = useState<AdrPerformance[]>([]);
   const [adrMyPerformance, setAdrMyPerformance] = useState<AdrPerformance | null>(null);
+  const [agentSparklines, setAgentSparklines] = useState<AgentSparklines | null>(null);
   const [queuedVisitCount, setQueuedVisitCount] = useState(getQueuedVisitCount);
   const [visitSyncing, setVisitSyncing] = useState(false);
   const visitSyncingRef = useRef(false);
@@ -168,6 +171,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       setVisitSummary(null);
       setAdrPerformance([]);
       setAdrMyPerformance(null);
+      setAgentSparklines(null);
       return;
     }
 
@@ -225,6 +229,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
       if (['manager', 'internal', 'team_lead'].includes(user.role)) {
         fetches.push(api.performance.adr().then(setAdrPerformance));
+        fetches.push(api.performance.agentSparklines().then(setAgentSparklines));
       }
 
       if (['manager', 'internal'].includes(user.role)) {
@@ -574,6 +579,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         visitSummary,
         adrPerformance,
         adrMyPerformance,
+        agentSparklines,
         queuedVisitCount,
         visitSyncing,
         syncQueuedVisits,

@@ -1,16 +1,25 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
-import { companyFilter, todayISO, agentWhereForUser, applyVisitOfficerFilter } from '../middleware/user.js';
+import { companyFilter } from '../middleware/user.js';
 import { syncFloatAlerts } from '../lib/float-alerts.js';
 import { relativeTime } from '../lib/visit-utils.js';
 import { getOnboardingConfig } from '../lib/onboarding-config.js';
 import { requireRoles } from '../middleware/auth.js';
+import { buildAdrPerformance } from '../lib/performance.js';
+import {
+  buildExtendedStats,
+  buildFloatTrend,
+  buildTrainingProgress
+} from '../lib/analytics.js';
 
 const router = Router();
 
 router.get('/zones', async (req, res, next) => {
   try {
-    const companyId = companyFilter(req.user) || 'co-aps';
+    const companyId = companyFilter(req.user);
+    if (!companyId) {
+      return res.status(400).json({ error: 'Company context required' });
+    }
     const config = await getOnboardingConfig(companyId);
     res.json(config.zone_names);
   } catch (err) {
@@ -20,7 +29,10 @@ router.get('/zones', async (req, res, next) => {
 
 router.get('/onboarding-config', requireRoles('manager', 'team_lead', 'adr'), async (req, res, next) => {
   try {
-    const companyId = companyFilter(req.user) || 'co-aps';
+    const companyId = companyFilter(req.user);
+    if (!companyId) {
+      return res.status(400).json({ error: 'Company context required' });
+    }
     const config = await getOnboardingConfig(companyId);
     res.json(config);
   } catch (err) {
@@ -30,12 +42,22 @@ router.get('/onboarding-config', requireRoles('manager', 'team_lead', 'adr'), as
 
 router.get('/officers', async (req, res, next) => {
   try {
-    const companyId = companyFilter(req.user) || 'co-aps';
-    const officers = await prisma.officer.findMany({
-      where: { companyId },
-      orderBy: { score: 'desc' }
-    });
-    res.json(officers);
+    const companyId = companyFilter(req.user);
+    if (!companyId) {
+      return res.json([]);
+    }
+    const rows = await buildAdrPerformance(companyId);
+    res.json(
+      rows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        agents: r.agents,
+        visits: r.visits_done,
+        target: r.visit_target,
+        score: r.visit_rate,
+        zone: r.zone
+      }))
+    );
   } catch (err) {
     next(err);
   }
@@ -96,11 +118,11 @@ router.patch('/alerts/:id/dismiss', async (req, res, next) => {
 
 router.get('/training', async (req, res, next) => {
   try {
-    const companyId = companyFilter(req.user) || 'co-aps';
-    const training = await prisma.trainingModule.findMany({
-      where: { companyId },
-      orderBy: { id: 'asc' }
-    });
+    const companyId = companyFilter(req.user);
+    if (!companyId) {
+      return res.json([]);
+    }
+    const training = await buildTrainingProgress(companyId);
     res.json(training);
   } catch (err) {
     next(err);
@@ -109,16 +131,12 @@ router.get('/training', async (req, res, next) => {
 
 router.get('/float-trend', async (req, res, next) => {
   try {
-    const companyId = companyFilter(req.user) || 'co-aps';
-    const rows = await prisma.floatTrendPoint.findMany({
-      where: { companyId },
-      orderBy: { dayIndex: 'asc' }
-    });
-    res.json({
-      labels: rows.map((r) => r.label),
-      efloat: rows.map((r) => r.efloat),
-      cash: rows.map((r) => r.cash)
-    });
+    const companyId = companyFilter(req.user);
+    if (!companyId) {
+      return res.json({ labels: [], efloat: [], cash: [] });
+    }
+    const trend = await buildFloatTrend(companyId);
+    res.json(trend);
   } catch (err) {
     next(err);
   }
@@ -126,32 +144,12 @@ router.get('/float-trend', async (req, res, next) => {
 
 router.get('/stats', async (req, res, next) => {
   try {
-    const companyId = companyFilter(req.user) || 'co-aps';
-    const company = await prisma.company.findUnique({ where: { id: companyId } });
-    const agentWhere = agentWhereForUser(req.user);
-    const agents = await prisma.agent.findMany({ where: agentWhere });
-    const today = todayISO();
-    const visitWhere = { visitDate: today };
-    if (companyId) visitWhere.companyId = companyId;
-    applyVisitOfficerFilter(visitWhere, req.user);
-
-    const visits = await prisma.visit.findMany({ where: visitWhere });
-
-    const statusCounts = agents.reduce((acc, a) => {
-      acc[a.status] = (acc[a.status] || 0) + 1;
-      return acc;
-    }, {});
-
-    const visitsToday = visits.reduce((acc, v) => {
-      acc[v.status] = (acc[v.status] || 0) + 1;
-      return acc;
-    }, {});
-
-    res.json({
-      totalAgents: company?.agents ?? agents.length,
-      statusCounts,
-      visitsToday
-    });
+    const companyId = companyFilter(req.user);
+    if (!companyId) {
+      return res.status(400).json({ error: 'Company context required' });
+    }
+    const stats = await buildExtendedStats(req.user);
+    res.json(stats);
   } catch (err) {
     next(err);
   }

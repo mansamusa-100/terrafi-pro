@@ -13,6 +13,8 @@ import { requireRoles } from '../middleware/auth.js';
 import { verifyGpsCheckIn, GPS_VERIFY_RADIUS_M } from '../lib/geo.js';
 import { notifyVisitLogged, notifyVisitScheduled } from '../lib/notifications.js';
 import { syncFloatAlertsForAgent } from '../lib/float-alerts.js';
+import { recordFloatTrendSnapshot } from '../lib/analytics.js';
+import { refreshAgentScore } from '../lib/agent-score.js';
 import { buildVisitSummary, markOverdueVisits } from '../lib/visit-utils.js';
 import { logAudit } from '../lib/audit.js';
 
@@ -320,6 +322,8 @@ router.post('/', requireRoles('manager', 'team_lead', 'adr'), async (req, res, n
       return record;
     });
 
+    await refreshAgentScore(agentId);
+    await recordFloatTrendSnapshot(companyId);
     await syncFloatAlertsForAgent(agentId);
     await notifyVisitLogged(visit, agent, req.user);
 
