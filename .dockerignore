@@ -1,0 +1,14 @@
+node_modules
+Frontend/node_modules
+Backend/node_modules
+Frontend/dist
+Backend/uploads
+Backend/.env
+.git
+.gitignore
+*.md
+.env
+.env.*
+agent-tools
+terminals
+.cursor

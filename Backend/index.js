@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { prisma } from './lib/prisma.js';
@@ -84,6 +85,17 @@ app.use('/api/kyc', kycRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api', dataRoutes);
 
+if (process.env.NODE_ENV === 'production') {
+  const frontendDist = path.join(__dirname, '../Frontend/dist');
+  app.use(express.static(frontendDist, { index: false }));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    res.sendFile(path.join(frontendDist, 'index.html'), (err) => {
+      if (err) next(err);
+    });
+  });
+}
+
 app.use((err, _req, res, _next) => {
   console.error(err);
   if (err.name === 'PrismaClientInitializationError') {
@@ -95,7 +107,15 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
+function ensureUploadDirs() {
+  for (const dir of ['uploads/kyc', 'uploads/locations', 'uploads/branding']) {
+    fs.mkdirSync(path.join(__dirname, dir), { recursive: true });
+  }
+}
+
 async function start() {
+  ensureUploadDirs();
+
   try {
     await prisma.$connect();
     console.log('Database connected');
@@ -111,8 +131,13 @@ async function start() {
     process.exit(1);
   }
 
-  const server = app.listen(PORT, () => {
-    console.log(`Terrafi Pro API running on http://localhost:${PORT}`);
+  const host = process.env.NODE_ENV === 'production' ? '0.0.0.0' : undefined;
+  const server = app.listen(PORT, host, () => {
+    const where =
+      process.env.NODE_ENV === 'production'
+        ? `port ${PORT}`
+        : `http://localhost:${PORT}`;
+    console.log(`Terrafi Pro running on ${where}`);
   });
 
   server.on('error', (err) => {
