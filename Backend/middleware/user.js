@@ -140,16 +140,57 @@ export async function resolveOfficerAssignment(
   return fallback;
 }
 
+function escapeRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Agent.id is a global primary key. Never allocate per-company only with a
+ * shared prefix (e.g. APW-0001) — that collides across tenants.
+ */
+async function resolveAgentIdPrefix(companyId) {
+  const own = await prisma.agent.findFirst({
+    where: { companyId },
+    select: { id: true },
+    orderBy: { id: 'asc' }
+  });
+  if (own?.id) {
+    const m = own.id.match(/^([A-Za-z][A-Za-z0-9]*-)/);
+    if (m) return m[1].toUpperCase();
+  }
+
+  const company = await prisma.company.findUnique({ where: { id: companyId } });
+  const fromName = (company?.name || '')
+    .replace(/[^A-Za-z0-9]/g, '')
+    .toUpperCase()
+    .slice(0, 3);
+  if (fromName.length >= 2) return `${fromName}-`;
+
+  const fromId = companyId
+    .replace(/^co-/i, '')
+    .replace(/[^A-Za-z0-9]/g, '')
+    .toUpperCase()
+    .slice(0, 3);
+  return `${fromId || 'AGT'}-`;
+}
+
 export async function nextAgentId(companyId) {
-  const prefix = 'APW-';
-  const latest = await prisma.agent.findFirst({
-    where: { companyId, id: { startsWith: prefix } },
-    orderBy: { id: 'desc' }
+  const prefix = await resolveAgentIdPrefix(companyId);
+  const rows = await prisma.agent.findMany({
+    where: { id: { startsWith: prefix } },
+    select: { id: true }
   });
 
-  if (!latest) return `${prefix}0001`;
-  const num = parseInt(latest.id.replace(prefix, ''), 10) + 1;
-  return `${prefix}${String(num).padStart(4, '0')}`;
+  let max = 0;
+  const re = new RegExp(`^${escapeRegExp(prefix)}(\\d+)$`, 'i');
+  for (const { id } of rows) {
+    const m = id.match(re);
+    if (!m) continue;
+    const n = parseInt(m[1], 10);
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+
+  return `${prefix}${String(max + 1).padStart(4, '0')}`;
 }
 
 export function todayISO() {
