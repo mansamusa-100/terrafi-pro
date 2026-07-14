@@ -25,6 +25,8 @@ export default {
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        landing: ['Sora', 'system-ui', 'sans-serif'],
+        'landing-display': ['Outfit', 'system-ui', 'sans-serif'],
       }
     },
   },

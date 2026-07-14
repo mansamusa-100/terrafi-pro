@@ -296,6 +296,48 @@ export async function notifyUserInvited(user, actor) {
   });
 }
 
+/** Notify every other membership for this email that a new workspace was added. */
+export async function notifyMembershipAdded(user, actor, companyName) {
+  const siblings = await prisma.user.findMany({
+    where: {
+      email: { equals: user.email, mode: 'insensitive' },
+      id: { not: user.id },
+      status: { in: ['active', 'invited'] }
+    }
+  });
+
+  const workspaceLabel = companyName || 'Terrafi Pro Platform';
+  const roleLabel = user.role.replace(/_/g, ' ');
+
+  await Promise.all(
+    siblings.map((sibling) =>
+      notifyUser({
+        userId: sibling.id,
+        companyId: sibling.companyId,
+        type: 'membership.added',
+        title: 'New workspace access',
+        body: `${actor.name} added you to ${workspaceLabel} as ${roleLabel}. Open your profile menu to switch workspace.`,
+        entityType: 'user',
+        entityId: user.id
+      })
+    )
+  );
+
+  if (user.status === 'active') {
+    await notifyUser({
+      userId: user.id,
+      companyId: user.companyId,
+      type: 'membership.added',
+      title: `Added to ${workspaceLabel}`,
+      body: `${actor.name} invited you as ${roleLabel}. You can switch here anytime from your profile menu.`,
+      entityType: 'user',
+      entityId: user.id
+    });
+  } else {
+    await notifyUserInvited(user, actor);
+  }
+}
+
 export async function notifyCompanyRegistered(company) {
   await notifyPlatformRoles({
     roles: ['system_owner', 'platform_staff'],

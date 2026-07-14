@@ -9,7 +9,9 @@ import { logAudit } from '../lib/audit.js';
 import {
   findUsersByEmail,
   loginEligibilityError,
+  pickDefaultMembership,
   serializeWorkspace,
+  syncPasswordAcrossEmail,
   usersMatchingPassword
 } from '../lib/user-email.js';
 
@@ -41,23 +43,24 @@ router.post('/login', async (req, res, next) => {
       if (!row) {
         return res.status(401).json({ error: 'Invalid workspace selection' });
       }
-    } else if (matched.length > 1) {
-      const eligible = matched.filter((u) => !loginEligibilityError(u));
-      if (eligible.length === 0) {
+    } else {
+      // One password, multiple memberships — enter a single workspace.
+      // Switch between workspaces after sign-in (not on the public login page).
+      row = pickDefaultMembership(matched);
+      if (!row) {
         return res.status(403).json({ error: loginEligibilityError(matched[0]) });
       }
-      if (eligible.length > 1) {
-        return res.json({
-          requiresWorkspaceSelection: true,
-          workspaces: eligible.map(serializeWorkspace)
-        });
-      }
-      row = eligible[0];
     }
 
     const blocked = loginEligibilityError(row);
     if (blocked) {
       return res.status(403).json({ error: blocked });
+    }
+
+    // Unify credentials across memberships after a successful login
+    // (fixes legacy invites that created separate passwords).
+    if (candidates.length > 1) {
+      await syncPasswordAcrossEmail(row.email, row.passwordHash);
     }
 
     res.json({ token: signToken(row), user: await toAppUser(row) });
@@ -85,6 +88,50 @@ router.get('/me', authMiddleware, loadUser, async (req, res, next) => {
       user: await toAppUser(row),
       subscription
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** List every workspace (membership) for the signed-in email. */
+router.get('/workspaces', authMiddleware, loadUser, async (req, res, next) => {
+  try {
+    const members = await findUsersByEmail(req.user.email);
+    const workspaces = members
+      .filter((u) => !loginEligibilityError(u))
+      .map(serializeWorkspace);
+    res.json({ workspaces });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** Switch to another membership without re-entering the password. */
+router.post('/switch-workspace', authMiddleware, loadUser, async (req, res, next) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required' });
+    }
+
+    const members = await findUsersByEmail(req.user.email);
+    const target = members.find((u) => u.id === userId);
+    if (!target) {
+      return res.status(404).json({ error: 'Workspace not found for this account' });
+    }
+
+    const blocked = loginEligibilityError(target);
+    if (blocked) {
+      return res.status(403).json({ error: blocked });
+    }
+
+    if (target.status === 'invited') {
+      return res.status(403).json({
+        error: 'Set your password on this workspace before switching to it'
+      });
+    }
+
+    res.json({ token: signToken(target), user: await toAppUser(target) });
   } catch (err) {
     next(err);
   }
@@ -125,12 +172,11 @@ router.post('/change-password', authMiddleware, loadUser, async (req, res, next)
       return res.status(401).json({ error: 'Current password is incorrect' });
     }
 
-    const updated = await prisma.user.update({
+    const newHash = bcrypt.hashSync(newPassword, 10);
+    await syncPasswordAcrossEmail(row.email, newHash, { activateInvited: true });
+
+    const updated = await prisma.user.findUnique({
       where: { id: row.id },
-      data: {
-        passwordHash: bcrypt.hashSync(newPassword, 10),
-        status: 'active'
-      },
       include: { company: true }
     });
 
@@ -141,7 +187,7 @@ router.post('/change-password', authMiddleware, loadUser, async (req, res, next)
       action: 'auth.password_set',
       entityType: 'user',
       entityId: updated.id,
-      details: { email: updated.email }
+      details: { email: updated.email, syncedMemberships: true }
     });
 
     res.json({ user: await toAppUser(updated) });

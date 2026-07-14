@@ -5,25 +5,20 @@ import React, {
   useEffect,
   useState
 } from 'react';
-import { api, setToken, getToken, type LoginResponse } from './api';
-import { AppUser, Role, firstPageFor } from './rbac';
+import { api, setToken, getToken } from './api';
+import { AppUser, firstPageFor } from './rbac';
 
 interface AuthContextValue {
   user: AppUser | null;
   loading: boolean;
-  login: (
-    email: string,
-    password: string,
-    userId?: string
-  ) => Promise<LoginResponse | void>;
+  login: (email: string, password: string) => Promise<void>;
   logout: () => void;
-  switchRole: (email: string) => Promise<void>;
+  switchWorkspace: (userId: string) => Promise<void>;
   refreshProfile: () => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
-const DEMO_PASSWORD = 'demo';
 
 export function AuthProvider({
   children,
@@ -49,11 +44,8 @@ export function AuthProvider({
   }, []);
 
   const login = useCallback(
-    async (email: string, password: string, userId?: string) => {
-      const result = await api.login(email, password, userId);
-      if (result.requiresWorkspaceSelection) {
-        return result;
-      }
+    async (email: string, password: string) => {
+      const result = await api.login(email, password);
       setToken(result.token);
       setUser(result.user);
       onUserChange?.(firstPageFor(result.user.role));
@@ -66,12 +58,12 @@ export function AuthProvider({
     setUser(null);
   }, []);
 
-  const switchRole = useCallback(
-    async (email: string) => {
-      const { token, user: u } = await api.login(email, DEMO_PASSWORD);
+  const switchWorkspace = useCallback(
+    async (userId: string) => {
+      const { token, user: u } = await api.switchWorkspace(userId);
       setToken(token);
       setUser(u);
-      onUserChange?.(firstPageFor(u.role as Role));
+      onUserChange?.(firstPageFor(u.role));
     },
     [onUserChange]
   );
@@ -100,7 +92,7 @@ export function AuthProvider({
         loading,
         login,
         logout,
-        switchRole,
+        switchWorkspace,
         refreshProfile,
         changePassword
       }}>

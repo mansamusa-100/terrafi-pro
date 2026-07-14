@@ -189,16 +189,22 @@ export function UsersPage() {
           ? { supervised_adr_ids: inviteForm.supervisedAdrIds }
           : {})
       });
-      toast.success('User invited', {
-        description: created.temporaryPassword
-          ? `${created.email} — temp password: ${created.temporaryPassword}${
-              created.credentialDelivery === 'log_only'
-                ? ' (also logged in backend console & audit)'
-                : ''
-            }`
-          : created.email,
-        duration: 12000
-      });
+      toast.success(
+        created.passwordReused ? 'Added to existing account' : 'User invited',
+        {
+          description: created.passwordReused
+            ? created.message ||
+              `${created.email} keeps their password and can switch workspace after sign-in.`
+            : created.temporaryPassword
+              ? `${created.email} — temp password: ${created.temporaryPassword}${
+                  created.credentialDelivery === 'log_only'
+                    ? ' (also logged in backend console & audit)'
+                    : ''
+                }`
+              : created.email,
+          duration: 12000
+        }
+      );
       setInviteOpen(false);
       setInviteForm({
         name: '',

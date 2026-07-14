@@ -12,6 +12,7 @@ import { OfflineVisitBanner } from './components/OfflineVisitBanner';
 import { SubscriptionBanner } from './components/SubscriptionBanner';
 import { PlatformDashboardPage } from './pages/PlatformDashboardPage';
 import { LoginScreen } from './components/LoginScreen';
+import { LandingPage } from './components/LandingPage';
 import { SetPasswordScreen } from './components/SetPasswordScreen';
 import { DashboardPage } from './pages/DashboardPage';
 import { TeamLeadDashboardPage } from './pages/TeamLeadDashboardPage';
@@ -230,6 +231,9 @@ function AppShell({
   setPage: (p: string) => void;
 }) {
   const { user, loading } = useAuth();
+  const [authView, setAuthView] = useState<'landing' | 'signin' | 'register'>(
+    'landing'
+  );
 
   if (loading) {
     return (
@@ -239,14 +243,29 @@ function AppShell({
     );
   }
 
-  if (!user) return <LoginScreen />;
+  if (!user) {
+    if (authView === 'landing') {
+      return (
+        <LandingPage
+          onSignIn={() => setAuthView('signin')}
+          onRegister={() => setAuthView('register')}
+        />
+      );
+    }
+    return (
+      <LoginScreen
+        initialMode={authView === 'register' ? 'register' : 'signin'}
+        onBack={() => setAuthView('landing')}
+      />
+    );
+  }
 
   if (user.must_change_password || user.status === 'invited') {
     return <SetPasswordScreen />;
   }
 
   return (
-    <AppDataProvider>
+    <AppDataProvider key={user.id}>
       <AuthenticatedApp page={page} setPage={setPage} />
     </AppDataProvider>
   );

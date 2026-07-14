@@ -1,7 +1,18 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Search, ChevronDown, LogOut, Menu } from 'lucide-react';
+import {
+  Search,
+  ChevronDown,
+  LogOut,
+  Menu,
+  Repeat,
+  Check,
+  Loader2
+} from 'lucide-react';
+import { toast } from 'sonner';
 import { useAuth } from '../lib/auth';
 import { ROLE_META } from '../lib/rbac';
+import { api, ApiError, LoginWorkspace } from '../lib/api';
+import { cn } from '../lib/utils';
 import { NotificationBell } from './NotificationBell';
 import type { Agent } from '../lib/api';
 
@@ -38,15 +49,25 @@ export function Topbar({
   setPage,
   setSelectedAgent
 }: TopbarProps) {
-  const { user, logout } = useAuth();
+  const { user, logout, switchWorkspace } = useAuth();
   const [open, setOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [workspaces, setWorkspaces] = useState<LoginWorkspace[]>([]);
+  const [switchingId, setSwitchingId] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const showAgentSearch = page === 'agents';
 
   useEffect(() => {
     setMobileSearchOpen(false);
   }, [page]);
+
+  useEffect(() => {
+    if (!open || !user) return;
+    api
+      .workspaces()
+      .then((res) => setWorkspaces(res.workspaces))
+      .catch(() => setWorkspaces([]));
+  }, [open, user?.id]);
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
@@ -67,6 +88,24 @@ export function Topbar({
           ? 'Regional hub'
           : 'Network Overview'
       : TITLES[page] || 'Dashboard';
+
+  const canSwitch = workspaces.length > 1;
+
+  const handleSwitch = async (userId: string) => {
+    if (userId === user.id) return;
+    setSwitchingId(userId);
+    try {
+      await switchWorkspace(userId);
+      setOpen(false);
+      toast.success('Workspace switched');
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError ? err.message : 'Could not switch workspace'
+      );
+    } finally {
+      setSwitchingId(null);
+    }
+  };
 
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shrink-0 shadow-sm">
@@ -103,11 +142,7 @@ export function Topbar({
           <input
             value={searchQ}
             onChange={(e) => setSearchQ(e.target.value)}
-            placeholder={
-              showAgentSearch
-                ? 'Search agents…'
-                : 'Search…'
-            }
+            placeholder={showAgentSearch ? 'Search agents…' : 'Search…'}
             className="bg-transparent border-none outline-none text-sm text-slate-800 w-full min-w-0 placeholder:text-slate-400"
           />
         </div>
@@ -130,19 +165,62 @@ export function Topbar({
           </button>
 
           {open && (
-            <div className="absolute right-0 mt-2 w-[min(16rem,calc(100vw-1.5rem))] bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden z-40">
+            <div className="absolute right-0 mt-2 w-[min(18rem,calc(100vw-1.5rem))] bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden z-40">
               <div className="px-4 py-3 border-b border-slate-100">
                 <div className="text-sm font-semibold text-slate-900 truncate">
                   {user.name}
                 </div>
                 <div className="text-xs text-slate-500 truncate">{user.email}</div>
-                <div className="text-[10px] text-slate-400 mt-1">{meta.label}</div>
+                <div className="text-[10px] text-slate-400 mt-1">
+                  {user.company} · {meta.label}
+                </div>
               </div>
+
+              {canSwitch && (
+                <div className="py-2 border-b border-slate-100 max-h-56 overflow-y-auto">
+                  <div className="px-4 pb-1.5 flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    <Repeat className="w-3 h-3" />
+                    Switch workspace
+                  </div>
+                  {workspaces.map((ws) => {
+                    const rm = ROLE_META[ws.role];
+                    const isCurrent = ws.userId === user.id;
+                    return (
+                      <button
+                        key={ws.userId}
+                        type="button"
+                        disabled={isCurrent || switchingId != null}
+                        onClick={() => handleSwitch(ws.userId)}
+                        className={cn(
+                          'w-full flex items-center justify-between gap-2 px-4 py-2.5 text-left transition-colors',
+                          isCurrent
+                            ? 'bg-slate-50'
+                            : 'hover:bg-slate-50 disabled:opacity-60'
+                        )}>
+                        <div className="min-w-0">
+                          <div className="text-xs font-semibold text-slate-900 truncate">
+                            {ws.companyName}
+                          </div>
+                          <div className="text-[10px] text-slate-500 truncate">
+                            {rm?.label || ws.role}
+                            {ws.status === 'invited' ? ' · set password first' : ''}
+                          </div>
+                        </div>
+                        {switchingId === ws.userId ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-apsBlue shrink-0" />
+                        ) : isCurrent ? (
+                          <Check className="w-4 h-4 text-apsBlue shrink-0" />
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
               <button
                 type="button"
                 onClick={logout}
-                className="w-full flex items-center gap-2 px-4 py-3 text-sm font-medium text-apsRed border-t border-slate-100 hover:bg-apsRedLt/40 transition-colors">
+                className="w-full flex items-center gap-2 px-4 py-3 text-sm font-medium text-apsRed hover:bg-apsRedLt/40 transition-colors">
                 <LogOut className="w-4 h-4" />
                 Sign out
               </button>

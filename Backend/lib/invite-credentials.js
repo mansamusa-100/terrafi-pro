@@ -29,27 +29,36 @@ export function logInviteCredentials({
   user,
   actor,
   company = null,
-  temporaryPassword
+  temporaryPassword = null,
+  passwordReused = false
 }) {
   const emailConfigured = isEmailDeliveryConfigured();
-  const credentialDelivery = emailConfigured ? 'email' : 'log_only';
+  const credentialDelivery = passwordReused
+    ? 'reused_existing'
+    : emailConfigured
+      ? 'email'
+      : 'log_only';
 
-  if (!emailConfigured) {
+  if (!emailConfigured || passwordReused) {
     const lines = [
       '',
       '══════════════════════════════════════════════════════════',
-      ' Terrafi Pro — user invited (no email provider configured)',
+      ' Terrafi Pro — user invited',
       '══════════════════════════════════════════════════════════',
       `  Name:            ${user.name}`,
       `  Email:           ${user.email}`,
       `  Role:            ${user.role}`,
-      `  Temporary password: ${temporaryPassword}`,
+      passwordReused
+        ? '  Credentials:     Existing password reused (notify other workspaces)'
+        : `  Temporary password: ${temporaryPassword}`,
       `  User ID:         ${user.id}`,
       `  Invited by:      ${actor.name} <${actor.email}>`,
       company
         ? `  Company:         ${company.name} (${company.id})`
         : '  Company:         Platform',
-      '  Share these credentials with the user manually.',
+      passwordReused
+        ? '  User can switch workspace after signing in.'
+        : '  Share these credentials with the user manually.',
       '══════════════════════════════════════════════════════════',
       ''
     ];
@@ -58,6 +67,7 @@ export function logInviteCredentials({
 
   return {
     credentialDelivery,
-    emailConfigured
+    emailConfigured,
+    passwordReused
   };
 }

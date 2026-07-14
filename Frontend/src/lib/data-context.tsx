@@ -86,7 +86,14 @@ interface AppDataContextValue {
     role: string;
     zone?: string;
     supervised_adr_ids?: string[];
-  }) => Promise<CompanyUser & { temporaryPassword?: string }>;
+  }) => Promise<
+    CompanyUser & {
+      temporaryPassword?: string;
+      passwordReused?: boolean;
+      message?: string;
+      credentialDelivery?: string;
+    }
+  >;
   importAgents: (csv: string) => Promise<BulkImportResult>;
   bulkUploadKyc: (files: File[]) => Promise<BulkKycResult>;
   updateAgent: (id: string, body: Record<string, unknown>) => Promise<void>;

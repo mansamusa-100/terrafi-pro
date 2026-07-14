@@ -471,9 +471,10 @@ export interface LoginWorkspace {
   companyName: string;
 }
 
-export type LoginResponse =
-  | { token: string; user: AppUser; requiresWorkspaceSelection?: false }
-  | { requiresWorkspaceSelection: true; workspaces: LoginWorkspace[] };
+export type LoginResponse = {
+  token: string;
+  user: AppUser;
+};
 
 export const api = {
   login(email: string, password: string, userId?: string) {
@@ -487,6 +488,17 @@ export const api = {
     return request<{ user: AppUser; subscription: SubscriptionView | null }>(
       '/auth/me'
     );
+  },
+
+  workspaces() {
+    return request<{ workspaces: LoginWorkspace[] }>('/auth/workspaces');
+  },
+
+  switchWorkspace(userId: string) {
+    return request<LoginResponse>('/auth/switch-workspace', {
+      method: 'POST',
+      body: JSON.stringify({ userId })
+    });
   },
 
   changePassword(body: { currentPassword: string; newPassword: string }) {
@@ -636,7 +648,9 @@ export const api = {
     request<
       CompanyUser & {
         temporaryPassword?: string;
-        credentialDelivery?: 'log_only' | 'email';
+        credentialDelivery?: 'log_only' | 'email' | 'reused_existing';
+        passwordReused?: boolean;
+        message?: string;
       }
     >('/users/invite', {
       method: 'POST',

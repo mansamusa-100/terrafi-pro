@@ -4,13 +4,17 @@ import { prisma } from '../lib/prisma.js';
 import { companyFilter } from '../middleware/user.js';
 import { requireRoles } from '../middleware/auth.js';
 import { logAudit, isPlatformRole, PLATFORM_ROLES, COMPANY_ROLES } from '../lib/audit.js';
-import { notifyUserInvited } from '../lib/notifications.js';
+import { notifyMembershipAdded } from '../lib/notifications.js';
 import { loadSupervisedAdrs, setSupervisedAdrs } from '../lib/team-lead.js';
 import {
   generateTemporaryPassword,
   logInviteCredentials
 } from '../lib/invite-credentials.js';
-import { findInviteEmailConflict } from '../lib/user-email.js';
+import {
+  findInviteEmailConflict,
+  findUsersByEmail,
+  resolveInviteCredentials
+} from '../lib/user-email.js';
 
 const router = Router();
 
@@ -97,7 +101,6 @@ router.post('/invite', requireRoles('system_owner', 'platform_staff', 'manager')
     let companyId = null;
     let allowedRoles;
     let auditScope;
-    const tempPassword = generateTemporaryPassword();
 
     if (isPlatform) {
       if (!PLATFORM_ROLES.includes(role) || role === 'system_owner') {
@@ -120,26 +123,38 @@ router.post('/invite', requireRoles('system_owner', 'platform_staff', 'manager')
       return res.status(400).json({ error: 'Invalid role for this scope' });
     }
 
-    const hash = bcrypt.hashSync(tempPassword, 10);
+    const existingUsers = await findUsersByEmail(normalizedEmail);
+    const credentials = resolveInviteCredentials(existingUsers);
+    let temporaryPassword = null;
+    let passwordHash;
+    let status;
+
+    if (credentials.reuseExisting) {
+      passwordHash = credentials.passwordHash;
+      status = credentials.status;
+    } else {
+      temporaryPassword = generateTemporaryPassword();
+      passwordHash = bcrypt.hashSync(temporaryPassword, 10);
+      status = 'invited';
+    }
+
     const user = await prisma.user.create({
       data: {
         id: `usr-${Date.now().toString(36)}`,
         name: name.trim(),
         email: normalizedEmail,
-        passwordHash: hash,
+        passwordHash,
         role,
         companyId,
         scope: isPlatform ? 'Platform operations' : zone?.trim() || 'Invited',
         zone: zone?.trim() || null,
-        status: 'invited'
+        status
       }
     });
 
     if (role === 'team_lead' && companyId && Array.isArray(supervised_adr_ids)) {
       await setSupervisedAdrs(user.id, companyId, supervised_adr_ids);
     }
-
-    await notifyUserInvited(user, req.user);
 
     const company = companyId
       ? await prisma.company.findUnique({
@@ -148,11 +163,14 @@ router.post('/invite', requireRoles('system_owner', 'platform_staff', 'manager')
         })
       : null;
 
+    await notifyMembershipAdded(user, req.user, company?.name || null);
+
     const { credentialDelivery } = logInviteCredentials({
       user,
       actor: req.user,
       company,
-      temporaryPassword: tempPassword
+      temporaryPassword,
+      passwordReused: credentials.reuseExisting
     });
 
     await logAudit({
@@ -167,8 +185,9 @@ router.post('/invite', requireRoles('system_owner', 'platform_staff', 'manager')
         role: user.role,
         invitedName: user.name,
         credentialDelivery,
-        ...(credentialDelivery === 'log_only'
-          ? { temporaryPassword: tempPassword }
+        passwordReused: credentials.reuseExisting,
+        ...(credentialDelivery === 'log_only' && temporaryPassword
+          ? { temporaryPassword }
           : {})
       }
     });
@@ -180,8 +199,14 @@ router.post('/invite', requireRoles('system_owner', 'platform_staff', 'manager')
       role: user.role,
       zone: user.zone,
       status: user.status,
-      temporaryPassword: tempPassword,
-      credentialDelivery
+      temporaryPassword: temporaryPassword || undefined,
+      credentialDelivery,
+      passwordReused: credentials.reuseExisting,
+      message: credentials.reuseExisting
+        ? credentials.hasActiveAccount
+          ? 'Added to workspace. They keep their existing password and can switch after signing in.'
+          : 'Added to workspace. They use the same temporary password as their other invite.'
+        : undefined
     });
   } catch (err) {
     next(err);
