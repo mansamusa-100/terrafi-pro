@@ -8,6 +8,8 @@ import { cn } from '../lib/utils';
 import { useUserLocation } from '../lib/useUserLocation';
 import { compareAgentDistance, formatDistance, agentDistanceMeters } from '../lib/agent-distance';
 import { GoVisitButton } from '../components/GoVisitButton';
+import { Pagination } from '../components/Pagination';
+import { PAGE_SIZE, useClientPagination } from '../lib/useClientPagination';
 
 interface MapPageProps {
   setSelectedAgent: (agent: Agent) => void;
@@ -44,6 +46,18 @@ export function MapPage({ setSelectedAgent }: MapPageProps) {
     );
     return [...list].sort((a, b) => compareAgentDistance(a, b, userCoords));
   }, [zoneFilter, statusFilter, agents, userCoords]);
+
+  const {
+    pageItems: pageAgents,
+    total: mapAgentTotal,
+    limit: mapAgentLimit,
+    offset: mapAgentOffset,
+    setOffset: setMapAgentOffset
+  } = useClientPagination(
+    filtered,
+    PAGE_SIZE.default,
+    `${zoneFilter}|${statusFilter}`
+  );
 
   const colorFor = (a: Agent) =>
     mode === 'status' ? STATUS_HEX[a.status] : floatHex(a.efloat);
@@ -205,7 +219,7 @@ export function MapPage({ setSelectedAgent }: MapPageProps) {
             </div>
           </div>
           <div className="overflow-y-auto flex-1">
-            {filtered.map((a) => {
+            {pageAgents.map((a) => {
               const dist = agentDistanceMeters(a, userCoords);
               return (
                 <div
@@ -240,6 +254,14 @@ export function MapPage({ setSelectedAgent }: MapPageProps) {
                 </div>
               );
             })}
+          </div>
+          <div className="px-4 pb-3 shrink-0">
+            <Pagination
+              total={mapAgentTotal}
+              limit={mapAgentLimit}
+              offset={mapAgentOffset}
+              onPageChange={setMapAgentOffset}
+            />
           </div>
         </div>
       </div>

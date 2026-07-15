@@ -14,6 +14,8 @@ import { fmt } from '../lib/data';
 import { useAppData } from '../lib/data-context';
 import { cn } from '../lib/utils';
 import { DataTable } from '../components/DataTable';
+import { Pagination } from '../components/Pagination';
+import { PAGE_SIZE, useClientPagination } from '../lib/useClientPagination';
 
 export function FloatPage() {
   const { agents, zones, floatTrend } = useAppData();
@@ -47,6 +49,18 @@ export function FloatPage() {
       if (a[key] > b[key]) return direction === 'asc' ? 1 : -1;
       return 0;
     });
+
+  const {
+    pageItems: pageAgents,
+    total: floatTotal,
+    limit: floatLimit,
+    offset: floatOffset,
+    setOffset: setFloatOffset
+  } = useClientPagination(
+    sortedAgents,
+    PAGE_SIZE.default,
+    sortConfig ? `${sortConfig.key}:${sortConfig.direction}` : 'total'
+  );
 
   const requestSort = (key: string) => {
     let direction: 'asc' | 'desc' = 'asc';
@@ -136,7 +150,7 @@ export function FloatPage() {
               </div>
             ))}
           </div>
-          {sortedAgents.map((a) => {
+          {pageAgents.map((a) => {
             const fc =
               a.efloat < 5000
                 ? 'text-apsRed'
@@ -168,6 +182,12 @@ export function FloatPage() {
             );
           })}
         </DataTable>
+        <Pagination
+          total={floatTotal}
+          limit={floatLimit}
+          offset={floatOffset}
+          onPageChange={setFloatOffset}
+        />
       </div>
     </div>
   );

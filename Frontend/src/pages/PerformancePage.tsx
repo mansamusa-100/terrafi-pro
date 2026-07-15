@@ -16,6 +16,8 @@ import { initials, avatarColor } from '../lib/data';
 import { useAppData } from '../lib/data-context';
 import { api } from '../lib/api';
 import { DataTable } from '../components/DataTable';
+import { Pagination } from '../components/Pagination';
+import { PAGE_SIZE, useClientPagination } from '../lib/useClientPagination';
 import { cn } from '../lib/utils';
 
 function todayISO() {
@@ -24,30 +26,10 @@ function todayISO() {
 
 export function PerformancePage() {
   const { agents, adrPerformance, agentSparklines } = useAppData();
-
-  if (!agents.length) {
-    return (
-      <div className="page-pad text-sm text-slate-500">No agent data available.</div>
-    );
-  }
-
   const [sortConfig, setSortConfig] = useState<{
     key: string;
     direction: 'asc' | 'desc';
   } | null>(null);
-
-  const avgScore = Math.round(
-    agents.reduce((s, a) => s + a.score, 0) / agents.length
-  );
-  const aboveTarget = agents.filter((a) => a.score >= 80).length;
-  const topPerformer = agents.reduce(
-    (top, a) => (a.score > top.score ? a : top),
-    agents[0]
-  );
-  const needsAttention = agents.reduce(
-    (low, a) => (a.score < low.score ? a : low),
-    agents[0]
-  );
 
   const sortedAdrs = useMemo(() => {
     const data = [...adrPerformance];
@@ -63,10 +45,49 @@ export function PerformancePage() {
     return data;
   }, [adrPerformance, sortConfig]);
 
-  const sortedAgents = [...agents].sort((a, b) => {
-    if (!sortConfig) return b.score - a.score;
-    return b.score - a.score;
-  });
+  const sortedAgents = useMemo(
+    () => [...agents].sort((a, b) => b.score - a.score),
+    [agents]
+  );
+
+  const {
+    pageItems: pageAgents,
+    total: perfAgentTotal,
+    limit: perfAgentLimit,
+    offset: perfAgentOffset,
+    setOffset: setPerfAgentOffset
+  } = useClientPagination(sortedAgents, PAGE_SIZE.default);
+
+  const {
+    pageItems: pageAdrs,
+    total: adrTotal,
+    limit: adrLimit,
+    offset: adrOffset,
+    setOffset: setAdrOffset
+  } = useClientPagination(
+    sortedAdrs,
+    PAGE_SIZE.compact,
+    sortConfig ? `${sortConfig.key}:${sortConfig.direction}` : 'score'
+  );
+
+  if (!agents.length) {
+    return (
+      <div className="page-pad text-sm text-slate-500">No agent data available.</div>
+    );
+  }
+
+  const avgScore = Math.round(
+    agents.reduce((s, a) => s + a.score, 0) / agents.length
+  );
+  const aboveTarget = agents.filter((a) => a.score >= 80).length;
+  const topPerformer = agents.reduce(
+    (top, a) => (a.score > top.score ? a : top),
+    agents[0]
+  );
+  const needsAttention = agents.reduce(
+    (low, a) => (a.score < low.score ? a : low),
+    agents[0]
+  );
 
   const requestSort = (key: string) => {
     let direction: 'asc' | 'desc' = 'asc';
@@ -178,7 +199,7 @@ export function PerformancePage() {
                 </div>
               ))}
             </div>
-            {sortedAdrs.map((o) => {
+            {pageAdrs.map((o) => {
               const bgColor =
                 o.score >= 80
                   ? 'bg-apsGreen'
@@ -242,6 +263,12 @@ export function PerformancePage() {
             })}
           </DataTable>
         )}
+        <Pagination
+          total={adrTotal}
+          limit={adrLimit}
+          offset={adrOffset}
+          onPageChange={setAdrOffset}
+        />
       </div>
 
       <div className="panel-grid-2 mb-5">
@@ -318,7 +345,7 @@ export function PerformancePage() {
               </div>
             ))}
           </div>
-          {sortedAgents.map((a) => {
+          {pageAgents.map((a) => {
             const c =
               a.score >= 80
                 ? 'bg-apsGreen'
@@ -359,6 +386,12 @@ export function PerformancePage() {
             );
           })}
         </DataTable>
+        <Pagination
+          total={perfAgentTotal}
+          limit={perfAgentLimit}
+          offset={perfAgentOffset}
+          onPageChange={setPerfAgentOffset}
+        />
       </div>
     </div>
   );

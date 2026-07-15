@@ -8,6 +8,8 @@ import { useAuth } from '../lib/auth';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
 import { ApiError, CompanyUser } from '../lib/api';
+import { Pagination } from '../components/Pagination';
+import { PAGE_SIZE, useClientPagination } from '../lib/useClientPagination';
 
 const ROLE_BADGE: Record<string, string> = {
   system_owner: 'bg-navy text-white',
@@ -130,6 +132,14 @@ export function UsersPage() {
       : can(user.role, 'editUsers'));
   const inviteRoles = isPlatform ? PLATFORM_INVITE_ROLES : COMPANY_INVITE_ROLES;
   const editableRoles = isPlatform ? PLATFORM_INVITE_ROLES : COMPANY_INVITE_ROLES;
+
+  const {
+    pageItems: pageUsers,
+    total: usersTotal,
+    limit: usersLimit,
+    offset: usersOffset,
+    setOffset: setUsersOffset
+  } = useClientPagination(users, PAGE_SIZE.default);
 
   const openEdit = (u: CompanyUser) => {
     setEditTarget(u);
@@ -303,7 +313,7 @@ export function UsersPage() {
             )}
           </div>
 
-          {users.map((u) => {
+          {pageUsers.map((u) => {
             const ac = avatarColor(u.name);
             const roleLocked = u.role === 'system_owner';
             return (
@@ -358,7 +368,7 @@ export function UsersPage() {
           {users.length === 0 ? (
             <p className="text-sm text-slate-500 text-center py-8">No users yet</p>
           ) : (
-            users.map((u) => {
+            pageUsers.map((u) => {
               const ac = avatarColor(u.name);
               const roleLocked = u.role === 'system_owner';
               return (
@@ -422,6 +432,14 @@ export function UsersPage() {
             })
           )}
         </div>
+
+        <Pagination
+          total={usersTotal}
+          limit={usersLimit}
+          offset={usersOffset}
+          onPageChange={setUsersOffset}
+          className="mt-4"
+        />
       </div>
 
       {inviteOpen && (

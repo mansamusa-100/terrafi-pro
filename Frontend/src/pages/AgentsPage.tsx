@@ -11,6 +11,8 @@ import { useAuth } from '../lib/auth';
 import { can } from '../lib/rbac';
 import { useUserLocation } from '../lib/useUserLocation';
 import { compareAgentDistance } from '../lib/agent-distance';
+import { Pagination } from '../components/Pagination';
+import { PAGE_SIZE, useClientPagination } from '../lib/useClientPagination';
 
 interface AgentsPageProps {
   searchQ: string;
@@ -56,6 +58,18 @@ export function AgentsPage({ searchQ, onAgentClick }: AgentsPageProps) {
       return b.score - a.score;
     });
   }, [filter, searchQ, sort, agents, userCoords]);
+
+  const {
+    pageItems: pageAgents,
+    total: agentTotal,
+    limit: agentLimit,
+    offset: agentOffset,
+    setOffset: setAgentOffset
+  } = useClientPagination(
+    filteredAndSortedAgents,
+    PAGE_SIZE.cards,
+    `${filter}|${searchQ}|${sort}`
+  );
 
   const handleAddAgent = () => setOnboardingOpen(true);
 
@@ -132,16 +146,25 @@ export function AgentsPage({ searchQ, onAgentClick }: AgentsPageProps) {
       </div>
 
       {filteredAndSortedAgents.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filteredAndSortedAgents.map((agent) => (
-            <AgentCard
-              key={agent.id}
-              agent={agent}
-              userCoords={userCoords}
-              onClick={onAgentClick}
-            />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            {pageAgents.map((agent) => (
+              <AgentCard
+                key={agent.id}
+                agent={agent}
+                userCoords={userCoords}
+                onClick={onAgentClick}
+              />
+            ))}
+          </div>
+          <Pagination
+            total={agentTotal}
+            limit={agentLimit}
+            offset={agentOffset}
+            onPageChange={setAgentOffset}
+            className="mt-4"
+          />
+        </>
       ) : (
         <div className="text-center py-16 text-slate-500">
           <Users className="w-12 h-12 mx-auto mb-3 text-slate-300" />

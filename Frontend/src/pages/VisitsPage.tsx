@@ -18,6 +18,8 @@ import { ScheduleVisitModal } from '../components/ScheduleVisitModal';
 import { ExportButton } from '../components/ExportButton';
 import { useAppData } from '../lib/data-context';
 import { DataTable } from '../components/DataTable';
+import { Pagination } from '../components/Pagination';
+import { PAGE_SIZE, useClientPagination } from '../lib/useClientPagination';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
 import { useAuth } from '../lib/auth';
@@ -107,6 +109,18 @@ export function VisitsPage() {
     }
     return data;
   }, [sortConfig, visits]);
+
+  const {
+    pageItems: pageVisits,
+    total: visitTotal,
+    limit: visitLimit,
+    offset: visitOffset,
+    setOffset: setVisitOffset
+  } = useClientPagination(
+    sortedVisits,
+    PAGE_SIZE.default,
+    sortConfig ? `${sortConfig.key}:${sortConfig.direction}` : 'default'
+  );
 
   const requestSort = (key: string) => {
     let direction: 'asc' | 'desc' = 'asc';
@@ -381,7 +395,7 @@ export function VisitsPage() {
               No visits scheduled for today
             </div>
           ) : (
-            sortedVisits.map((v) => {
+            pageVisits.map((v) => {
               const sc = STATUS_STYLES[v.status] || STATUS_STYLES.pending;
               const loading = actionLoading === v.id;
               return (
@@ -478,6 +492,12 @@ export function VisitsPage() {
             })
           )}
         </DataTable>
+        <Pagination
+          total={visitTotal}
+          limit={visitLimit}
+          offset={visitOffset}
+          onPageChange={setVisitOffset}
+        />
       </div>
 
       <VisitLogModal

@@ -3,6 +3,8 @@ import { Building2, Users, UserCog, DollarSign, Search } from 'lucide-react';
 import { MetricCard } from '../components/MetricCard';
 import { useAppData } from '../lib/data-context';
 import { DataTable } from '../components/DataTable';
+import { Pagination } from '../components/Pagination';
+import { PAGE_SIZE, useClientPagination } from '../lib/useClientPagination';
 import { cn } from '../lib/utils';
 
 const STATUS_STYLE: Record<string, string> = {
@@ -38,6 +40,18 @@ export function CompaniesPage({ onOpenCompany }: CompaniesPageProps) {
       );
     });
   }, [companies, search, statusFilter]);
+
+  const {
+    pageItems: pageCompanies,
+    total: companiesTotal,
+    limit: companiesLimit,
+    offset: companiesOffset,
+    setOffset: setCompaniesOffset
+  } = useClientPagination(
+    filtered,
+    PAGE_SIZE.default,
+    `${statusFilter}|${search}`
+  );
 
   const totalAgents = companies.reduce((s, c) => s + c.agents, 0);
   const activeCos = companies.filter((c) => c.status === 'active').length;
@@ -155,7 +169,7 @@ export function CompaniesPage({ onOpenCompany }: CompaniesPageProps) {
                 : 'No companies match your search.'}
             </div>
           ) : (
-            filtered.map((c) => (
+            pageCompanies.map((c) => (
               <button
                 key={c.id}
                 type="button"
@@ -204,6 +218,12 @@ export function CompaniesPage({ onOpenCompany }: CompaniesPageProps) {
             ))
           )}
         </DataTable>
+        <Pagination
+          total={companiesTotal}
+          limit={companiesLimit}
+          offset={companiesOffset}
+          onPageChange={setCompaniesOffset}
+        />
       </div>
     </div>
   );

@@ -14,6 +14,8 @@ import { cn } from '../lib/utils';
 import { toast } from 'sonner';
 import { ApiError } from '../lib/api';
 import type { KycReviewItem } from '../lib/api';
+import { Pagination } from './Pagination';
+import { PAGE_SIZE, useClientPagination } from '../lib/useClientPagination';
 
 interface KycReviewQueueProps {
   onOpenAgent?: (agentId: string) => void;
@@ -26,6 +28,14 @@ export function KycReviewQueue({ onOpenAgent }: KycReviewQueueProps) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<KycReviewItem | null>(null);
   const [rejectNote, setRejectNote] = useState('');
+
+  const {
+    pageItems: pageQueue,
+    total: queueTotal,
+    limit: queueLimit,
+    offset: queueOffset,
+    setOffset: setQueueOffset
+  } = useClientPagination(kycReviewQueue, PAGE_SIZE.compact);
 
   const handleApprove = async (item: KycReviewItem) => {
     setBusyId(item.id);
@@ -77,7 +87,7 @@ export function KycReviewQueue({ onOpenAgent }: KycReviewQueueProps) {
   return (
     <>
       <div className="space-y-3">
-        {kycReviewQueue.map((item) => (
+        {pageQueue.map((item) => (
           <div
             key={item.id}
             className="border border-slate-200 rounded-xl p-4 hover:border-apsBlue/30 transition-colors">
@@ -159,6 +169,12 @@ export function KycReviewQueue({ onOpenAgent }: KycReviewQueueProps) {
           </div>
         ))}
       </div>
+      <Pagination
+        total={queueTotal}
+        limit={queueLimit}
+        offset={queueOffset}
+        onPageChange={setQueueOffset}
+      />
 
       {rejecting && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">

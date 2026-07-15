@@ -14,6 +14,9 @@ import { useAppData } from '../lib/data-context';
 import type { Agent } from '../lib/api';
 import { cn } from '../lib/utils';
 import { useAuth } from '../lib/auth';
+import { Pagination } from '../components/Pagination';
+import { PAGE_SIZE, useClientPagination } from '../lib/useClientPagination';
+
 interface DashboardPageProps {
   setActive: (page: string) => void;
   setSelectedAgent: (agent: Agent) => void;
@@ -32,6 +35,22 @@ export function DashboardPage({
   const statusCounts = stats?.statusCounts ?? {};
   const visitsToday = stats?.visitsToday ?? {};
   const floatData = floatTrend ?? { labels: [], efloat: [], cash: [] };
+
+  const {
+    pageItems: pageVisits,
+    total: dashVisitTotal,
+    limit: dashVisitLimit,
+    offset: dashVisitOffset,
+    setOffset: setDashVisitOffset
+  } = useClientPagination(visits, PAGE_SIZE.compact);
+
+  const {
+    pageItems: pageAlerts,
+    total: dashAlertTotal,
+    limit: dashAlertLimit,
+    offset: dashAlertOffset,
+    setOffset: setDashAlertOffset
+  } = useClientPagination(alerts, PAGE_SIZE.compact);
 
   const agentsAddedSub =
     (stats?.agentsAddedThisMonth ?? 0) > 0
@@ -313,9 +332,15 @@ export function DashboardPage({
           <h3 className="text-sm font-semibold text-slate-900 mb-4">
             Active alerts
           </h3>
-          {alerts.map((a) => (
+          {pageAlerts.map((a) => (
             <AlertItem key={a.id ?? a.title} alert={a} onDismiss={dismissAlert} />
           ))}
+          <Pagination
+            total={dashAlertTotal}
+            limit={dashAlertLimit}
+            offset={dashAlertOffset}
+            onPageChange={setDashAlertOffset}
+          />
         </div>
 
         {/* Visits today */}
@@ -339,7 +364,7 @@ export function DashboardPage({
               )}
             </div>
           </div>
-          {visits.map((v, i) => {
+          {pageVisits.map((v, i) => {
             const statusConfig = {
               done: {
                 icon: '✓',
@@ -356,16 +381,16 @@ export function DashboardPage({
             }[v.status];
             return (
               <div
-                key={i}
+                key={v.id ?? `${v.agent}-${v.time}-${i}`}
                 className="flex gap-3 py-2 border-b border-slate-100 last:border-0">
                 
                 <div
                   className={cn(
                     'text-sm font-bold shrink-0 mt-0.5',
-                    statusConfig.color
+                    statusConfig?.color
                   )}>
                   
-                  {statusConfig.icon}
+                  {statusConfig?.icon}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-xs font-medium text-slate-900">
@@ -376,13 +401,19 @@ export function DashboardPage({
                   </div>
                 </div>
                 <div
-                  className={cn('text-[10px] font-medium', statusConfig.color)}>
+                  className={cn('text-[10px] font-medium', statusConfig?.color)}>
                   
                   {v.time}
                 </div>
               </div>);
 
           })}
+          <Pagination
+            total={dashVisitTotal}
+            limit={dashVisitLimit}
+            offset={dashVisitOffset}
+            onPageChange={setDashVisitOffset}
+          />
         </div>
       </div>
     </div>);

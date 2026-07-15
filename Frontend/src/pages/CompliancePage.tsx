@@ -9,6 +9,8 @@ import { useAppData } from '../lib/data-context';
 import { useAuth } from '../lib/auth';
 import { can } from '../lib/rbac';
 import { api } from '../lib/api';
+import { Pagination } from '../components/Pagination';
+import { PAGE_SIZE, useClientPagination } from '../lib/useClientPagination';
 
 import type { Agent } from '../lib/api';
 
@@ -24,6 +26,14 @@ export function CompliancePage({ onOpenAgent }: CompliancePageProps) {
   const { alerts, kycStats, kycReviewQueue, agents, dismissAlert } = useAppData();
   const { user } = useAuth();
   const canReview = user ? can(user.role, 'reviewKyc') : false;
+
+  const {
+    pageItems: pageAlerts,
+    total: alertTotal,
+    limit: alertLimit,
+    offset: alertOffset,
+    setOffset: setAlertOffset
+  } = useClientPagination(alerts, PAGE_SIZE.compact);
 
   const openAgent = (agentId: string) => {
     const agent = agents.find((a) => a.id === agentId);
@@ -136,9 +146,17 @@ export function CompliancePage({ onOpenAgent }: CompliancePageProps) {
           {alerts.length === 0 ? (
             <p className="text-sm text-slate-500 py-6 text-center">No open alerts.</p>
           ) : (
-            alerts.map((a) => (
-              <AlertItem key={a.id ?? a.title} alert={a} onDismiss={dismissAlert} />
-            ))
+            <>
+              {pageAlerts.map((a) => (
+                <AlertItem key={a.id ?? a.title} alert={a} onDismiss={dismissAlert} />
+              ))}
+              <Pagination
+                total={alertTotal}
+                limit={alertLimit}
+                offset={alertOffset}
+                onPageChange={setAlertOffset}
+              />
+            </>
           )}
         </div>
 

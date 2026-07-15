@@ -4,6 +4,8 @@ import { MetricCard } from '../components/MetricCard';
 import { useAppData } from '../lib/data-context';
 import { useAuth } from '../lib/auth';
 import { DataTable } from '../components/DataTable';
+import { Pagination } from '../components/Pagination';
+import { PAGE_SIZE, useClientPagination } from '../lib/useClientPagination';
 import { cn } from '../lib/utils';
 
 const ACTION_LABELS: Record<string, string> = {
@@ -69,6 +71,14 @@ export function AuditPage() {
     if (!actionFilter) return auditLogs;
     return auditLogs.filter((e) => e.action === actionFilter);
   }, [auditLogs, actionFilter]);
+
+  const {
+    pageItems: pageLogs,
+    total: auditTotal,
+    limit: auditLimit,
+    offset: auditOffset,
+    setOffset: setAuditOffset
+  } = useClientPagination(filtered, PAGE_SIZE.default, actionFilter);
 
   const recent = auditLogs.filter((e) => {
     const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
@@ -144,7 +154,7 @@ export function AuditPage() {
               No audit events yet.
             </p>
           ) : (
-            filtered.map((e) => (
+            pageLogs.map((e) => (
               <div
                 key={e.id}
                 className="grid grid-cols-[1.2fr_1.5fr_1fr_1.5fr] gap-4 py-3 border-b border-slate-100 last:border-0 items-start">
@@ -183,6 +193,12 @@ export function AuditPage() {
             ))
           )}
         </DataTable>
+        <Pagination
+          total={auditTotal}
+          limit={auditLimit}
+          offset={auditOffset}
+          onPageChange={setAuditOffset}
+        />
       </div>
     </div>
   );
