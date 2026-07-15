@@ -198,9 +198,17 @@ export function BillingCard() {
         </span>
         <span className="text-slate-500">Seats</span>
         <span className="text-slate-900 font-medium text-right">{seatsLabel}</span>
-        <span className="text-slate-500">Amount (monthly)</span>
+        <span className="text-slate-500">
+          {sub.status === 'ACTIVE' ? 'Collected MRR' : 'Plan price (monthly)'}
+        </span>
         <span className="text-slate-900 font-medium text-right">
-          {(sub.mrr ?? 0) > 0 ? fmtDalasi(sub.mrr ?? 0) : '—'}
+          {sub.status === 'ACTIVE' && (sub.mrr ?? 0) > 0
+            ? fmtDalasi(sub.mrr ?? 0)
+            : (sub.monthlyPriceGmd ?? 0) > 0
+              ? fmtDalasi(sub.monthlyPriceGmd ?? 0)
+              : (sub.mrr ?? 0) > 0
+                ? fmtDalasi(sub.mrr ?? 0)
+                : '—'}
         </span>
         <span className="text-slate-500">Billing interval</span>
         <span className="text-slate-900 font-medium text-right capitalize">

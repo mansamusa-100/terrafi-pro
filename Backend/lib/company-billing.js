@@ -109,6 +109,16 @@ export async function applyPlanTierToCompany(
 ) {
   const plan = assertPlanTier(tierId);
   const interval = assertBillingInterval(intervalId);
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { subscriptionStatus: true, mrr: true }
+  });
+  // Collected MRR only when subscription is ACTIVE (paid). Plan price is separate.
+  const mrrPatch =
+    company?.subscriptionStatus === 'ACTIVE'
+      ? { mrr: plan.monthlyPriceGmd }
+      : { mrr: 0 };
+
   return prisma.company.update({
     where: { id: companyId },
     data: {
@@ -116,8 +126,8 @@ export async function applyPlanTierToCompany(
       planTier: plan.id,
       userSeats: plan.seats,
       subscriptionBillingInterval: interval.id,
-      mrr: plan.monthlyPriceGmd,
-      subscriptionPlanCode: directPayPlanCodeForTier(plan.id)
+      subscriptionPlanCode: directPayPlanCodeForTier(plan.id),
+      ...mrrPatch
     }
   });
 }
@@ -164,19 +174,26 @@ export async function issueCompanyPayLink(companyId) {
     pendingInvoice: data.pendingInvoice,
     subscription: data.subscription
   });
+  const status = data.subscription?.status ?? company.subscriptionStatus ?? null;
   const plan = getPlanTier(company.planTier);
+
+  // Do not count MRR from invoice/plan while still TRIALING.
+  const mrrPatch = isMrrEligibleStatus(status)
+    ? {
+        mrr:
+          invoiceAmount != null && invoiceAmount > 0
+            ? invoiceAmount
+            : plan?.monthlyPriceGmd || company.mrr || 0
+      }
+    : { mrr: 0 };
 
   await prisma.company.update({
     where: { id: companyId },
     data: {
-      subscriptionStatus: data.subscription?.status ?? undefined,
+      subscriptionStatus: status ?? undefined,
       subscriptionPlanCode: data.subscription?.plan?.code ?? undefined,
       subscriptionPayUrl: payUrl ?? undefined,
-      ...(invoiceAmount != null && invoiceAmount > 0
-        ? { mrr: invoiceAmount }
-        : plan
-          ? { mrr: plan.monthlyPriceGmd }
-          : {}),
+      ...mrrPatch,
       subscriptionSyncedAt: new Date()
     }
   });
@@ -280,14 +297,14 @@ export async function syncCompanySubscription(companyId) {
 
   const extracted = extractSubscriptionMrrGmd(remote);
   const plan = getPlanTier(company.planTier);
+  const previousStatus = company.subscriptionStatus;
+  // Collected MRR only when DirectPay reports ACTIVE (paid), not TRIALING.
   let mrr = 0;
-  if (isMrrEligibleStatus(status) || status === 'EXPIRED') {
+  if (isMrrEligibleStatus(status)) {
     mrr =
       extracted != null && extracted > 0
         ? extracted
-        : plan?.monthlyPriceGmd || company.mrr || 0;
-  } else if (plan) {
-    mrr = plan.monthlyPriceGmd;
+        : plan?.monthlyPriceGmd || 0;
   }
 
   const syncedAt = new Date();
@@ -307,6 +324,16 @@ export async function syncCompanySubscription(companyId) {
       subscriptionSyncedAt: syncedAt
     }
   });
+
+  if (
+    previousStatus !== 'ACTIVE' &&
+    status === 'ACTIVE' &&
+    mrr > 0
+  ) {
+    console.info(
+      `[billing] MRR collected for ${companyId}: D ${mrr} (status ${previousStatus || 'none'} → ACTIVE)`
+    );
+  }
 
   if (status === 'ACTIVE' || status === 'TRIALING') {
     updated = await clearSubscriptionLock(companyId);

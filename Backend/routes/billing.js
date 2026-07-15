@@ -268,7 +268,7 @@ router.post('/sync-all', requireRoles('system_owner'), async (_req, res, next) =
           name: c.name,
           ok: true,
           status: subscription.status,
-          mrr: subscription.mrr ?? 0
+          mrr: subscription.status === 'ACTIVE' ? subscription.mrr ?? 0 : 0
         });
       } catch (err) {
         results.push({
@@ -280,7 +280,10 @@ router.post('/sync-all', requireRoles('system_owner'), async (_req, res, next) =
       }
     }
 
-    const mrr = results.reduce((s, r) => s + (r.ok ? r.mrr || 0 : 0), 0);
+    const mrr = results.reduce(
+      (s, r) => s + (r.ok ? r.mrr || 0 : 0),
+      0
+    );
     res.json({ ok: true, synced: results.filter((r) => r.ok).length, total: results.length, mrr, results });
   } catch (err) {
     next(err);

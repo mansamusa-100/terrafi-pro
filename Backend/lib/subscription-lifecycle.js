@@ -120,6 +120,7 @@ export function subscriptionViewExtras(company) {
     planTier: company.planTier ?? null,
     planName: plan?.name ?? company.plan ?? null,
     userSeats: company.userSeats ?? plan?.seats ?? null,
+    monthlyPriceGmd: plan?.monthlyPriceGmd ?? null,
     lockState: access.lockState,
     graceUntil: access.graceUntil?.toISOString?.() ?? access.graceUntil ?? null,
     accessAllowed: access.accessAllowed,

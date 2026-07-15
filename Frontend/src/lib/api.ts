@@ -426,6 +426,7 @@ export interface SubscriptionView {
   payUrl: string | null;
   syncedAt?: string | null;
   mrr?: number;
+  monthlyPriceGmd?: number | null;
   provisioned: boolean;
   accessAllowed: boolean;
   planTier?: string | null;

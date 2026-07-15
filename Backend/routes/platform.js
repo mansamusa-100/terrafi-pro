@@ -42,7 +42,11 @@ router.get('/stats', requireRoles('system_owner', 'platform_staff'), async (_req
 
     const active = companies.filter((c) => c.status === 'active').length;
     const suspended = companies.filter((c) => c.status === 'suspended').length;
-    const mrr = companies.reduce((s, c) => s + (c.mrr || 0), 0);
+    const mrr = companies.reduce((s, c) => {
+      // Only count paid (ACTIVE) subscriptions toward platform collected MRR
+      if (c.subscriptionStatus !== 'ACTIVE') return s;
+      return s + (c.mrr || 0);
+    }, 0);
 
     const subscriptionCounts = {};
     for (const c of companies) {

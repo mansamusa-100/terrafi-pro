@@ -15,7 +15,8 @@ import { fromDirectPayBillingInterval, toDirectPayBillingInterval } from './plan
  */
 
 const ACTIVE_STATUSES = new Set(['TRIALING', 'ACTIVE', 'PAST_DUE']);
-const MRR_STATUSES = new Set(['ACTIVE', 'TRIALING', 'PAST_DUE']);
+/** Collected platform MRR — only after payment (ACTIVE). Not during TRIALING. */
+const MRR_STATUSES = new Set(['ACTIVE']);
 const DIRECTPAY_TIMEOUT_MS = Number(process.env.DIRECTPAY_TIMEOUT_MS || 20000);
 
 export function getDirectPayConfig() {

@@ -78,7 +78,7 @@ router.post('/register-company', async (req, res, next) => {
           agents: 0,
           officers: 0,
           status: 'active',
-          mrr: plan.monthlyPriceGmd,
+          mrr: 0,
           since,
           contactEmail: email,
           registeredAt: now,
