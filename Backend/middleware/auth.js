@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import { assertUserMayAccess } from '../lib/subscription-lifecycle.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'field-pro-dev-secret';
 
@@ -46,4 +47,27 @@ export function requireActiveAccount(req, res, next) {
     });
   }
   next();
+}
+
+/**
+ * Enforce subscription lock / grace.
+ * Locked companies: only managers may call billing/payment endpoints.
+ */
+export function requireSubscriptionAccess(req, res, next) {
+  try {
+    const company = req.user?.companyRecord;
+    if (!company) return next();
+
+    const result = assertUserMayAccess(req.user, company, req.path);
+    if (result.ok) {
+      req.subscriptionAccess = result.access;
+      return next();
+    }
+    return res.status(403).json({
+      error: result.error,
+      code: result.code
+    });
+  } catch (err) {
+    next(err);
+  }
 }

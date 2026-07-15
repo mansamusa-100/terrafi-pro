@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Lock, Mail, ArrowRight, Loader2, Building2, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../lib/auth';
-import { api, ApiError } from '../lib/api';
+import { api, ApiError, PublicPlan } from '../lib/api';
 import { cn } from '../lib/utils';
+import { fmtDalasi } from '../lib/data';
 import { BrandMark } from './BrandMark';
 import { PwaInstallBanner } from './PwaInstallBanner';
+import type { InfoSection } from './InfoPages';
 
 const PLATFORM_BRANDING = {
   title: 'Terrafi Pro',
@@ -18,24 +20,38 @@ type Mode = 'signin' | 'register';
 interface LoginScreenProps {
   initialMode?: Mode;
   onBack?: () => void;
+  onInfo?: (section: InfoSection) => void;
 }
 
 export function LoginScreen({
   initialMode = 'signin',
-  onBack
+  onBack,
+  onInfo
 }: LoginScreenProps) {
   const { login } = useAuth();
   const [mode, setMode] = useState<Mode>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [plans, setPlans] = useState<PublicPlan[]>([]);
   const [registerForm, setRegisterForm] = useState({
     companyName: '',
     adminName: '',
     adminEmail: '',
     password: '',
-    zone: ''
+    zone: '',
+    planTier: 'standard',
+    billingInterval: 'monthly' as 'monthly' | 'quarterly'
   });
+
+  useEffect(() => {
+    api
+      .plans()
+      .then((c) => setPlans(c.plans))
+      .catch(() => {});
+  }, []);
+
+  const selectedPlan = plans.find((p) => p.id === registerForm.planTier);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,11 +74,15 @@ export function LoginScreen({
         adminName: registerForm.adminName.trim(),
         adminEmail: registerForm.adminEmail.trim(),
         password: registerForm.password,
-        zone: registerForm.zone.trim() || undefined
+        zone: registerForm.zone.trim() || undefined,
+        planTier: registerForm.planTier,
+        billingInterval: registerForm.billingInterval
       });
       const payUrl = res.billing?.payUrl;
+      const planName =
+        selectedPlan?.name || registerForm.planTier;
       if (payUrl) {
-        toast.success('Company registered — activate your Corporate plan', {
+        toast.success(`Company registered — activate ${planName}`, {
           description: 'Pay your first subscription invoice in DirectPay.',
           duration: 10000,
           action: {
@@ -124,7 +144,7 @@ export function LoginScreen({
           </h1>
           <p className="text-white/60 text-base leading-relaxed max-w-md">
             {mode === 'register'
-              ? 'Create your mobile money operator workspace. You become the network manager and can invite your team after sign-in.'
+              ? 'Choose a plan, create your workspace, and invite your team after sign-in.'
               : 'Field visits, float health, compliance, and performance — all in one operations dashboard for mobile money networks.'}
           </p>
         </div>
@@ -132,18 +152,34 @@ export function LoginScreen({
         <div className="relative z-10 mt-10 lg:mt-0">
           <div className="grid grid-cols-3 gap-4">
             {[
-              ['Self-serve', 'Onboarding'],
-              ['Multi-tenant', 'Workspaces'],
-              ['Secure', 'Audit logs']
+              ['Basic', '25 users'],
+              ['Standard', '50 users'],
+              ['Unlimited', 'No seat cap']
             ].map(([val, label]) => (
               <div
                 key={label}
                 className="bg-white/5 border border-white/10 rounded-xl p-4 text-center">
-                <div className="text-2xl font-bold text-white">{val}</div>
+                <div className="text-lg font-bold text-white">{val}</div>
                 <div className="text-white/50 text-xs mt-1">{label}</div>
               </div>
             ))}
           </div>
+          {onInfo && (
+            <div className="mt-6 flex flex-wrap gap-3 text-xs text-white/50">
+              <button type="button" onClick={() => onInfo('terms')} className="hover:text-white">
+                Terms
+              </button>
+              <button type="button" onClick={() => onInfo('privacy')} className="hover:text-white">
+                Privacy
+              </button>
+              <button type="button" onClick={() => onInfo('pricing')} className="hover:text-white">
+                Pricing
+              </button>
+              <button type="button" onClick={() => onInfo('contact')} className="hover:text-white">
+                Contact
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -329,6 +365,114 @@ export function LoginScreen({
                       placeholder="Primary coverage zone"
                     />
                   </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 mb-1.5 block">
+                      Plan
+                    </label>
+                    <div className="space-y-2">
+                      {(plans.length
+                        ? plans
+                        : [
+                            {
+                              id: 'basic',
+                              name: 'Basic',
+                              seatsLabel: 'Up to 25 users',
+                              monthlyPriceGmd: 26590,
+                              quarterlyPriceGmd: 79770
+                            },
+                            {
+                              id: 'standard',
+                              name: 'Standard',
+                              seatsLabel: 'Up to 50 users',
+                              monthlyPriceGmd: 31590,
+                              quarterlyPriceGmd: 94770
+                            },
+                            {
+                              id: 'unlimited',
+                              name: 'Unlimited',
+                              seatsLabel: 'Unlimited users',
+                              monthlyPriceGmd: 50590,
+                              quarterlyPriceGmd: 151770
+                            }
+                          ]
+                      ).map((plan) => {
+                        const price =
+                          registerForm.billingInterval === 'quarterly'
+                            ? plan.quarterlyPriceGmd
+                            : plan.monthlyPriceGmd;
+                        const selected = registerForm.planTier === plan.id;
+                        return (
+                          <button
+                            key={plan.id}
+                            type="button"
+                            onClick={() =>
+                              setRegisterForm((f) => ({
+                                ...f,
+                                planTier: plan.id
+                              }))
+                            }
+                            className={cn(
+                              'w-full text-left px-3 py-2.5 rounded-lg border text-sm transition-colors',
+                              selected
+                                ? 'border-apsBlue bg-apsBlue/5 ring-1 ring-apsBlue/20'
+                                : 'border-slate-200 hover:border-slate-300'
+                            )}>
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-semibold text-slate-900">
+                                {plan.name}
+                              </span>
+                              <span className="font-medium text-slate-800">
+                                {fmtDalasi(price)}
+                                <span className="text-slate-400 font-normal">
+                                  /
+                                  {registerForm.billingInterval === 'quarterly'
+                                    ? 'qtr'
+                                    : 'mo'}
+                                </span>
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                              {plan.seatsLabel}
+                            </p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 mb-1.5 block">
+                      Billing
+                    </label>
+                    <div className="flex gap-2 p-1 bg-slate-100 rounded-lg">
+                      {(
+                        [
+                          ['monthly', 'Monthly'],
+                          ['quarterly', 'Quarterly (3 months)']
+                        ] as const
+                      ).map(([id, label]) => (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() =>
+                            setRegisterForm((f) => ({
+                              ...f,
+                              billingInterval: id
+                            }))
+                          }
+                          className={cn(
+                            'flex-1 py-2 text-xs font-semibold rounded-md transition-colors',
+                            registerForm.billingInterval === id
+                              ? 'bg-white text-slate-900 shadow-sm'
+                              : 'text-slate-600'
+                          )}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   <button
                     type="submit"
                     disabled={loading}

@@ -14,6 +14,9 @@ import { PlatformDashboardPage } from './pages/PlatformDashboardPage';
 import { LoginScreen } from './components/LoginScreen';
 import { LandingPage } from './components/LandingPage';
 import { SetPasswordScreen } from './components/SetPasswordScreen';
+import { PaymentRequiredScreen } from './components/PaymentRequiredScreen';
+import { AccessLockedScreen } from './components/AccessLockedScreen';
+import { InfoPages, type InfoSection } from './components/InfoPages';
 import { DashboardPage } from './pages/DashboardPage';
 import { TeamLeadDashboardPage } from './pages/TeamLeadDashboardPage';
 import { AgentsPage } from './pages/AgentsPage';
@@ -230,10 +233,11 @@ function AppShell({
   page: string;
   setPage: (p: string) => void;
 }) {
-  const { user, loading } = useAuth();
-  const [authView, setAuthView] = useState<'landing' | 'signin' | 'register'>(
-    'landing'
-  );
+  const { user, subscription, loading } = useAuth();
+  const [authView, setAuthView] = useState<
+    'landing' | 'signin' | 'register' | 'info'
+  >('landing');
+  const [infoSection, setInfoSection] = useState<InfoSection>('pricing');
 
   if (loading) {
     return (
@@ -244,11 +248,25 @@ function AppShell({
   }
 
   if (!user) {
+    if (authView === 'info') {
+      return (
+        <InfoPages
+          section={infoSection}
+          onSection={setInfoSection}
+          onBack={() => setAuthView('landing')}
+          onRegister={() => setAuthView('register')}
+        />
+      );
+    }
     if (authView === 'landing') {
       return (
         <LandingPage
           onSignIn={() => setAuthView('signin')}
           onRegister={() => setAuthView('register')}
+          onInfo={(section) => {
+            setInfoSection(section);
+            setAuthView('info');
+          }}
         />
       );
     }
@@ -256,12 +274,31 @@ function AppShell({
       <LoginScreen
         initialMode={authView === 'register' ? 'register' : 'signin'}
         onBack={() => setAuthView('landing')}
+        onInfo={(section) => {
+          setInfoSection(section);
+          setAuthView('info');
+        }}
       />
     );
   }
 
   if (user.must_change_password || user.status === 'invited') {
     return <SetPasswordScreen />;
+  }
+
+  if (
+    user.role === 'manager' &&
+    subscription?.lockState === 'locked'
+  ) {
+    return <PaymentRequiredScreen />;
+  }
+
+  if (
+    subscription?.lockState === 'locked' &&
+    user.role !== 'system_owner' &&
+    user.role !== 'platform_staff'
+  ) {
+    return <AccessLockedScreen />;
   }
 
   return (

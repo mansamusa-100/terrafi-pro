@@ -5,6 +5,7 @@ import { signToken, authMiddleware } from '../middleware/auth.js';
 import { loadUser, serializeAppUser } from '../middleware/user.js';
 import { loadSupervisedAdrs } from '../lib/team-lead.js';
 import { cachedCompanySubscription } from '../lib/company-billing.js';
+import { applySubscriptionLifecycle } from '../lib/subscription-lifecycle.js';
 import { logAudit } from '../lib/audit.js';
 import {
   findUsersByEmail,
@@ -21,6 +22,11 @@ async function toAppUser(row) {
   const supervised =
     row.role === 'team_lead' ? await loadSupervisedAdrs(row.id) : null;
   return serializeAppUser(row, supervised);
+}
+
+function subscriptionFor(row) {
+  if (!row.companyId || !row.company) return null;
+  return cachedCompanySubscription(row.company);
 }
 
 router.post('/login', async (req, res, next) => {
@@ -63,7 +69,11 @@ router.post('/login', async (req, res, next) => {
       await syncPasswordAcrossEmail(row.email, row.passwordHash);
     }
 
-    res.json({ token: signToken(row), user: await toAppUser(row) });
+    res.json({
+      token: signToken(row),
+      user: await toAppUser(row),
+      subscription: subscriptionFor(row)
+    });
   } catch (err) {
     next(err);
   }
@@ -81,7 +91,13 @@ router.get('/me', authMiddleware, loadUser, async (req, res, next) => {
 
     let subscription = null;
     if (row.companyId && row.company) {
-      subscription = cachedCompanySubscription(row.company);
+      await applySubscriptionLifecycle(row.companyId, { notify: true }).catch(
+        () => null
+      );
+      const company = await prisma.company.findUnique({
+        where: { id: row.companyId }
+      });
+      subscription = cachedCompanySubscription(company || row.company);
     }
 
     res.json({
@@ -131,7 +147,7 @@ router.post('/switch-workspace', authMiddleware, loadUser, async (req, res, next
       });
     }
 
-    res.json({ token: signToken(target), user: await toAppUser(target) });
+    res.json({ token: signToken(target), user: await toAppUser(target), subscription: subscriptionFor(target) });
   } catch (err) {
     next(err);
   }

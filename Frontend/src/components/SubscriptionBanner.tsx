@@ -7,13 +7,25 @@ import { can } from '../lib/rbac';
 import { cn } from '../lib/utils';
 import { useSubscriptionPayFlow } from '../lib/useSubscriptionPayFlow';
 
-function messageFor(status: string | null, provisioned: boolean): string {
-  if (!provisioned) {
-    return 'Set up your subscription to activate Corporate billing.';
+function messageFor(sub: BillingStatus['subscription']): string {
+  if (sub.lockState === 'grace') {
+    const until = sub.graceUntil
+      ? new Date(sub.graceUntil).toLocaleDateString(undefined, {
+          month: 'short',
+          day: 'numeric'
+        })
+      : 'soon';
+    return `Subscription payment overdue. Settle by ${until} to avoid locking team access.`;
   }
-  switch (status) {
+  if (sub.lockState === 'locked') {
+    return 'Access is locked for your team. Pay now to restore Terrafi Pro.';
+  }
+  if (!sub.provisioned) {
+    return 'Set up your subscription to activate billing for your plan.';
+  }
+  switch (sub.status) {
     case 'TRIALING':
-      return 'You are on a trial. Pay your invoice to activate your Corporate plan.';
+      return 'You are on a trial. Pay your invoice to activate your plan.';
     case 'PAST_DUE':
       return 'Your subscription payment is past due. Pay now to avoid interruption.';
     case 'EXPIRED':
@@ -26,16 +38,20 @@ function messageFor(status: string | null, provisioned: boolean): string {
 }
 
 export function SubscriptionBanner() {
-  const { user } = useAuth();
+  const { user, setSubscription } = useAuth();
   const [status, setStatus] = useState<BillingStatus | null>(null);
   const [dismissed, setDismissed] = useState(false);
   const [paying, setPaying] = useState(false);
 
   const canManage = user ? can(user.role, 'manageBilling') : false;
 
-  const applySub = useCallback((subscription: BillingStatus['subscription']) => {
-    setStatus((s) => (s ? { ...s, subscription } : s));
-  }, []);
+  const applySub = useCallback(
+    (subscription: BillingStatus['subscription']) => {
+      setStatus((s) => (s ? { ...s, subscription } : s));
+      setSubscription(subscription);
+    },
+    [setSubscription]
+  );
 
   const { openPayLink } = useSubscriptionPayFlow({ onUpdate: applySub });
 
@@ -45,13 +61,16 @@ export function SubscriptionBanner() {
     api.billing
       .status({ sync: true })
       .then((s) => {
-        if (active) setStatus(s);
+        if (active) {
+          setStatus(s);
+          setSubscription(s.subscription);
+        }
       })
       .catch(() => {});
     return () => {
       active = false;
     };
-  }, [canManage]);
+  }, [canManage, setSubscription]);
 
   const onPay = async () => {
     setPaying(true);
@@ -73,10 +92,15 @@ export function SubscriptionBanner() {
   if (!canManage || !status || !status.configured || dismissed) return null;
 
   const sub = status.subscription;
-  if (sub.status === 'ACTIVE') return null;
+  if (sub.status === 'ACTIVE' && sub.lockState !== 'grace' && sub.lockState !== 'locked') {
+    return null;
+  }
 
   const severe =
-    sub.status === 'EXPIRED' || sub.status === 'CANCELLED' || !sub.provisioned;
+    sub.lockState === 'locked' ||
+    sub.status === 'EXPIRED' ||
+    sub.status === 'CANCELLED' ||
+    !sub.provisioned;
 
   return (
     <div
@@ -87,7 +111,7 @@ export function SubscriptionBanner() {
           : 'bg-apsAmberLt/60 border-amber-300/40 text-amber-800'
       )}>
       <AlertTriangle className="w-4 h-4 shrink-0" />
-      <span className="flex-1 min-w-0">{messageFor(sub.status, sub.provisioned)}</span>
+      <span className="flex-1 min-w-0">{messageFor(sub)}</span>
       <button
         type="button"
         onClick={onPay}
@@ -103,13 +127,15 @@ export function SubscriptionBanner() {
         )}
         Pay in DirectPay
       </button>
-      <button
-        type="button"
-        aria-label="Dismiss"
-        onClick={() => setDismissed(true)}
-        className="p-1 rounded hover:bg-black/5 shrink-0">
-        <X className="w-4 h-4" />
-      </button>
+      {sub.lockState !== 'locked' && (
+        <button
+          type="button"
+          aria-label="Dismiss"
+          onClick={() => setDismissed(true)}
+          className="p-1 rounded hover:bg-black/5 shrink-0">
+          <X className="w-4 h-4" />
+        </button>
+      )}
     </div>
   );
 }

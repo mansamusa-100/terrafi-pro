@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowRight, MapPin, ShieldCheck, Wallet, Activity } from 'lucide-react';
 import { BrandMark } from './BrandMark';
+import { api, PublicPlan, PlansCatalogue } from '../lib/api';
+import { fmtDalasi } from '../lib/data';
+import type { InfoSection } from './InfoPages';
 
 const BRANDING = {
   title: 'Terrafi Pro',
@@ -11,14 +14,27 @@ const BRANDING = {
 interface LandingPageProps {
   onSignIn: () => void;
   onRegister: () => void;
+  onInfo: (section: InfoSection) => void;
 }
 
-export function LandingPage({ onSignIn, onRegister }: LandingPageProps) {
+export function LandingPage({ onSignIn, onRegister, onInfo }: LandingPageProps) {
   const [visible, setVisible] = useState(false);
+  const [plans, setPlans] = useState<PublicPlan[]>([]);
+  const [catalogue, setCatalogue] = useState<PlansCatalogue | null>(null);
 
   useEffect(() => {
     const t = requestAnimationFrame(() => setVisible(true));
     return () => cancelAnimationFrame(t);
+  }, []);
+
+  useEffect(() => {
+    api
+      .plans()
+      .then((c) => {
+        setCatalogue(c);
+        setPlans(c.plans);
+      })
+      .catch(() => {});
   }, []);
 
   return (
@@ -46,6 +62,12 @@ export function LandingPage({ onSignIn, onRegister }: LandingPageProps) {
           </span>
         </div>
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <button
+            type="button"
+            onClick={() => onInfo('pricing')}
+            className="hidden sm:inline px-3 py-2 text-sm font-medium text-white/70 hover:text-white transition-colors">
+            Pricing
+          </button>
           <button
             type="button"
             onClick={onSignIn}
@@ -182,31 +204,94 @@ export function LandingPage({ onSignIn, onRegister }: LandingPageProps) {
           </div>
         </section>
 
+        {plans.length > 0 && (
+          <section className="px-5 sm:px-10 lg:px-16 py-20 border-t border-white/10">
+            <div className="max-w-5xl mx-auto">
+              <h2 className="font-landing-display text-3xl sm:text-4xl tracking-tight mb-3">
+                Simple plans in Dalasi
+              </h2>
+              <p className="text-white/55 max-w-xl mb-10 text-base leading-relaxed">
+                Pay monthly or quarterly upfront. Upgrade when your team grows —
+                from 25 seats to unlimited.
+              </p>
+              <div className="grid sm:grid-cols-3 gap-6 mb-8">
+                {plans.map((plan) => (
+                  <button
+                    key={plan.id}
+                    type="button"
+                    onClick={onRegister}
+                    className="text-left rounded-2xl border border-white/10 bg-white/5 hover:border-teal-400/40 p-5 transition-colors">
+                    <p className="font-landing-display text-xl mb-1">
+                      {plan.name}
+                    </p>
+                    <p className="text-2xl font-semibold mb-1">
+                      {fmtDalasi(plan.monthlyPriceGmd)}
+                      <span className="text-sm font-normal text-white/45">
+                        /mo
+                      </span>
+                    </p>
+                    <p className="text-sm text-teal-200/80">{plan.seatsLabel}</p>
+                  </button>
+                ))}
+              </div>
+              {catalogue && (
+                <p className="text-xs text-white/40 max-w-2xl leading-relaxed">
+                  {catalogue.policies.renewalNotice}{' '}
+                  {catalogue.policies.gracePeriod}
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={() => onInfo('pricing')}
+                className="mt-6 text-sm text-teal-300 hover:text-teal-200 font-medium">
+                Compare plans in detail →
+              </button>
+            </div>
+          </section>
+        )}
+
         <section className="px-5 sm:px-10 lg:px-16 py-20 border-t border-white/10">
           <div className="max-w-3xl mx-auto text-center">
             <h2 className="font-landing-display text-3xl sm:text-4xl tracking-tight mb-4">
               Ready to run your network on Terrafi Pro?
             </h2>
             <p className="text-white/55 mb-8 leading-relaxed">
-              Register your organisation in minutes, then invite managers, ADRs,
-              and agents into their roles.
+              Register your organisation in minutes, pick a plan, then invite
+              managers, ADRs, and agents into their roles.
             </p>
             <button
               type="button"
               onClick={onRegister}
               className="inline-flex items-center gap-2 px-8 py-3.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-[#061018] text-sm font-semibold transition-colors">
-              Get started free
+              Get started
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
         </section>
       </main>
 
-      <footer className="relative z-10 px-5 sm:px-10 lg:px-16 py-8 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-white/40">
+      <footer className="relative z-10 px-5 sm:px-10 lg:px-16 py-8 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-white/40">
         <span className="font-landing-display text-sm text-white/60">
           Terrafi Pro
         </span>
-        <span>Agent network management for mobile money operators</span>
+        <div className="flex flex-wrap justify-center gap-4">
+          {(
+            [
+              ['pricing', 'Pricing'],
+              ['terms', 'Terms'],
+              ['privacy', 'Privacy'],
+              ['contact', 'Contact']
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => onInfo(id)}
+              className="hover:text-white/70 transition-colors">
+              {label}
+            </button>
+          ))}
+        </div>
       </footer>
     </div>
   );

@@ -246,7 +246,15 @@ export interface CompanySubscription {
   syncedAt: string | null;
   provisioned: boolean;
   accessAllowed: boolean;
+  planTier?: string | null;
+  planName?: string | null;
+  userSeats?: number | null;
+  lockState?: string | null;
+  graceUntil?: string | null;
+  accessReason?: string | null;
+  mrr?: number;
 }
+
 
 export interface CompanyDetail extends Company {
   visitCount: number;
@@ -420,6 +428,46 @@ export interface SubscriptionView {
   mrr?: number;
   provisioned: boolean;
   accessAllowed: boolean;
+  planTier?: string | null;
+  planName?: string | null;
+  userSeats?: number | null;
+  lockState?: 'open' | 'grace' | 'locked' | string | null;
+  graceUntil?: string | null;
+  accessReason?: string | null;
+}
+
+export interface PublicPlan {
+  id: string;
+  name: string;
+  description: string;
+  seats: number | null;
+  seatsLabel: string;
+  monthlyPriceGmd: number;
+  quarterlyPriceGmd: number;
+  features: string[];
+}
+
+export interface PlansCatalogue {
+  currency: string;
+  currencySymbol: string;
+  renewalNoticeDays: number;
+  graceDays: number;
+  intervals: {
+    id: string;
+    label: string;
+    months: number;
+    description: string;
+  }[];
+  plans: PublicPlan[];
+  contact: {
+    email: string;
+    phone: string | null;
+    address: string;
+  };
+  policies: {
+    renewalNotice: string;
+    gracePeriod: string;
+  };
 }
 
 export interface BillingStatus {
@@ -428,6 +476,7 @@ export interface BillingStatus {
   configured: boolean;
   subscription: SubscriptionView;
 }
+
 
 export interface PayLinkResult {
   ok: boolean;
@@ -475,6 +524,7 @@ export interface LoginWorkspace {
 export type LoginResponse = {
   token: string;
   user: AppUser;
+  subscription?: SubscriptionView | null;
 };
 
 export const api = {
@@ -519,14 +569,27 @@ export const api = {
     adminEmail: string;
     password: string;
     zone?: string;
+    planTier?: string;
+    billingInterval?: string;
   }) {
     return request<{
       message: string;
-      billing?: { payUrl: string | null; configured: boolean };
+      billing?: {
+        payUrl: string | null;
+        configured: boolean;
+        planTier?: string;
+        billingInterval?: string;
+        periodAmountGmd?: number;
+        monthlyPriceGmd?: number;
+      };
     }>('/auth/register-company', {
       method: 'POST',
       body: JSON.stringify(body)
     });
+  },
+
+  plans() {
+    return request<PlansCatalogue>('/plans');
   },
 
   agents: {
@@ -790,6 +853,26 @@ export const api = {
       }>('/billing/sync-all', {
         method: 'POST',
         body: JSON.stringify({})
-      })
+      }),
+    upgrade: (planTier: string, billingInterval?: string) =>
+      request<{ ok: boolean; subscription: SubscriptionView }>(
+        '/billing/upgrade',
+        {
+          method: 'POST',
+          body: JSON.stringify({ planTier, billingInterval })
+        }
+      ),
+    availableUpgrades: () =>
+      request<{
+        currentTier: string | null;
+        currentPlan: {
+          id: string;
+          name: string;
+          seats: number | null;
+          monthlyPriceGmd: number;
+        } | null;
+        upgrades: PublicPlan[];
+        subscription: SubscriptionView;
+      }>('/billing/plans')
   }
 };

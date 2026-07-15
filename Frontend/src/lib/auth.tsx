@@ -5,16 +5,18 @@ import React, {
   useEffect,
   useState
 } from 'react';
-import { api, setToken, getToken } from './api';
+import { api, setToken, getToken, SubscriptionView } from './api';
 import { AppUser, firstPageFor } from './rbac';
 
 interface AuthContextValue {
   user: AppUser | null;
+  subscription: SubscriptionView | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   switchWorkspace: (userId: string) => Promise<void>;
   refreshProfile: () => Promise<void>;
+  setSubscription: (sub: SubscriptionView | null) => void;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
 }
 
@@ -28,6 +30,7 @@ export function AuthProvider({
   onUserChange?: (page: string) => void;
 }) {
   const [user, setUser] = useState<AppUser | null>(null);
+  const [subscription, setSubscription] = useState<SubscriptionView | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -38,7 +41,10 @@ export function AuthProvider({
     }
     api
       .me()
-      .then(({ user: u }) => setUser(u))
+      .then(({ user: u, subscription: s }) => {
+        setUser(u);
+        setSubscription(s ?? null);
+      })
       .catch(() => setToken(null))
       .finally(() => setLoading(false));
   }, []);
@@ -48,6 +54,7 @@ export function AuthProvider({
       const result = await api.login(email, password);
       setToken(result.token);
       setUser(result.user);
+      setSubscription(result.subscription ?? null);
       onUserChange?.(firstPageFor(result.user.role));
     },
     [onUserChange]
@@ -56,21 +63,24 @@ export function AuthProvider({
   const logout = useCallback(() => {
     setToken(null);
     setUser(null);
+    setSubscription(null);
   }, []);
 
   const switchWorkspace = useCallback(
     async (userId: string) => {
-      const { token, user: u } = await api.switchWorkspace(userId);
+      const { token, user: u, subscription: s } = await api.switchWorkspace(userId);
       setToken(token);
       setUser(u);
+      setSubscription(s ?? null);
       onUserChange?.(firstPageFor(u.role));
     },
     [onUserChange]
   );
 
   const refreshProfile = useCallback(async () => {
-    const { user: u } = await api.me();
+    const { user: u, subscription: s } = await api.me();
     setUser(u);
+    setSubscription(s ?? null);
   }, []);
 
   const changePassword = useCallback(
@@ -89,11 +99,13 @@ export function AuthProvider({
     <AuthContext.Provider
       value={{
         user,
+        subscription,
         loading,
         login,
         logout,
         switchWorkspace,
         refreshProfile,
+        setSubscription,
         changePassword
       }}>
       {children}

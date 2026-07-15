@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { prisma } from './prisma.js';
+import { evaluateSubscriptionAccess } from './subscription-lifecycle.js';
 
 /** Platform-only — one account per email with companyId null. */
 export const GLOBAL_EMAIL_ROLES = ['system_owner', 'platform_staff'];
@@ -123,6 +124,13 @@ export function loginEligibilityError(user) {
   }
   if (user.companyId && user.company?.status === 'suspended') {
     return 'This organisation has been suspended. Contact platform support.';
+  }
+  // Locked subscription: only network managers may sign in (to pay).
+  if (user.companyId && user.company && user.role !== 'manager') {
+    const access = evaluateSubscriptionAccess(user.company);
+    if (access.lockState === 'locked') {
+      return 'Your organisation subscription is locked. Ask your network manager to settle payment.';
+    }
   }
   return null;
 }

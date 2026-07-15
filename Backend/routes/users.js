@@ -15,6 +15,7 @@ import {
   findUsersByEmail,
   resolveInviteCredentials
 } from '../lib/user-email.js';
+import { assertCompanyHasSeatCapacity } from '../lib/company-billing.js';
 
 const router = Router();
 
@@ -121,6 +122,17 @@ router.post('/invite', requireRoles('system_owner', 'platform_staff', 'manager')
 
     if (!allowedRoles.includes(role)) {
       return res.status(400).json({ error: 'Invalid role for this scope' });
+    }
+
+    if (companyId) {
+      try {
+        await assertCompanyHasSeatCapacity(companyId);
+      } catch (err) {
+        if (err.status === 403 || err.code === 'SEAT_LIMIT') {
+          return res.status(403).json({ error: err.message, code: 'SEAT_LIMIT' });
+        }
+        throw err;
+      }
     }
 
     const existingUsers = await findUsersByEmail(normalizedEmail);

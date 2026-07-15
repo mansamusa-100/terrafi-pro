@@ -7,8 +7,11 @@ import {
   issueCompanyPayLink,
   provisionCompany,
   startCompanySubscription,
-  syncCompanySubscription
+  syncCompanySubscription,
+  upgradeCompanyPlan
 } from '../lib/company-billing.js';
+import { nextUpgradeTiers, getPlanTier } from '../lib/plans.js';
+
 
 const router = Router();
 
@@ -172,6 +175,74 @@ router.post('/sync', async (req, res, next) => {
     if (err.code === 'DIRECTPAY_TIMEOUT') {
       return res.status(504).json({ error: err.message });
     }
+    next(err);
+  }
+});
+
+/** Upgrade to a higher Terrafi Pro tier (Basic → Standard → Unlimited). */
+router.post('/upgrade', async (req, res, next) => {
+  try {
+    const companyId = resolveCompanyId(req.user, req.body.companyId);
+    if (!companyId) {
+      return res.status(400).json({ error: 'Company context required' });
+    }
+    if (!req.body.planTier) {
+      return res.status(400).json({ error: 'planTier is required' });
+    }
+    const subscription = await upgradeCompanyPlan(
+      companyId,
+      req.body.planTier,
+      req.body.billingInterval
+    );
+    res.json({ ok: true, subscription });
+  } catch (err) {
+    if (err.status === 400) {
+      return res.status(400).json({ error: err.message });
+    }
+    if (err.message?.includes('not provisioned')) {
+      return res.status(400).json({ error: err.message });
+    }
+    if (err.code === 'DIRECTPAY_NOT_CONFIGURED') {
+      return res.status(503).json({ error: 'DirectPay is not configured' });
+    }
+    if (err.code === 'DIRECTPAY_TIMEOUT') {
+      return res.status(504).json({ error: err.message });
+    }
+    next(err);
+  }
+});
+
+router.get('/plans', async (req, res, next) => {
+  try {
+    const companyId = resolveCompanyId(req.user, req.query.companyId);
+    if (!companyId) {
+      return res.status(400).json({ error: 'Company context required' });
+    }
+    const company = await loadCompany(companyId);
+    if (!company) return res.status(404).json({ error: 'Company not found' });
+    const current = getPlanTier(company.planTier);
+    res.json({
+      currentTier: company.planTier || null,
+      currentPlan: current
+        ? {
+            id: current.id,
+            name: current.name,
+            seats: current.seats,
+            monthlyPriceGmd: current.monthlyPriceGmd
+          }
+        : null,
+      upgrades: nextUpgradeTiers(company.planTier || 'basic').map((p) => ({
+        id: p.id,
+        name: p.name,
+        seats: p.seats,
+        seatsLabel: p.seats == null ? 'Unlimited users' : `Up to ${p.seats} users`,
+        monthlyPriceGmd: p.monthlyPriceGmd,
+        quarterlyPriceGmd: p.monthlyPriceGmd * 3,
+        features: p.features
+      })),
+      subscription: cachedCompanySubscription(company)
+    });
+  } catch (err) {
     next(err);
   }
 });

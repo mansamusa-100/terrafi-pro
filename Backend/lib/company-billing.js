@@ -5,11 +5,22 @@ import {
   getDirectPayConfig,
   getSubscription,
   isMrrEligibleStatus,
-  isSubscriptionAccessAllowed,
   issuePayableInvoice,
   provisionBusiness,
   startSubscription
 } from './directpay.js';
+import {
+  assertBillingInterval,
+  assertPlanTier,
+  canUpgradeTo,
+  directPayPlanCodeForTier,
+  getPlanTier
+} from './plans.js';
+import {
+  applySubscriptionLifecycle,
+  clearSubscriptionLock,
+  subscriptionViewExtras
+} from './subscription-lifecycle.js';
 
 function slugify(name) {
   return String(name || '')
@@ -26,6 +37,8 @@ function webhookUrl() {
 }
 
 function serializeSubscription(company, overrides = {}) {
+  const merged = { ...company, ...overrides };
+  const extras = subscriptionViewExtras(merged);
   return {
     status: overrides.status ?? company.subscriptionStatus ?? null,
     planCode: overrides.planCode ?? company.subscriptionPlanCode ?? null,
@@ -49,16 +62,14 @@ function serializeSubscription(company, overrides = {}) {
       null,
     mrr: overrides.mrr ?? company.mrr ?? 0,
     provisioned: Boolean(company.directPayBusinessId),
-    accessAllowed: isSubscriptionAccessAllowed(
-      overrides.status ?? company.subscriptionStatus
-    )
+    ...extras,
+    accessAllowed:
+      overrides.accessAllowed !== undefined
+        ? overrides.accessAllowed
+        : extras.accessAllowed
   };
 }
 
-/**
- * Create the DirectPay business for a company (idempotent). Stores the
- * DirectPay ids on the company. Requires a billing owner email + name.
- */
 export async function provisionCompany(company, { ownerEmail, ownerName }) {
   if (company.directPayBusinessId) {
     return {
@@ -90,34 +101,51 @@ export async function provisionCompany(company, { ownerEmail, ownerName }) {
   return data;
 }
 
-/** Start the CORPORATE subscription for a provisioned company, then sync. */
+export async function applyPlanTierToCompany(
+  companyId,
+  tierId,
+  intervalId = 'monthly'
+) {
+  const plan = assertPlanTier(tierId);
+  const interval = assertBillingInterval(intervalId);
+  return prisma.company.update({
+    where: { id: companyId },
+    data: {
+      plan: plan.name,
+      planTier: plan.id,
+      userSeats: plan.seats,
+      subscriptionBillingInterval: interval.id,
+      mrr: plan.monthlyPriceGmd,
+      subscriptionPlanCode: directPayPlanCodeForTier(plan.id)
+    }
+  });
+}
+
 export async function startCompanySubscription(companyId, opts = {}) {
   const company = await prisma.company.findUnique({
-    where: { id: companyId },
-    select: { directPayBusinessId: true }
+    where: { id: companyId }
   });
   if (!company?.directPayBusinessId) {
     throw new Error('Company is not provisioned in DirectPay');
   }
+
+  const tierId = opts.planTier || company.planTier || 'standard';
+  const intervalId =
+    opts.billingInterval || company.subscriptionBillingInterval || 'monthly';
+  await applyPlanTierToCompany(companyId, tierId, intervalId);
+
+  const planCode = opts.planCode || directPayPlanCodeForTier(tierId);
+
   await startSubscription(company.directPayBusinessId, {
-    planCode: opts.planCode ?? 'CORPORATE',
-    billingInterval: opts.billingInterval
+    planCode,
+    billingInterval: intervalId
   });
   return syncCompanySubscription(companyId);
 }
 
-/**
- * Ensure a payable subscription invoice exists and return its guest pay URL.
- * Uses the authoritative payUrl returned by DirectPay when available.
- */
 export async function issueCompanyPayLink(companyId) {
   const company = await prisma.company.findUnique({
-    where: { id: companyId },
-    select: {
-      directPayBusinessId: true,
-      subscriptionPayUrl: true,
-      mrr: true
-    }
+    where: { id: companyId }
   });
   if (!company?.directPayBusinessId) {
     throw new Error('Company is not provisioned in DirectPay');
@@ -134,6 +162,7 @@ export async function issueCompanyPayLink(companyId) {
     pendingInvoice: data.pendingInvoice,
     subscription: data.subscription
   });
+  const plan = getPlanTier(company.planTier);
 
   await prisma.company.update({
     where: { id: companyId },
@@ -143,7 +172,9 @@ export async function issueCompanyPayLink(companyId) {
       subscriptionPayUrl: payUrl ?? undefined,
       ...(invoiceAmount != null && invoiceAmount > 0
         ? { mrr: invoiceAmount }
-        : {}),
+        : plan
+          ? { mrr: plan.monthlyPriceGmd }
+          : {}),
       subscriptionSyncedAt: new Date()
     }
   });
@@ -155,12 +186,13 @@ export async function issueCompanyPayLink(companyId) {
   };
 }
 
-/**
- * Full self-service setup: provision -> start CORPORATE -> ensure pay link.
- * Best-effort: never throws (returns { ok, error }) so it can run inline during
- * company registration without blocking signup when DirectPay is unavailable.
- */
-export async function setupCompanyBilling({ companyId, ownerEmail, ownerName }) {
+export async function setupCompanyBilling({
+  companyId,
+  ownerEmail,
+  ownerName,
+  planTier = 'standard',
+  billingInterval = 'monthly'
+}) {
   const { configured } = getDirectPayConfig();
   if (!configured) {
     return { ok: false, skipped: true, reason: 'not_configured' };
@@ -170,8 +202,9 @@ export async function setupCompanyBilling({ companyId, ownerEmail, ownerName }) 
     const company = await prisma.company.findUnique({ where: { id: companyId } });
     if (!company) return { ok: false, error: 'Company not found' };
 
+    await applyPlanTierToCompany(companyId, planTier, billingInterval);
     await provisionCompany(company, { ownerEmail, ownerName });
-    await startCompanySubscription(companyId);
+    await startCompanySubscription(companyId, { planTier, billingInterval });
     const link = await issueCompanyPayLink(companyId).catch(() => null);
 
     return {
@@ -184,44 +217,52 @@ export async function setupCompanyBilling({ companyId, ownerEmail, ownerName }) 
   }
 }
 
-/**
- * Pull the latest subscription state from DirectPay and cache it on the company.
- * Returns the serialized subscription view (incl. MRR in Dalasi).
- */
+export async function upgradeCompanyPlan(companyId, toTier, billingInterval) {
+  const company = await prisma.company.findUnique({ where: { id: companyId } });
+  if (!company) throw new Error('Company not found');
+  const from = company.planTier || 'standard';
+  if (!canUpgradeTo(from, toTier)) {
+    const err = new Error(
+      `Cannot upgrade from ${from} to ${toTier}. Choose a higher tier.`
+    );
+    err.status = 400;
+    throw err;
+  }
+  const interval =
+    billingInterval || company.subscriptionBillingInterval || 'monthly';
+  await applyPlanTierToCompany(companyId, toTier, interval);
+  if (company.directPayBusinessId) {
+    await startCompanySubscription(companyId, {
+      planTier: toTier,
+      billingInterval: interval
+    });
+    await issueCompanyPayLink(companyId).catch(() => null);
+  }
+  return syncCompanySubscription(companyId);
+}
+
 export async function syncCompanySubscription(companyId) {
   const company = await prisma.company.findUnique({
-    where: { id: companyId },
-    select: {
-      id: true,
-      directPayBusinessId: true,
-      subscriptionPayUrl: true,
-      mrr: true,
-      subscriptionStatus: true,
-      subscriptionPlanCode: true,
-      subscriptionPeriodStart: true,
-      subscriptionPeriodEnd: true,
-      subscriptionBillingInterval: true,
-      subscriptionSyncedAt: true
-    }
+    where: { id: companyId }
   });
   if (!company) throw new Error('Company not found');
 
   if (!company.directPayBusinessId) {
-    return {
+    return serializeSubscription(company, {
       status: null,
       planCode: null,
       periodEnd: null,
       payUrl: null,
-      mrr: 0,
-      accessAllowed: false,
+      mrr: company.mrr || 0,
+      accessAllowed: true,
       provisioned: false
-    };
+    });
   }
 
   const remote = await getSubscription(company.directPayBusinessId);
   const sub = remote.subscription;
   const status = sub?.status ?? null;
-  const planCode = sub?.plan?.code ?? null;
+  const planCode = sub?.plan?.code ?? company.subscriptionPlanCode ?? null;
   const periodStart = sub?.currentPeriodStart ?? null;
   const periodEnd = sub?.currentPeriodEnd ?? null;
   const remotePayUrl =
@@ -230,18 +271,19 @@ export async function syncCompanySubscription(companyId) {
   const payUrl = remotePayUrl || company.subscriptionPayUrl || null;
 
   const extracted = extractSubscriptionMrrGmd(remote);
+  const plan = getPlanTier(company.planTier);
   let mrr = 0;
-  if (isMrrEligibleStatus(status)) {
+  if (isMrrEligibleStatus(status) || status === 'EXPIRED') {
     mrr =
       extracted != null && extracted > 0
         ? extracted
-        : company.mrr > 0
-          ? company.mrr
-          : 0;
+        : plan?.monthlyPriceGmd || company.mrr || 0;
+  } else if (plan) {
+    mrr = plan.monthlyPriceGmd;
   }
 
   const syncedAt = new Date();
-  const updated = await prisma.company.update({
+  let updated = await prisma.company.update({
     where: { id: companyId },
     data: {
       directPaySubscriptionId: sub?.id ?? null,
@@ -249,25 +291,69 @@ export async function syncCompanySubscription(companyId) {
       subscriptionPlanCode: planCode,
       subscriptionPeriodStart: periodStart ? new Date(periodStart) : null,
       subscriptionPeriodEnd: periodEnd ? new Date(periodEnd) : null,
-      subscriptionBillingInterval: sub?.billingInterval ?? null,
+      subscriptionBillingInterval:
+        sub?.billingInterval ?? company.subscriptionBillingInterval ?? null,
       subscriptionPayUrl: payUrl,
       mrr,
       subscriptionSyncedAt: syncedAt
     }
   });
 
+  if (status === 'ACTIVE' || status === 'TRIALING') {
+    updated = await clearSubscriptionLock(companyId);
+  } else {
+    await applySubscriptionLifecycle(companyId, { notify: true });
+    updated = await prisma.company.findUnique({ where: { id: companyId } });
+  }
+
   return serializeSubscription(updated, {
-    status,
-    planCode,
-    periodStart: periodStart ? new Date(periodStart).toISOString() : null,
-    periodEnd: periodEnd ? new Date(periodEnd).toISOString() : null,
-    billingInterval: sub?.billingInterval ?? null,
-    payUrl,
+    status: updated.subscriptionStatus,
+    planCode: updated.subscriptionPlanCode,
+    periodStart: updated.subscriptionPeriodStart?.toISOString() ?? null,
+    periodEnd: updated.subscriptionPeriodEnd?.toISOString() ?? null,
+    billingInterval: updated.subscriptionBillingInterval,
+    payUrl: updated.subscriptionPayUrl,
     syncedAt: syncedAt.toISOString(),
-    mrr
+    mrr: updated.mrr
   });
 }
 
 export function cachedCompanySubscription(company) {
   return serializeSubscription(company);
+}
+
+/** Count seats used by active/invited company users. */
+export async function countCompanySeatsUsed(companyId) {
+  return prisma.user.count({
+    where: {
+      companyId,
+      status: { in: ['active', 'invited'] }
+    }
+  });
+}
+
+export async function assertCompanyHasSeatCapacity(companyId) {
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { planTier: true, userSeats: true, plan: true }
+  });
+  if (!company) {
+    const err = new Error('Company not found');
+    err.status = 404;
+    throw err;
+  }
+  const plan = getPlanTier(company.planTier);
+  const seats = company.userSeats ?? plan?.seats ?? null;
+  if (seats == null) return { seats: null, used: null };
+
+  const used = await countCompanySeatsUsed(companyId);
+  if (used >= seats) {
+    const err = new Error(
+      `Your ${plan?.name || company.plan || 'current'} plan allows up to ${seats} users. Upgrade to add more.`
+    );
+    err.status = 403;
+    err.code = 'SEAT_LIMIT';
+    throw err;
+  }
+  return { seats, used };
 }

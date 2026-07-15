@@ -7,6 +7,12 @@ import { setupCompanyBilling } from '../lib/company-billing.js';
 import { findRegistrationEmailConflict } from '../lib/user-email.js';
 import { ensureDefaultTrainingModules } from '../lib/analytics.js';
 import { getOrCreateCompanySettings } from '../lib/company-settings.js';
+import {
+  assertBillingInterval,
+  assertPlanTier,
+  directPayPlanCodeForTier,
+  priceFor
+} from '../lib/plans.js';
 
 const router = Router();
 
@@ -20,7 +26,15 @@ function slugify(name) {
 
 router.post('/register-company', async (req, res, next) => {
   try {
-    const { companyName, adminName, adminEmail, password, zone } = req.body;
+    const {
+      companyName,
+      adminName,
+      adminEmail,
+      password,
+      zone,
+      planTier: planTierRaw,
+      billingInterval: billingIntervalRaw
+    } = req.body;
 
     if (!companyName?.trim() || !adminName?.trim() || !adminEmail?.trim() || !password) {
       return res.status(400).json({
@@ -29,6 +43,15 @@ router.post('/register-company', async (req, res, next) => {
     }
     if (password.length < 6) {
       return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+
+    let plan;
+    let interval;
+    try {
+      plan = assertPlanTier(planTierRaw || 'standard');
+      interval = assertBillingInterval(billingIntervalRaw || 'monthly');
+    } catch (err) {
+      return res.status(err.status || 400).json({ error: err.message });
     }
 
     const email = adminEmail.trim().toLowerCase();
@@ -42,20 +65,26 @@ router.post('/register-company', async (req, res, next) => {
     const companyId = `co-${slugify(companyName)}-${Date.now().toString(36)}`;
     const userId = `usr-${Date.now().toString(36)}`;
     const hash = bcrypt.hashSync(password, 10);
+    const periodAmount = priceFor(plan.id, interval.id);
 
     const result = await prisma.$transaction(async (tx) => {
       const company = await tx.company.create({
         data: {
           id: companyId,
           name: companyName.trim(),
-          plan: 'Standard',
+          plan: plan.name,
+          planTier: plan.id,
+          userSeats: plan.seats,
           agents: 0,
           officers: 0,
           status: 'active',
-          mrr: 0,
+          mrr: plan.monthlyPriceGmd,
           since,
           contactEmail: email,
-          registeredAt: now
+          registeredAt: now,
+          subscriptionBillingInterval: interval.id,
+          subscriptionPlanCode: directPayPlanCodeForTier(plan.id),
+          lockState: 'open'
         }
       });
 
@@ -95,8 +124,11 @@ router.post('/register-company', async (req, res, next) => {
     const billingPromise = setupCompanyBilling({
       companyId: result.company.id,
       ownerEmail: result.user.email,
-      ownerName: result.user.name
+      ownerName: result.user.name,
+      planTier: plan.id,
+      billingInterval: interval.id
     });
+
     const billing = await Promise.race([
       billingPromise,
       new Promise((resolve) =>
@@ -118,7 +150,11 @@ router.post('/register-company', async (req, res, next) => {
       company: {
         id: result.company.id,
         name: result.company.name,
-        status: result.company.status
+        status: result.company.status,
+        planTier: plan.id,
+        planName: plan.name,
+        userSeats: plan.seats,
+        billingInterval: interval.id
       },
       user: {
         email: result.user.email,
@@ -127,9 +163,14 @@ router.post('/register-company', async (req, res, next) => {
       },
       billing: {
         payUrl: billing?.ok ? billing.payUrl ?? null : null,
-        configured: Boolean(billing && !billing.skipped)
+        configured: Boolean(billing && !billing.skipped),
+        planTier: plan.id,
+        billingInterval: interval.id,
+        periodAmountGmd: periodAmount,
+        monthlyPriceGmd: plan.monthlyPriceGmd
       }
     });
+
   } catch (err) {
     next(err);
   }

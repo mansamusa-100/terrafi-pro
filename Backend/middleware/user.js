@@ -25,6 +25,7 @@ export async function loadUser(req, res, next) {
       role: row.role,
       companyId: row.companyId,
       company: row.company?.name || 'ANMS Platform',
+      companyRecord: row.company || null,
       scope: row.scope,
       zone: row.zone,
       status: row.status,

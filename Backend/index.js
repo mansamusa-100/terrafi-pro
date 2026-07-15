@@ -6,7 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { prisma } from './lib/prisma.js';
 import { ensurePlatformOwner } from './lib/ensure-platform-owner.js';
-import { authMiddleware, requireActiveAccount } from './middleware/auth.js';
+import { authMiddleware, requireActiveAccount, requireSubscriptionAccess } from './middleware/auth.js';
 import { loadUser } from './middleware/user.js';
 import authRoutes from './routes/auth.js';
 import agentsRoutes from './routes/agents.js';
@@ -24,8 +24,10 @@ import billingRoutes from './routes/billing.js';
 import platformRoutes from './routes/platform.js';
 import performanceRoutes from './routes/performance.js';
 import exportsRoutes from './routes/exports.js';
+import plansRoutes from './routes/plans.js';
 import { handleAgentFloatDelivery } from './routes/integrations.js';
 import { handleDirectPayWebhook } from './routes/directpay-webhook.js';
+import { runSubscriptionLifecycleSweep } from './lib/subscription-lifecycle.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3001;
@@ -68,8 +70,9 @@ app.get('/api/health', async (_req, res) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/auth', registerRoutes);
+app.use('/api/plans', plansRoutes);
 
-app.use('/api', authMiddleware, loadUser, requireActiveAccount);
+app.use('/api', authMiddleware, loadUser, requireActiveAccount, requireSubscriptionAccess);
 
 app.use('/api/agents', agentsRoutes);
 app.use('/api/visits', visitsRoutes);
@@ -143,6 +146,21 @@ async function start() {
         : `http://localhost:${PORT}`;
     console.log(`Terrafi Pro running on ${where}`);
   });
+
+  // Renewal notices + grace/lock transitions (every hour)
+  const sweepMs = Number(process.env.SUBSCRIPTION_SWEEP_MS || 60 * 60 * 1000);
+  const runSweep = () =>
+    runSubscriptionLifecycleSweep()
+      .then((r) => {
+        if (r.lockTransitions > 0) {
+          console.info(
+            `[subscription-lifecycle] scanned ${r.scanned}, transitions ${r.lockTransitions}`
+          );
+        }
+      })
+      .catch((err) => console.warn('[subscription-lifecycle]', err.message));
+  setTimeout(runSweep, 15_000);
+  setInterval(runSweep, sweepMs);
 
   server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {

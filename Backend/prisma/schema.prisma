@@ -32,6 +32,13 @@ model Company {
   subscriptionPayUrl          String?   @map("subscription_pay_url")
   subscriptionSyncedAt        DateTime? @map("subscription_synced_at")
 
+  // Terrafi Pro plan / access lifecycle
+  planTier                    String?   @map("plan_tier") // basic | standard | unlimited
+  userSeats                   Int?      @map("user_seats") // null = unlimited
+  subscriptionGraceUntil      DateTime? @map("subscription_grace_until")
+  lockState                   String    @default("open") @map("lock_state") // open | grace | locked
+  renewalNotifiedAt           DateTime? @map("renewal_notified_at")
+
   users         User[]
   agentsRel     Agent[]
   officersRel   Officer[]
