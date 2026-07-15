@@ -91,12 +91,27 @@ router.post('/register-company', async (req, res, next) => {
     await ensureDefaultTrainingModules(result.company.id);
 
     // Self-service DirectPay setup: provision + start CORPORATE + pay link.
-    // Best-effort — never blocks registration if DirectPay is unavailable.
-    const billing = await setupCompanyBilling({
+    // Cap wait time so slow DirectPay never blocks registration for long.
+    const billingPromise = setupCompanyBilling({
       companyId: result.company.id,
       ownerEmail: result.user.email,
       ownerName: result.user.name
     });
+    const billing = await Promise.race([
+      billingPromise,
+      new Promise((resolve) =>
+        setTimeout(
+          () => resolve({ ok: false, skipped: true, reason: 'timeout' }),
+          Number(process.env.DIRECTPAY_REGISTER_TIMEOUT_MS || 12000)
+        )
+      )
+    ]);
+    // If we timed out, keep setup running in background
+    if (billing?.reason === 'timeout') {
+      billingPromise.catch((err) =>
+        console.warn('[register] background billing setup failed:', err?.message)
+      );
+    }
 
     res.status(201).json({
       message: 'Registration successful. You can sign in and set up your network.',
@@ -111,8 +126,8 @@ router.post('/register-company', async (req, res, next) => {
         role: result.user.role
       },
       billing: {
-        payUrl: billing.ok ? billing.payUrl : null,
-        configured: !billing.skipped
+        payUrl: billing?.ok ? billing.payUrl ?? null : null,
+        configured: Boolean(billing && !billing.skipped)
       }
     });
   } catch (err) {

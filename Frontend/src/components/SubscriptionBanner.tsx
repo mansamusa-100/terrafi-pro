@@ -5,6 +5,7 @@ import { api, ApiError, BillingStatus } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { can } from '../lib/rbac';
 import { cn } from '../lib/utils';
+import { useSubscriptionPayFlow } from '../lib/useSubscriptionPayFlow';
 
 function messageFor(status: string | null, provisioned: boolean): string {
   if (!provisioned) {
@@ -32,11 +33,17 @@ export function SubscriptionBanner() {
 
   const canManage = user ? can(user.role, 'manageBilling') : false;
 
+  const applySub = useCallback((subscription: BillingStatus['subscription']) => {
+    setStatus((s) => (s ? { ...s, subscription } : s));
+  }, []);
+
+  const { openPayLink } = useSubscriptionPayFlow({ onUpdate: applySub });
+
   useEffect(() => {
     if (!canManage) return;
     let active = true;
     api.billing
-      .status()
+      .status({ sync: true })
       .then((s) => {
         if (active) setStatus(s);
       })
@@ -46,20 +53,10 @@ export function SubscriptionBanner() {
     };
   }, [canManage]);
 
-  const openPayLink = useCallback(async () => {
+  const onPay = async () => {
     setPaying(true);
     try {
-      const cached = status?.subscription.payUrl;
-      if (cached) {
-        window.open(cached, '_blank', 'noopener');
-        return;
-      }
-      const res = await api.billing.payLink();
-      if (res.payUrl) {
-        window.open(res.payUrl, '_blank', 'noopener');
-      } else {
-        toast.error('No pay link is available yet.');
-      }
+      await openPayLink(status?.subscription.payUrl);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
         toast.info('No payable invoice yet', {
@@ -71,7 +68,7 @@ export function SubscriptionBanner() {
     } finally {
       setPaying(false);
     }
-  }, [status]);
+  };
 
   if (!canManage || !status || !status.configured || dismissed) return null;
 
@@ -93,7 +90,7 @@ export function SubscriptionBanner() {
       <span className="flex-1 min-w-0">{messageFor(sub.status, sub.provisioned)}</span>
       <button
         type="button"
-        onClick={openPayLink}
+        onClick={onPay}
         disabled={paying}
         className={cn(
           'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold text-white transition-colors disabled:opacity-60 shrink-0',

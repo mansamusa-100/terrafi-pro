@@ -1,13 +1,18 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Building2,
   Users,
   DollarSign,
   TrendingUp,
-  AlertTriangle
+  AlertTriangle,
+  RefreshCw,
+  Loader2
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { MetricCard } from '../components/MetricCard';
 import { useAppData } from '../lib/data-context';
+import { api, ApiError } from '../lib/api';
+import { fmtDalasi } from '../lib/data';
 import { cn } from '../lib/utils';
 
 interface PlatformDashboardPageProps {
@@ -28,8 +33,24 @@ export function PlatformDashboardPage({
   onOpenCompany,
   setActive
 }: PlatformDashboardPageProps) {
-  const { platformStats, loading } = useAppData();
+  const { platformStats, loading, refresh } = useAppData();
   const stats = platformStats;
+  const [syncing, setSyncing] = useState(false);
+
+  const syncBilling = async () => {
+    setSyncing(true);
+    try {
+      const res = await api.billing.syncAll();
+      await refresh();
+      toast.success('Subscriptions synced', {
+        description: `${res.synced}/${res.total} companies · collected ${fmtDalasi(res.mrr)}`
+      });
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Billing sync failed');
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   if (loading && !stats) {
     return (
@@ -51,11 +72,25 @@ export function PlatformDashboardPage({
 
   return (
     <div className="page-pad">
-      <div className="mb-6">
-        <h2 className="text-lg font-semibold text-slate-900">Platform overview</h2>
-        <p className="text-xs text-slate-500 mt-0.5">
-          Subscriber health, signups, and billing status across Terrafi Pro
-        </p>
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">Platform overview</h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Subscriber health, signups, and billing status across Terrafi Pro
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={syncing}
+          onClick={syncBilling}
+          className="inline-flex items-center gap-1.5 self-start rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+          {syncing ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="w-3.5 h-3.5" />
+          )}
+          Sync subscriptions
+        </button>
       </div>
 
       <div className="metric-grid mb-6">
@@ -83,9 +118,9 @@ export function PlatformDashboardPage({
           accent="#F59E0B"
         />
         <MetricCard
-          label="Platform MRR"
-          value={`$${stats.revenue.mrr.toLocaleString()}`}
-          sub={`${stats.users.platform} platform staff`}
+          label="Collected MRR"
+          value={fmtDalasi(stats.revenue.mrr)}
+          sub="Gambian Dalasi (D) · active plans"
           icon={<DollarSign className="w-5 h-5" />}
           accent="#22C55E"
         />

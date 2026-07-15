@@ -5,6 +5,7 @@ import { useAppData } from '../lib/data-context';
 import { DataTable } from '../components/DataTable';
 import { Pagination } from '../components/Pagination';
 import { PAGE_SIZE, useClientPagination } from '../lib/useClientPagination';
+import { fmtDalasi } from '../lib/data';
 import { cn } from '../lib/utils';
 
 const STATUS_STYLE: Record<string, string> = {
@@ -101,8 +102,8 @@ export function CompaniesPage({ onOpenCompany }: CompaniesPageProps) {
         />
         <MetricCard
           label="Monthly recurring rev."
-          value={`$${mrr.toLocaleString()}`}
-          sub="across active plans"
+          value={fmtDalasi(mrr)}
+          sub="Collected in Dalasi (D)"
           subColor="text-apsGreen"
           icon={<DollarSign className="w-5 h-5" />}
           accent="#22C55E"
@@ -205,7 +206,7 @@ export function CompaniesPage({ onOpenCompany }: CompaniesPageProps) {
                   {c.subscriptionStatus?.replace(/_/g, ' ') || '—'}
                 </div>
                 <div className="text-xs text-slate-700">
-                  {c.mrr ? `$${c.mrr.toLocaleString()}` : '—'}
+                  {c.mrr ? fmtDalasi(c.mrr) : '—'}
                 </div>
                 <span
                   className={cn(

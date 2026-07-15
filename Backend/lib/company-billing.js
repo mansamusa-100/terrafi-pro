@@ -1,8 +1,10 @@
 import { prisma } from './prisma.js';
 import {
   buildGuestInvoicePayUrl,
+  extractSubscriptionMrrGmd,
   getDirectPayConfig,
   getSubscription,
+  isMrrEligibleStatus,
   isSubscriptionAccessAllowed,
   issuePayableInvoice,
   provisionBusiness,
@@ -21,6 +23,36 @@ function webhookUrl() {
   const base = (process.env.APP_PUBLIC_URL || '').replace(/\/$/, '');
   if (!base) return null;
   return `${base}/api/webhooks/directpay`;
+}
+
+function serializeSubscription(company, overrides = {}) {
+  return {
+    status: overrides.status ?? company.subscriptionStatus ?? null,
+    planCode: overrides.planCode ?? company.subscriptionPlanCode ?? null,
+    periodStart:
+      overrides.periodStart ??
+      company.subscriptionPeriodStart?.toISOString?.() ??
+      company.subscriptionPeriodStart ??
+      null,
+    periodEnd:
+      overrides.periodEnd ??
+      company.subscriptionPeriodEnd?.toISOString?.() ??
+      company.subscriptionPeriodEnd ??
+      null,
+    billingInterval:
+      overrides.billingInterval ?? company.subscriptionBillingInterval ?? null,
+    payUrl: overrides.payUrl ?? company.subscriptionPayUrl ?? null,
+    syncedAt:
+      overrides.syncedAt ??
+      company.subscriptionSyncedAt?.toISOString?.() ??
+      company.subscriptionSyncedAt ??
+      null,
+    mrr: overrides.mrr ?? company.mrr ?? 0,
+    provisioned: Boolean(company.directPayBusinessId),
+    accessAllowed: isSubscriptionAccessAllowed(
+      overrides.status ?? company.subscriptionStatus
+    )
+  };
 }
 
 /**
@@ -81,7 +113,11 @@ export async function startCompanySubscription(companyId, opts = {}) {
 export async function issueCompanyPayLink(companyId) {
   const company = await prisma.company.findUnique({
     where: { id: companyId },
-    select: { directPayBusinessId: true }
+    select: {
+      directPayBusinessId: true,
+      subscriptionPayUrl: true,
+      mrr: true
+    }
   });
   if (!company?.directPayBusinessId) {
     throw new Error('Company is not provisioned in DirectPay');
@@ -89,7 +125,15 @@ export async function issueCompanyPayLink(companyId) {
 
   const data = await issuePayableInvoice(company.directPayBusinessId);
   const payUrl =
-    data.payUrl || buildGuestInvoicePayUrl(data.pendingInvoice?.guestToken);
+    data.payUrl ||
+    buildGuestInvoicePayUrl(data.pendingInvoice?.guestToken) ||
+    company.subscriptionPayUrl ||
+    null;
+
+  const invoiceAmount = extractSubscriptionMrrGmd({
+    pendingInvoice: data.pendingInvoice,
+    subscription: data.subscription
+  });
 
   await prisma.company.update({
     where: { id: companyId },
@@ -97,6 +141,9 @@ export async function issueCompanyPayLink(companyId) {
       subscriptionStatus: data.subscription?.status ?? undefined,
       subscriptionPlanCode: data.subscription?.plan?.code ?? undefined,
       subscriptionPayUrl: payUrl ?? undefined,
+      ...(invoiceAmount != null && invoiceAmount > 0
+        ? { mrr: invoiceAmount }
+        : {}),
       subscriptionSyncedAt: new Date()
     }
   });
@@ -139,12 +186,23 @@ export async function setupCompanyBilling({ companyId, ownerEmail, ownerName }) 
 
 /**
  * Pull the latest subscription state from DirectPay and cache it on the company.
- * Returns the serialized subscription view.
+ * Returns the serialized subscription view (incl. MRR in Dalasi).
  */
 export async function syncCompanySubscription(companyId) {
   const company = await prisma.company.findUnique({
     where: { id: companyId },
-    select: { id: true, directPayBusinessId: true }
+    select: {
+      id: true,
+      directPayBusinessId: true,
+      subscriptionPayUrl: true,
+      mrr: true,
+      subscriptionStatus: true,
+      subscriptionPlanCode: true,
+      subscriptionPeriodStart: true,
+      subscriptionPeriodEnd: true,
+      subscriptionBillingInterval: true,
+      subscriptionSyncedAt: true
+    }
   });
   if (!company) throw new Error('Company not found');
 
@@ -154,6 +212,7 @@ export async function syncCompanySubscription(companyId) {
       planCode: null,
       periodEnd: null,
       payUrl: null,
+      mrr: 0,
       accessAllowed: false,
       provisioned: false
     };
@@ -165,9 +224,24 @@ export async function syncCompanySubscription(companyId) {
   const planCode = sub?.plan?.code ?? null;
   const periodStart = sub?.currentPeriodStart ?? null;
   const periodEnd = sub?.currentPeriodEnd ?? null;
-  const payUrl = buildGuestInvoicePayUrl(remote.pendingInvoice?.guestToken);
+  const remotePayUrl =
+    remote.payUrl ||
+    buildGuestInvoicePayUrl(remote.pendingInvoice?.guestToken);
+  const payUrl = remotePayUrl || company.subscriptionPayUrl || null;
 
-  await prisma.company.update({
+  const extracted = extractSubscriptionMrrGmd(remote);
+  let mrr = 0;
+  if (isMrrEligibleStatus(status)) {
+    mrr =
+      extracted != null && extracted > 0
+        ? extracted
+        : company.mrr > 0
+          ? company.mrr
+          : 0;
+  }
+
+  const syncedAt = new Date();
+  const updated = await prisma.company.update({
     where: { id: companyId },
     data: {
       directPaySubscriptionId: sub?.id ?? null,
@@ -177,30 +251,23 @@ export async function syncCompanySubscription(companyId) {
       subscriptionPeriodEnd: periodEnd ? new Date(periodEnd) : null,
       subscriptionBillingInterval: sub?.billingInterval ?? null,
       subscriptionPayUrl: payUrl,
-      subscriptionSyncedAt: new Date()
+      mrr,
+      subscriptionSyncedAt: syncedAt
     }
   });
 
-  return {
+  return serializeSubscription(updated, {
     status,
     planCode,
-    periodEnd,
+    periodStart: periodStart ? new Date(periodStart).toISOString() : null,
+    periodEnd: periodEnd ? new Date(periodEnd).toISOString() : null,
+    billingInterval: sub?.billingInterval ?? null,
     payUrl,
-    accessAllowed: isSubscriptionAccessAllowed(status),
-    provisioned: true
-  };
+    syncedAt: syncedAt.toISOString(),
+    mrr
+  });
 }
 
 export function cachedCompanySubscription(company) {
-  return {
-    status: company.subscriptionStatus ?? null,
-    planCode: company.subscriptionPlanCode ?? null,
-    periodStart: company.subscriptionPeriodStart?.toISOString() ?? null,
-    periodEnd: company.subscriptionPeriodEnd?.toISOString() ?? null,
-    billingInterval: company.subscriptionBillingInterval ?? null,
-    payUrl: company.subscriptionPayUrl ?? null,
-    syncedAt: company.subscriptionSyncedAt?.toISOString() ?? null,
-    provisioned: Boolean(company.directPayBusinessId),
-    accessAllowed: isSubscriptionAccessAllowed(company.subscriptionStatus)
-  };
+  return serializeSubscription(company);
 }

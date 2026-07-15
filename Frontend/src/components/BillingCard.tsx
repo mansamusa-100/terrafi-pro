@@ -2,7 +2,9 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { CreditCard, Loader2, RefreshCw, Rocket } from 'lucide-react';
 import { toast } from 'sonner';
 import { api, ApiError, BillingStatus } from '../lib/api';
+import { fmtDalasi } from '../lib/data';
 import { cn } from '../lib/utils';
+import { useSubscriptionPayFlow } from '../lib/useSubscriptionPayFlow';
 
 const STATUS_STYLE: Record<string, string> = {
   ACTIVE: 'bg-apsGreenLt text-apsGreen border-apsGreen/20',
@@ -26,10 +28,18 @@ export function BillingCard() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const applySub = useCallback((subscription: BillingStatus['subscription']) => {
+    setData((d) => (d ? { ...d, subscription } : d));
+  }, []);
+
+  const { openPayLink, syncOnce } = useSubscriptionPayFlow({
+    onUpdate: applySub
+  });
+
+  const load = useCallback(async (live = false) => {
     setLoading(true);
     try {
-      setData(await api.billing.status());
+      setData(await api.billing.status({ sync: live }));
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Failed to load billing');
     } finally {
@@ -38,14 +48,14 @@ export function BillingCard() {
   }, []);
 
   useEffect(() => {
-    load();
+    load(true);
   }, [load]);
 
   const refresh = async () => {
     setBusy('sync');
     try {
-      const res = await api.billing.sync();
-      setData((d) => (d ? { ...d, subscription: res.subscription } : d));
+      const subscription = await syncOnce();
+      setData((d) => (d ? { ...d, subscription } : d));
       toast.success('Subscription refreshed');
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Refresh failed');
@@ -59,7 +69,7 @@ export function BillingCard() {
     try {
       await api.billing.provision();
       await api.billing.startSubscription();
-      await load();
+      await load(true);
       toast.success('Corporate subscription started');
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Setup failed');
@@ -71,20 +81,9 @@ export function BillingCard() {
   const pay = async () => {
     setBusy('pay');
     try {
-      const cached = data?.subscription.payUrl;
-      if (cached) {
-        window.open(cached, '_blank', 'noopener');
-        return;
-      }
-      const res = await api.billing.payLink();
-      if (res.payUrl) window.open(res.payUrl, '_blank', 'noopener');
-      else toast.error('No pay link available yet');
+      await openPayLink(data?.subscription.payUrl);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
-        toast.info('No payable invoice right now');
-      } else {
-        toast.error(err instanceof ApiError ? err.message : 'Could not open pay link');
-      }
+      toast.error(err instanceof ApiError ? err.message : 'Could not open pay link');
     } finally {
       setBusy(null);
     }
@@ -135,6 +134,10 @@ export function BillingCard() {
         <span className="text-slate-900 font-medium text-right">
           {sub.planCode ? sub.planCode : '—'}
         </span>
+        <span className="text-slate-500">Amount (monthly)</span>
+        <span className="text-slate-900 font-medium text-right">
+          {(sub.mrr ?? 0) > 0 ? fmtDalasi(sub.mrr ?? 0) : '—'}
+        </span>
         <span className="text-slate-500">Current period ends</span>
         <span className="text-slate-900 font-medium text-right">
           {formatDate(sub.periodEnd)}
@@ -159,7 +162,7 @@ export function BillingCard() {
             )}
             Set up Corporate plan
           </button>
-        ) : (
+        ) : sub.status !== 'ACTIVE' ? (
           <button
             type="button"
             disabled={busy !== null}
@@ -172,7 +175,7 @@ export function BillingCard() {
             )}
             Pay in DirectPay
           </button>
-        )}
+        ) : null}
         <button
           type="button"
           disabled={!data.configured || busy !== null}
@@ -188,8 +191,8 @@ export function BillingCard() {
       </div>
 
       <p className="mt-3 text-[11px] text-slate-400">
-        Payments are processed securely in DirectPay. The pay link opens the guest
-        subscription-invoice checkout.
+        Payments are processed in DirectPay (Gambian Dalasi). After you pay, this
+        page updates automatically — you can also tap Refresh.
       </p>
     </div>
   );

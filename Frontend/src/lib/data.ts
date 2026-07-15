@@ -5,6 +5,9 @@ export const fmt = (n: number) =>
       ? `D ${(n / 1000).toFixed(0)}K`
       : `D ${n}`;
 
+/** Full Dalasi amount for revenue / subscription (not abbreviated). */
+export const fmtDalasi = (n: number) => `D ${Math.round(n).toLocaleString()}`;
+
 export const pct = (a: number, b: number) => Math.round((a / b) * 100);
 
 export const initials = (name: string) =>

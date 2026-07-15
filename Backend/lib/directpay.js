@@ -10,6 +10,8 @@ import crypto from 'node:crypto';
  */
 
 const ACTIVE_STATUSES = new Set(['TRIALING', 'ACTIVE', 'PAST_DUE']);
+const MRR_STATUSES = new Set(['ACTIVE', 'TRIALING', 'PAST_DUE']);
+const DIRECTPAY_TIMEOUT_MS = Number(process.env.DIRECTPAY_TIMEOUT_MS || 20000);
 
 export function getDirectPayConfig() {
   const baseUrl = (process.env.DIRECTPAY_API_BASE_URL || '').replace(/\/$/, '');
@@ -36,12 +38,67 @@ export function isSubscriptionAccessAllowed(status) {
   return ACTIVE_STATUSES.has(status);
 }
 
+export function isMrrEligibleStatus(status) {
+  return Boolean(status && MRR_STATUSES.has(status));
+}
+
 export function buildGuestInvoicePayUrl(guestToken) {
   const token = guestToken?.trim();
   if (!token) return null;
   const { publicAppUrl } = getDirectPayConfig();
   if (!publicAppUrl) return null;
   return `${publicAppUrl}/#/guest/subscription-invoice/${encodeURIComponent(token)}`;
+}
+
+/** Parse a money value from DirectPay (string/number/nested) into major units. */
+export function parseMoneyAmount(value) {
+  if (value == null) return null;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const cleaned = value.replace(/[^0-9.-]/g, '');
+    if (!cleaned) return null;
+    const n = Number(cleaned);
+    return Number.isFinite(n) ? n : null;
+  }
+  if (typeof value === 'object') {
+    return (
+      parseMoneyAmount(value.amount) ??
+      parseMoneyAmount(value.value) ??
+      parseMoneyAmount(value.total) ??
+      parseMoneyAmount(value.price)
+    );
+  }
+  return null;
+}
+
+/**
+ * Best-effort monthly subscription amount in Gambian Dalasi (integer major units).
+ * Prefers pending invoice, then plan price fields; optional env fallback.
+ */
+export function extractSubscriptionMrrGmd(remote) {
+  const plan = remote?.subscription?.plan;
+  const invoice = remote?.pendingInvoice;
+  const candidates = [
+    invoice?.amount,
+    invoice?.total,
+    invoice?.totalAmount,
+    plan?.amount,
+    plan?.price,
+    plan?.monthlyAmount,
+    plan?.amountGmd,
+    plan?.priceGmd,
+    remote?.subscription?.amount,
+    remote?.subscription?.price
+  ];
+
+  for (const c of candidates) {
+    const n = parseMoneyAmount(c);
+    if (n != null && n >= 0) return Math.round(n);
+  }
+
+  const fallback = Number(process.env.DIRECTPAY_CORPORATE_MRR_GMD || '');
+  if (Number.isFinite(fallback) && fallback > 0) return Math.round(fallback);
+  return null;
 }
 
 async function partnerJson(path, init = {}) {
@@ -64,7 +121,29 @@ async function partnerJson(path, init = {}) {
     body = JSON.stringify(init.body);
   }
 
-  const res = await fetch(url, { method, headers, body });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), DIRECTPAY_TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(url, {
+      method,
+      headers,
+      body,
+      signal: controller.signal
+    });
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      const timeoutErr = new Error(
+        `DirectPay ${method} ${path} timed out after ${DIRECTPAY_TIMEOUT_MS}ms`
+      );
+      timeoutErr.code = 'DIRECTPAY_TIMEOUT';
+      throw timeoutErr;
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+
   const text = await res.text();
   let json = {};
   try {

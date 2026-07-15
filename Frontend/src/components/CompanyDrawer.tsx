@@ -188,6 +188,12 @@ export function CompanyDrawer({ companyId, onClose }: CompanyDrawerProps) {
                     </dd>
                   </div>
                   <div className="flex justify-between">
+                    <dt className="text-slate-500">Monthly amount</dt>
+                    <dd className="font-medium text-slate-900">
+                      {detail.mrr ? `D ${detail.mrr.toLocaleString()}` : '—'}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between">
                     <dt className="text-slate-500">Billing access</dt>
                     <dd className="font-medium text-slate-900">
                       {detail.subscription.accessAllowed ? 'Allowed' : 'Blocked'}

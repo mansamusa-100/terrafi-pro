@@ -417,6 +417,7 @@ export interface SubscriptionView {
   billingInterval?: string | null;
   payUrl: string | null;
   syncedAt?: string | null;
+  mrr?: number;
   provisioned: boolean;
   accessAllowed: boolean;
 }
@@ -748,7 +749,10 @@ export const api = {
   },
 
   billing: {
-    status: () => request<BillingStatus>('/billing/status'),
+    status: (opts?: { sync?: boolean }) => {
+      const q = opts?.sync ? '?sync=1' : '';
+      return request<BillingStatus>(`/billing/status${q}`);
+    },
     provision: () =>
       request<{ ok: boolean; subscription: SubscriptionView }>(
         '/billing/provision',
@@ -766,6 +770,24 @@ export const api = {
       }),
     sync: () =>
       request<{ ok: boolean; subscription: SubscriptionView }>('/billing/sync', {
+        method: 'POST',
+        body: JSON.stringify({})
+      }),
+    syncAll: () =>
+      request<{
+        ok: boolean;
+        synced: number;
+        total: number;
+        mrr: number;
+        results: {
+          companyId: string;
+          name: string;
+          ok: boolean;
+          status?: string | null;
+          mrr?: number;
+          error?: string;
+        }[];
+      }>('/billing/sync-all', {
         method: 'POST',
         body: JSON.stringify({})
       })
