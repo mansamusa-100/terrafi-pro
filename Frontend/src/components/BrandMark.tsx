@@ -24,11 +24,18 @@ export function BrandMark({ branding, size = 'md', className }: BrandMarkProps) 
 
   if (branding.logo_url) {
     return (
-      <img
-        src={branding.logo_url}
-        alt=""
-        className={cn(dim, 'rounded-lg object-contain shrink-0 bg-white shadow-sm p-0.5', className)}
-      />
+      <div
+        className={cn(
+          dim,
+          'rounded-lg overflow-hidden shrink-0 bg-white shadow-sm ring-1 ring-black/5',
+          className
+        )}>
+        <img
+          src={branding.logo_url}
+          alt=""
+          className="block w-full h-full object-cover object-center"
+        />
+      </div>
     );
   }
 
