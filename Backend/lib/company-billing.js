@@ -14,6 +14,7 @@ import {
   assertPlanTier,
   canUpgradeTo,
   directPayPlanCodeForTier,
+  fromDirectPayBillingInterval,
   getPlanTier
 } from './plans.js';
 import {
@@ -136,6 +137,7 @@ export async function startCompanySubscription(companyId, opts = {}) {
 
   const planCode = opts.planCode || directPayPlanCodeForTier(tierId);
 
+  // Always CORPORATE (or mapped code) + uppercase DirectPay interval (MONTHLY/QUARTERLY)
   await startSubscription(company.directPayBusinessId, {
     planCode,
     billingInterval: intervalId
@@ -204,8 +206,14 @@ export async function setupCompanyBilling({
 
     await applyPlanTierToCompany(companyId, planTier, billingInterval);
     await provisionCompany(company, { ownerEmail, ownerName });
+    // CORPORATE + MONTHLY/QUARTERLY — DirectPay typically starts TRIALING.
     await startCompanySubscription(companyId, { planTier, billingInterval });
-    const link = await issueCompanyPayLink(companyId).catch(() => null);
+    // During TRIALING there is often no payable invoice yet — ignore 409.
+    const link = await issueCompanyPayLink(companyId).catch((err) => {
+      if (err.status === 409) return null;
+      console.warn('[billing] pay-link after setup:', err.message);
+      return null;
+    });
 
     return {
       ok: true,
@@ -283,6 +291,7 @@ export async function syncCompanySubscription(companyId) {
   }
 
   const syncedAt = new Date();
+  const remoteInterval = fromDirectPayBillingInterval(sub?.billingInterval);
   let updated = await prisma.company.update({
     where: { id: companyId },
     data: {
@@ -292,7 +301,7 @@ export async function syncCompanySubscription(companyId) {
       subscriptionPeriodStart: periodStart ? new Date(periodStart) : null,
       subscriptionPeriodEnd: periodEnd ? new Date(periodEnd) : null,
       subscriptionBillingInterval:
-        sub?.billingInterval ?? company.subscriptionBillingInterval ?? null,
+        remoteInterval ?? company.subscriptionBillingInterval ?? null,
       subscriptionPayUrl: payUrl,
       mrr,
       subscriptionSyncedAt: syncedAt

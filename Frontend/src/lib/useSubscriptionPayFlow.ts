@@ -103,7 +103,8 @@ export function useSubscriptionPayFlow({
           url = cachedPayUrl;
         } else if (err instanceof ApiError && err.status === 409) {
           toast.info('No payable invoice right now', {
-            description: 'Try Refresh, or check DirectPay if you already paid.'
+            description:
+              'During trial, DirectPay often has no invoice yet. Use the app normally; pay when your first invoice appears.'
           });
           startPolling();
           return;

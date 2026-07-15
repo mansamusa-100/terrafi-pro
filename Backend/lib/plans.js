@@ -102,6 +102,23 @@ export function assertBillingInterval(intervalId) {
   return interval;
 }
 
+/**
+ * DirectPay expects uppercase enum values:
+ * MONTHLY | QUARTERLY | HALF_YEARLY | YEARLY | TWO_YEARS | CONTRACT_INFINITE
+ */
+export function toDirectPayBillingInterval(intervalId = 'monthly') {
+  const interval = assertBillingInterval(intervalId);
+  return interval.id.toUpperCase();
+}
+
+/** Normalize DirectPay billingInterval into our lowercase ids. */
+export function fromDirectPayBillingInterval(remote) {
+  if (remote == null || remote === '') return null;
+  const lower = String(remote).toLowerCase();
+  if (BILLING_INTERVALS[lower]) return lower;
+  return lower;
+}
+
 export function priceFor(tierId, intervalId = 'monthly') {
   const plan = assertPlanTier(tierId);
   const interval = assertBillingInterval(intervalId);

@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { fromDirectPayBillingInterval, toDirectPayBillingInterval } from './plans.js';
 
 /**
  * DirectPay / EasyPay internal-partner API client.
@@ -7,6 +8,10 @@ import crypto from 'node:crypto';
  * and drives a CORPORATE platform subscription. Subscription payment happens in
  * DirectPay (guest invoice checkout); Field-Pro only issues/reads the pay link
  * and reacts to subscription.updated webhooks.
+ *
+ * All Terrafi tiers (basic / standard / unlimited) map to DirectPay planCode
+ * CORPORATE (or DIRECTPAY_DEFAULT_PLAN_CODE) so businesses start on the
+ * payable Corporate path, typically in TRIALING.
  */
 
 const ACTIVE_STATUSES = new Set(['TRIALING', 'ACTIVE', 'PAST_DUE']);
@@ -180,13 +185,18 @@ export async function getSubscription(businessId) {
 }
 
 export async function startSubscription(businessId, input = {}) {
+  const planCode = input.planCode?.trim() || 'CORPORATE';
+  const billingInterval = toDirectPayBillingInterval(
+    input.billingInterval || 'monthly'
+  );
+
   const json = await partnerJson(
     `/businesses/${encodeURIComponent(businessId)}/subscription`,
     {
       method: 'POST',
       body: {
-        planCode: input.planCode ?? 'CORPORATE',
-        billingInterval: input.billingInterval
+        planCode,
+        billingInterval
       }
     }
   );

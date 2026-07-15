@@ -176,6 +176,13 @@ export function BillingCard() {
         </div>
       )}
 
+      {sub.status === 'TRIALING' && (
+        <div className="mb-4 rounded-lg border border-apsBlue/20 bg-apsBlueLt/40 px-3 py-2 text-xs text-apsBlue">
+          Corporate subscription is on trial. Full access is available until the
+          trial ends. A payable invoice appears in DirectPay when billing is due.
+        </div>
+      )}
+
       {!data.configured && (
         <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
           DirectPay billing is not configured on this server yet. Set the{' '}
@@ -223,7 +230,9 @@ export function BillingCard() {
             )}
             Set up billing
           </button>
-        ) : sub.status !== 'ACTIVE' || sub.lockState === 'locked' || sub.lockState === 'grace' ? (
+        ) : sub.status === 'TRIALING' ? null : sub.status !== 'ACTIVE' ||
+          sub.lockState === 'locked' ||
+          sub.lockState === 'grace' ? (
           <button
             type="button"
             disabled={busy !== null}
