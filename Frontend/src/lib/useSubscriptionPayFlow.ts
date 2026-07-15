@@ -104,7 +104,7 @@ export function useSubscriptionPayFlow({
         } else if (err instanceof ApiError && err.status === 409) {
           toast.info('No payable invoice right now', {
             description:
-              'During trial, DirectPay often has no invoice yet. Use the app normally; pay when your first invoice appears.'
+              'DirectPay has no open invoice yet. Tap Refresh shortly, or open billing again from Settings.'
           });
           startPolling();
           return;

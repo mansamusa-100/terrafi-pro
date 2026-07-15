@@ -25,7 +25,7 @@ function messageFor(sub: BillingStatus['subscription']): string {
   }
   switch (sub.status) {
     case 'TRIALING':
-      return 'Your Corporate plan is on trial. You can use Terrafi Pro fully until the trial ends — pay when your first invoice is ready.';
+      return 'You are on a trial. Pay your Corporate invoice in DirectPay anytime to activate billing.';
     case 'PAST_DUE':
       return 'Your subscription payment is past due. Pay now to avoid interruption.';
     case 'EXPIRED':
@@ -92,12 +92,7 @@ export function SubscriptionBanner() {
   if (!canManage || !status || !status.configured || dismissed) return null;
 
   const sub = status.subscription;
-  // Trialing + Active with open lock = fine; no nag banner.
-  if (
-    (sub.status === 'ACTIVE' || sub.status === 'TRIALING') &&
-    sub.lockState !== 'grace' &&
-    sub.lockState !== 'locked'
-  ) {
+  if (sub.status === 'ACTIVE' && sub.lockState !== 'grace' && sub.lockState !== 'locked') {
     return null;
   }
 
