@@ -108,7 +108,7 @@ export function priceFor(tierId, intervalId = 'monthly') {
   return plan.monthlyPriceGmd * interval.months;
 }
 
-export function nextUpgradeTier(currentTierId) {
+export function nextUpgradeTiers(currentTierId) {
   const idx = PLAN_TIER_ORDER.indexOf(String(currentTierId || '').toLowerCase());
   if (idx < 0) return PLAN_TIER_ORDER.map((id) => PLAN_TIERS[id]);
   return PLAN_TIER_ORDER.slice(idx + 1).map((id) => PLAN_TIERS[id]);
