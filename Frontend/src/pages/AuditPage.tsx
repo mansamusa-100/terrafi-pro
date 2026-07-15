@@ -10,6 +10,7 @@ import { cn } from '../lib/utils';
 
 const ACTION_LABELS: Record<string, string> = {
   'user.invited': 'User invited',
+  'user.password_reset': 'Password reset',
   'user.role_updated': 'Role updated',
   'user.updated': 'User updated',
   'company.registered': 'Company registered',
@@ -28,6 +29,7 @@ const ACTION_FILTERS = [
   { value: 'company.registered', label: 'Registrations' },
   { value: 'company.status_changed', label: 'Status changes' },
   { value: 'user.invited', label: 'Invites' },
+  { value: 'user.password_reset', label: 'Password resets' },
   { value: 'user.role_updated', label: 'Role changes' },
   { value: 'user.updated', label: 'User updates' }
 ];

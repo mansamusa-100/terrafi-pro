@@ -22,15 +22,16 @@ export function isEmailDeliveryConfigured() {
 }
 
 /**
- * Log invite credentials to the server console when email cannot deliver them.
+ * Log temporary credentials to the server console when email cannot deliver them.
  * Also returns metadata for audit / API responses.
  */
-export function logInviteCredentials({
+export function logTemporaryCredentials({
   user,
   actor,
   company = null,
   temporaryPassword = null,
-  passwordReused = false
+  passwordReused = false,
+  purpose = 'invite'
 }) {
   const emailConfigured = isEmailDeliveryConfigured();
   const credentialDelivery = passwordReused
@@ -39,11 +40,16 @@ export function logInviteCredentials({
       ? 'email'
       : 'log_only';
 
+  const title =
+    purpose === 'password_reset'
+      ? 'Terrafi Pro — password reset'
+      : 'Terrafi Pro — user invited';
+
   if (!emailConfigured || passwordReused) {
     const lines = [
       '',
       '══════════════════════════════════════════════════════════',
-      ' Terrafi Pro — user invited',
+      ` ${title}`,
       '══════════════════════════════════════════════════════════',
       `  Name:            ${user.name}`,
       `  Email:           ${user.email}`,
@@ -52,13 +58,17 @@ export function logInviteCredentials({
         ? '  Credentials:     Existing password reused (notify other workspaces)'
         : `  Temporary password: ${temporaryPassword}`,
       `  User ID:         ${user.id}`,
-      `  Invited by:      ${actor.name} <${actor.email}>`,
+      purpose === 'password_reset'
+        ? `  Reset by:        ${actor.name} <${actor.email}>`
+        : `  Invited by:      ${actor.name} <${actor.email}>`,
       company
         ? `  Company:         ${company.name} (${company.id})`
         : '  Company:         Platform',
       passwordReused
         ? '  User can switch workspace after signing in.'
-        : '  Share these credentials with the user manually.',
+        : purpose === 'password_reset'
+          ? '  Share this temporary password with the user. They must set a new one on sign-in.'
+          : '  Share these credentials with the user manually.',
       '══════════════════════════════════════════════════════════',
       ''
     ];
@@ -70,4 +80,9 @@ export function logInviteCredentials({
     emailConfigured,
     passwordReused
   };
+}
+
+/** @deprecated Use logTemporaryCredentials — kept for existing invite call sites. */
+export function logInviteCredentials(opts) {
+  return logTemporaryCredentials({ ...opts, purpose: 'invite' });
 }

@@ -93,9 +93,8 @@ export function resolveInviteCredentials(existingUsers) {
 }
 
 /** Keep one password across every membership for the same email. */
-export async function syncPasswordAcrossEmail(email, passwordHash, { activateInvited = false } = {}) {
+export async function syncPasswordAcrossEmail(email, passwordHash, { activateInvited = false, forceInvited = false } = {}) {
   const normalized = normalizeEmail(email);
-  const data = { passwordHash };
   if (activateInvited) {
     return prisma.user.updateMany({
       where: {
@@ -105,12 +104,21 @@ export async function syncPasswordAcrossEmail(email, passwordHash, { activateInv
       data: { passwordHash, status: 'active' }
     });
   }
+  if (forceInvited) {
+    return prisma.user.updateMany({
+      where: {
+        email: { equals: normalized, mode: 'insensitive' },
+        status: { in: ['active', 'invited'] }
+      },
+      data: { passwordHash, status: 'invited' }
+    });
+  }
   return prisma.user.updateMany({
     where: {
       email: { equals: normalized, mode: 'insensitive' },
       status: { in: ['active', 'invited'] }
     },
-    data
+    data: { passwordHash }
   });
 }
 

@@ -735,6 +735,17 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(body)
     }),
+  resetUserPassword: (email: string) =>
+    request<
+      CompanyUser & {
+        temporaryPassword?: string;
+        credentialDelivery?: 'log_only' | 'email' | 'reused_existing';
+        message?: string;
+      }
+    >(`/users/${encodeURIComponent(email)}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({})
+    }),
   audit: (opts?: { limit?: number; action?: string }) => {
     const params = new URLSearchParams();
     if (opts?.limit != null) params.set('limit', String(opts.limit));

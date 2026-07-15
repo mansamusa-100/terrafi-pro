@@ -4,16 +4,18 @@ import { prisma } from '../lib/prisma.js';
 import { companyFilter } from '../middleware/user.js';
 import { requireRoles } from '../middleware/auth.js';
 import { logAudit, isPlatformRole, PLATFORM_ROLES, COMPANY_ROLES } from '../lib/audit.js';
-import { notifyMembershipAdded } from '../lib/notifications.js';
+import { notifyMembershipAdded, notifyPasswordReset } from '../lib/notifications.js';
 import { loadSupervisedAdrs, setSupervisedAdrs } from '../lib/team-lead.js';
 import {
   generateTemporaryPassword,
-  logInviteCredentials
+  logInviteCredentials,
+  logTemporaryCredentials
 } from '../lib/invite-credentials.js';
 import {
   findInviteEmailConflict,
   findUsersByEmail,
-  resolveInviteCredentials
+  resolveInviteCredentials,
+  syncPasswordAcrossEmail
 } from '../lib/user-email.js';
 import { assertCompanyHasSeatCapacity } from '../lib/company-billing.js';
 
@@ -249,6 +251,16 @@ router.patch(
         if (!COMPANY_ROLES.includes(role)) {
           return res.status(400).json({ error: 'Invalid company role' });
         }
+        if (user.role === 'manager') {
+          return res.status(400).json({
+            error: 'Network manager role cannot be changed'
+          });
+        }
+        if (role === 'manager' && user.role !== 'manager') {
+          return res.status(400).json({
+            error: 'Cannot promote users to network manager. Invite a new manager instead.'
+          });
+        }
       }
 
       const updated = await prisma.user.update({
@@ -344,6 +356,11 @@ router.patch(
         if (user.role === 'system_owner' && req.body.status !== 'active') {
           return res.status(400).json({ error: 'Cannot suspend system owner' });
         }
+        if (user.role === 'manager' && req.body.status !== user.status) {
+          return res.status(400).json({
+            error: 'Network manager status cannot be changed'
+          });
+        }
         data.status = req.body.status;
       }
 
@@ -374,6 +391,91 @@ router.patch(
       });
 
       res.json(await mapUser(updated));
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * Manager / system owner: issue a new temporary password (invite-style).
+ * User must sign in and set a personal password.
+ */
+router.post(
+  '/:email/reset-password',
+  requireRoles('system_owner', 'manager'),
+  async (req, res, next) => {
+    try {
+      const user = await findUserInScope(req, req.params.email);
+      if (!user) return res.status(404).json({ error: 'User not found' });
+
+      if (user.id === req.user.id) {
+        return res.status(400).json({
+          error: 'Use Change password for your own account'
+        });
+      }
+      if (user.role === 'system_owner') {
+        return res.status(403).json({ error: 'Cannot reset system owner password' });
+      }
+
+      if (isPlatformRole(req.user.role)) {
+        if (user.companyId != null) {
+          return res.status(403).json({
+            error: 'Cannot reset company user passwords from platform'
+          });
+        }
+      } else if (user.companyId !== req.user.companyId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      const temporaryPassword = generateTemporaryPassword();
+      const passwordHash = bcrypt.hashSync(temporaryPassword, 10);
+      await syncPasswordAcrossEmail(user.email, passwordHash, {
+        forceInvited: true
+      });
+
+      const updated = await prisma.user.findUnique({ where: { id: user.id } });
+
+      const company = user.companyId
+        ? await prisma.company.findUnique({
+            where: { id: user.companyId },
+            select: { id: true, name: true }
+          })
+        : null;
+
+      const { credentialDelivery } = logTemporaryCredentials({
+        user: updated,
+        actor: req.user,
+        company,
+        temporaryPassword,
+        purpose: 'password_reset'
+      });
+
+      await notifyPasswordReset(updated, req.user).catch(() => null);
+
+      await logAudit({
+        scope: user.companyId ? 'company' : 'platform',
+        companyId: user.companyId,
+        actor: req.user,
+        action: 'user.password_reset',
+        entityType: 'user',
+        entityId: user.id,
+        details: {
+          email: user.email,
+          credentialDelivery,
+          ...(credentialDelivery === 'log_only' ? { temporaryPassword } : {})
+        }
+      });
+
+      res.json({
+        ...(await mapUser(updated)),
+        temporaryPassword,
+        credentialDelivery,
+        message:
+          credentialDelivery === 'log_only'
+            ? 'Temporary password generated. Share it with the user — it is also logged in the server console and audit log.'
+            : 'Temporary password generated. Share it with the user so they can sign in and set a new password.'
+      });
     } catch (err) {
       next(err);
     }

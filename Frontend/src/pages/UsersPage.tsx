@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { UserPlus, Shield, X, Pencil } from 'lucide-react';
+import { UserPlus, Shield, X, Pencil, KeyRound } from 'lucide-react';
 import { MetricCard } from '../components/MetricCard';
 import { ROLE_META, Role, can } from '../lib/rbac';
 import { avatarColor, initials } from '../lib/data';
@@ -31,8 +31,16 @@ const COMPANY_INVITE_ROLES: Role[] = [
   'agent',
   'teller'
 ];
+/** Roles that can be changed from the users table (manager is fixed). */
+const COMPANY_EDIT_ROLES: Role[] = [
+  'internal',
+  'team_lead',
+  'adr',
+  'agent',
+  'teller'
+];
 
-const DESKTOP_GRID = 'md:grid-cols-[2fr_1.5fr_1.5fr_1fr_0.5fr]';
+const DESKTOP_GRID = 'md:grid-cols-[2fr_1.5fr_1.5fr_1fr_auto]';
 const DESKTOP_GRID_NO_EDIT = 'md:grid-cols-[2fr_1.5fr_1.5fr_1fr]';
 
 function zoneLabel(u: CompanyUser) {
@@ -98,10 +106,17 @@ function UserStatusBadge({ status }: { status: string }) {
 
 export function UsersPage() {
   const { user } = useAuth();
-  const { users, updateUserRole, inviteUser, updateUser, updateSupervisedAdrs } =
-    useAppData();
+  const {
+    users,
+    updateUserRole,
+    inviteUser,
+    updateUser,
+    updateSupervisedAdrs,
+    resetUserPassword
+  } = useAppData();
   const adrUsers = users.filter((u) => u.role === 'adr' && u.id);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [resettingEmail, setResettingEmail] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState<CompanyUser | null>(null);
   const [editForm, setEditForm] = useState({
     name: '',
@@ -131,7 +146,16 @@ export function UsersPage() {
       ? can(user.role, 'managePlatformUsers')
       : can(user.role, 'editUsers'));
   const inviteRoles = isPlatform ? PLATFORM_INVITE_ROLES : COMPANY_INVITE_ROLES;
-  const editableRoles = isPlatform ? PLATFORM_INVITE_ROLES : COMPANY_INVITE_ROLES;
+  const editableRoles = isPlatform ? PLATFORM_INVITE_ROLES : COMPANY_EDIT_ROLES;
+  const canResetPasswords =
+    !!user &&
+    (user.role === 'manager' || user.role === 'system_owner');
+  const showUserActions = Boolean(canEditUsers || canResetPasswords);
+
+  const canResetUser = (u: CompanyUser) =>
+    canResetPasswords &&
+    u.role !== 'system_owner' &&
+    u.id !== user?.id;
 
   const {
     pageItems: pageUsers,
@@ -184,6 +208,34 @@ export function UsersPage() {
     toast.success('Role updated', {
       description: `${email} is now ${ROLE_META[role as Role].label}`
     });
+  };
+
+  const handleResetPassword = async (u: CompanyUser) => {
+    if (
+      !window.confirm(
+        `Reset password for ${u.name} (${u.email})?\n\nA temporary password will be generated — share it with them so they can sign in and set a new one.`
+      )
+    ) {
+      return;
+    }
+    setResettingEmail(u.email);
+    try {
+      const result = await resetUserPassword(u.email);
+      toast.success('Password reset', {
+        description: result.temporaryPassword
+          ? `${result.email} — temp password: ${result.temporaryPassword}${
+              result.credentialDelivery === 'log_only'
+                ? ' (also logged in backend console & audit)'
+                : ''
+            }`
+          : result.message || result.email,
+        duration: 15000
+      });
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Password reset failed');
+    } finally {
+      setResettingEmail(null);
+    }
   };
 
   const submitInvite = async (e: React.FormEvent) => {
@@ -300,10 +352,12 @@ export function UsersPage() {
           <div
             className={cn(
               'grid gap-4 pb-3 mb-2 border-b border-slate-200',
-              canEditUsers ? DESKTOP_GRID : DESKTOP_GRID_NO_EDIT
+              showUserActions ? DESKTOP_GRID : DESKTOP_GRID_NO_EDIT
             )}>
-            {[...['User', 'Zone / scope', 'Role', 'Status'], ...(canEditUsers ? [''] : [])].map(
-              (h, i) => (
+            {[
+              ...['User', 'Zone / scope', 'Role', 'Status'],
+              ...(showUserActions ? [''] : [])
+            ].map((h, i) => (
                 <div
                   key={h || `col-${i}`}
                   className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
@@ -315,13 +369,14 @@ export function UsersPage() {
 
           {pageUsers.map((u) => {
             const ac = avatarColor(u.name);
-            const roleLocked = u.role === 'system_owner';
+            const roleLocked =
+              u.role === 'system_owner' || u.role === 'manager';
             return (
               <div
                 key={u.id || u.email}
                 className={cn(
                   'grid gap-4 py-3 border-b border-slate-100 last:border-0 items-center',
-                  canEditUsers ? DESKTOP_GRID : DESKTOP_GRID_NO_EDIT
+                  showUserActions ? DESKTOP_GRID : DESKTOP_GRID_NO_EDIT
                 )}>
                 <div className="flex items-center gap-3 min-w-0">
                   <div
@@ -349,14 +404,28 @@ export function UsersPage() {
                   />
                 </div>
                 <UserStatusBadge status={u.status} />
-                {canEditUsers && u.role !== 'manager' && (
-                  <button
-                    type="button"
-                    title="Edit user"
-                    onClick={() => openEdit(u)}
-                    className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500">
-                    <Pencil className="w-4 h-4" />
-                  </button>
+                {showUserActions && (
+                  <div className="flex items-center justify-end gap-0.5">
+                    {canResetUser(u) && (
+                      <button
+                        type="button"
+                        title="Reset password"
+                        disabled={resettingEmail === u.email}
+                        onClick={() => handleResetPassword(u)}
+                        className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 disabled:opacity-50">
+                        <KeyRound className="w-4 h-4" />
+                      </button>
+                    )}
+                    {canEditUsers && u.role !== 'manager' && (
+                      <button
+                        type="button"
+                        title="Edit user"
+                        onClick={() => openEdit(u)}
+                        className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500">
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             );
@@ -370,7 +439,8 @@ export function UsersPage() {
           ) : (
             pageUsers.map((u) => {
               const ac = avatarColor(u.name);
-              const roleLocked = u.role === 'system_owner';
+              const roleLocked =
+                u.role === 'system_owner' || u.role === 'manager';
               return (
                 <div
                   key={u.id || u.email}
@@ -390,15 +460,27 @@ export function UsersPage() {
                       </div>
                       <div className="text-xs text-slate-500 truncate mt-0.5">{u.email}</div>
                     </div>
-                    {canEditUsers && u.role !== 'manager' && (
-                      <button
-                        type="button"
-                        title="Edit user"
-                        onClick={() => openEdit(u)}
-                        className="p-2 rounded-lg hover:bg-white text-slate-500 shrink-0">
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                    )}
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      {canResetUser(u) && (
+                        <button
+                          type="button"
+                          title="Reset password"
+                          disabled={resettingEmail === u.email}
+                          onClick={() => handleResetPassword(u)}
+                          className="p-2 rounded-lg hover:bg-white text-slate-500 disabled:opacity-50">
+                          <KeyRound className="w-4 h-4" />
+                        </button>
+                      )}
+                      {canEditUsers && u.role !== 'manager' && (
+                        <button
+                          type="button"
+                          title="Edit user"
+                          onClick={() => openEdit(u)}
+                          className="p-2 rounded-lg hover:bg-white text-slate-500">
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 text-xs">
@@ -606,16 +688,22 @@ export function UsersPage() {
                 <label className="text-xs font-semibold text-slate-600 mb-1 block">
                   Status
                 </label>
-                <select
-                  value={editForm.status}
-                  onChange={(e) =>
-                    setEditForm((f) => ({ ...f, status: e.target.value }))
-                  }
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm">
-                  <option value="active">Active</option>
-                  <option value="invited">Invited</option>
-                  <option value="suspended">Suspended</option>
-                </select>
+                {editTarget.role === 'manager' ? (
+                  <div className="px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm text-slate-600">
+                    Active (manager status cannot be changed)
+                  </div>
+                ) : (
+                  <select
+                    value={editForm.status}
+                    onChange={(e) =>
+                      setEditForm((f) => ({ ...f, status: e.target.value }))
+                    }
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm">
+                    <option value="active">Active</option>
+                    <option value="invited">Invited</option>
+                    <option value="suspended">Suspended</option>
+                  </select>
+                )}
               </div>
               {!isPlatform && editTarget.role === 'team_lead' && (
                 <div>

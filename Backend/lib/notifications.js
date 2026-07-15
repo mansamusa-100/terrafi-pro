@@ -296,6 +296,18 @@ export async function notifyUserInvited(user, actor) {
   });
 }
 
+export async function notifyPasswordReset(user, actor) {
+  await notifyUser({
+    userId: user.id,
+    companyId: user.companyId,
+    type: 'user.password_reset',
+    title: 'Password reset',
+    body: `${actor.name} reset your password. Sign in with the temporary password they shared, then choose a new one.`,
+    entityType: 'user',
+    entityId: user.id
+  });
+}
+
 /** Notify every other membership for this email that a new workspace was added. */
 export async function notifyMembershipAdded(user, actor, companyName) {
   const siblings = await prisma.user.findMany({

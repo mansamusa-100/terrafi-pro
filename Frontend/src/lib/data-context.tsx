@@ -94,6 +94,13 @@ interface AppDataContextValue {
       credentialDelivery?: string;
     }
   >;
+  resetUserPassword: (email: string) => Promise<
+    CompanyUser & {
+      temporaryPassword?: string;
+      message?: string;
+      credentialDelivery?: string;
+    }
+  >;
   importAgents: (csv: string) => Promise<BulkImportResult>;
   bulkUploadKyc: (files: File[]) => Promise<BulkKycResult>;
   updateAgent: (id: string, body: Record<string, unknown>) => Promise<void>;
@@ -463,6 +470,15 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     [refresh]
   );
 
+  const resetUserPassword = useCallback(
+    async (email: string) => {
+      const result = await api.resetUserPassword(email);
+      await refresh();
+      return result;
+    },
+    [refresh]
+  );
+
   const importAgents = useCallback(
     async (csv: string) => {
       const result = await api.agents.importCsv(csv);
@@ -570,6 +586,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         logVisit,
         updateUserRole,
         inviteUser,
+        resetUserPassword,
         importAgents,
         bulkUploadKyc,
         updateUser,
