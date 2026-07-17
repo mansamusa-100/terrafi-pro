@@ -41,6 +41,44 @@ async function findUserInScope(req, email) {
   });
 }
 
+/** Resolve target user for password reset (manager or system owner). */
+async function findUserForPasswordReset(req, email) {
+  const normalized = email.trim().toLowerCase();
+
+  if (req.user.role === 'system_owner') {
+    const companyId = req.body?.companyId?.trim() || req.query?.companyId?.trim();
+    if (companyId) {
+      return prisma.user.findFirst({
+        where: {
+          email: { equals: normalized, mode: 'insensitive' },
+          companyId,
+          role: 'manager'
+        }
+      });
+    }
+    return prisma.user.findFirst({
+      where: {
+        email: { equals: normalized, mode: 'insensitive' },
+        companyId: null,
+        role: { not: 'system_owner' }
+      }
+    });
+  }
+
+  if (req.user.role === 'manager') {
+    if (!req.user.companyId) return null;
+    return prisma.user.findFirst({
+      where: {
+        email: { equals: normalized, mode: 'insensitive' },
+        companyId: req.user.companyId,
+        role: { not: 'manager' }
+      }
+    });
+  }
+
+  return null;
+}
+
 async function mapUser(u) {
   const base = {
     id: u.id,
@@ -399,15 +437,23 @@ router.patch(
 
 /**
  * Manager / system owner: issue a new temporary password (invite-style).
- * User must sign in and set a personal password.
+ * System owner may reset a company's network manager (pass companyId in body).
  */
 router.post(
   '/:email/reset-password',
   requireRoles('system_owner', 'manager'),
   async (req, res, next) => {
     try {
-      const user = await findUserInScope(req, req.params.email);
-      if (!user) return res.status(404).json({ error: 'User not found' });
+      const user = await findUserForPasswordReset(req, req.params.email);
+      if (!user) {
+        const companyId = req.body?.companyId?.trim();
+        if (req.user.role === 'system_owner' && companyId) {
+          return res.status(404).json({
+            error: 'Network manager not found for this company'
+          });
+        }
+        return res.status(404).json({ error: 'User not found' });
+      }
 
       if (user.id === req.user.id) {
         return res.status(400).json({
@@ -418,13 +464,7 @@ router.post(
         return res.status(403).json({ error: 'Cannot reset system owner password' });
       }
 
-      if (isPlatformRole(req.user.role)) {
-        if (user.companyId != null) {
-          return res.status(403).json({
-            error: 'Cannot reset company user passwords from platform'
-          });
-        }
-      } else if (user.companyId !== req.user.companyId) {
+      if (req.user.role === 'manager' && user.companyId !== req.user.companyId) {
         return res.status(403).json({ error: 'Access denied' });
       }
 
@@ -462,6 +502,8 @@ router.post(
         entityId: user.id,
         details: {
           email: user.email,
+          role: user.role,
+          resetByPlatformOwner: req.user.role === 'system_owner' && Boolean(user.companyId),
           credentialDelivery,
           ...(credentialDelivery === 'log_only' ? { temporaryPassword } : {})
         }

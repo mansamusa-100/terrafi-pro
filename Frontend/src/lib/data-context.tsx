@@ -94,7 +94,7 @@ interface AppDataContextValue {
       credentialDelivery?: string;
     }
   >;
-  resetUserPassword: (email: string) => Promise<
+  resetUserPassword: (email: string, opts?: { companyId?: string }) => Promise<
     CompanyUser & {
       temporaryPassword?: string;
       message?: string;
@@ -471,8 +471,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   );
 
   const resetUserPassword = useCallback(
-    async (email: string) => {
-      const result = await api.resetUserPassword(email);
+    async (email: string, opts?: { companyId?: string }) => {
+      const result = await api.resetUserPassword(email, opts);
       await refresh();
       return result;
     },

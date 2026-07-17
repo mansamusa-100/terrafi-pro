@@ -736,7 +736,7 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(body)
     }),
-  resetUserPassword: (email: string) =>
+  resetUserPassword: (email: string, opts?: { companyId?: string }) =>
     request<
       CompanyUser & {
         temporaryPassword?: string;
@@ -745,7 +745,7 @@ export const api = {
       }
     >(`/users/${encodeURIComponent(email)}/reset-password`, {
       method: 'POST',
-      body: JSON.stringify({})
+      body: JSON.stringify({ companyId: opts?.companyId })
     }),
   audit: (opts?: { limit?: number; action?: string }) => {
     const params = new URLSearchParams();

@@ -3,12 +3,12 @@ import {
   X,
   Building2,
   Users,
-  MapPin,
   CreditCard,
   ScrollText,
   Loader2,
   Ban,
-  CheckCircle2
+  CheckCircle2,
+  KeyRound
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api, ApiError, CompanyDetail } from '../lib/api';
@@ -45,11 +45,13 @@ function formatWhen(iso: string) {
 
 export function CompanyDrawer({ companyId, onClose }: CompanyDrawerProps) {
   const { user } = useAuth();
-  const { updateCompanyStatus } = useAppData();
+  const { updateCompanyStatus, resetUserPassword } = useAppData();
   const canManageStatus = user ? can(user.role, 'manageCompanyStatus') : false;
+  const canResetManagerPassword = user?.role === 'system_owner';
   const [detail, setDetail] = useState<CompanyDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [resettingEmail, setResettingEmail] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -86,6 +88,37 @@ export function CompanyDrawer({ companyId, onClose }: CompanyDrawerProps) {
       toast.error(e instanceof ApiError ? e.message : 'Update failed');
     } finally {
       setBusy(false);
+    }
+  };
+
+  const resetManagerPassword = async (managerEmail: string, managerName: string) => {
+    if (!detail) return;
+    if (
+      !window.confirm(
+        `Reset password for ${managerName} (${managerEmail}) at ${detail.name}?\n\nA temporary password will be generated — share it with them so they can sign in and set a new one.`
+      )
+    ) {
+      return;
+    }
+    setResettingEmail(managerEmail);
+    try {
+      const result = await resetUserPassword(managerEmail, {
+        companyId: detail.id
+      });
+      toast.success('Manager password reset', {
+        description: result.temporaryPassword
+          ? `${result.email} — temp password: ${result.temporaryPassword}${
+              result.credentialDelivery === 'log_only'
+                ? ' (also logged in backend console & audit)'
+                : ''
+            }`
+          : result.message || result.email,
+        duration: 15000
+      });
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Password reset failed');
+    } finally {
+      setResettingEmail(null);
     }
   };
 
@@ -231,9 +264,21 @@ export function CompanyDrawer({ companyId, onClose }: CompanyDrawerProps) {
                           </div>
                           <div className="text-slate-500 truncate">{u.email}</div>
                         </div>
-                        <span className="shrink-0 text-[10px] font-semibold text-slate-600">
-                          {ROLE_META[u.role as keyof typeof ROLE_META]?.short || u.role}
-                        </span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="text-[10px] font-semibold text-slate-600">
+                            {ROLE_META[u.role as keyof typeof ROLE_META]?.short || u.role}
+                          </span>
+                          {canResetManagerPassword && u.role === 'manager' && (
+                            <button
+                              type="button"
+                              title="Reset manager password"
+                              disabled={resettingEmail === u.email}
+                              onClick={() => resetManagerPassword(u.email, u.name)}
+                              className="p-1 rounded hover:bg-slate-100 text-slate-500 disabled:opacity-50">
+                              <KeyRound className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
