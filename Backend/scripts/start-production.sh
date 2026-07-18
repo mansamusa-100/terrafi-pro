@@ -60,6 +60,21 @@ while [ "$i" -le "$TRIES" ]; do
     continue
   fi
 
+  if echo "$OUTPUT" | grep -qiE 'P1000|password authentication failed|Authentication failed'; then
+    echo ""
+    echo "ERROR: Database authentication failed."
+    echo "DATABASE_URL username/password does not match your Postgres container."
+    echo ""
+    echo "Coolify fix:"
+    echo "  1. Open your Postgres resource → copy the Internal Connection URL"
+    echo "  2. Paste it into the app Environment as DATABASE_URL (exact password)"
+    echo "  3. Redeploy the app"
+    echo ""
+    echo "If you changed POSTGRES_PASSWORD after the DB volume was created,"
+    echo "reset the password inside Postgres or recreate the database volume."
+    exit 1
+  fi
+
   echo "Migration failed. Retrying in ${SLEEP}s..."
   sleep "$SLEEP"
   i=$((i + 1))

@@ -38,7 +38,7 @@ async function request<T>(
     res = await fetch(`/api${path}`, { ...options, headers });
   } catch {
     throw new ApiError(
-      'Cannot reach the server. Start the backend with npm run dev in the Backend folder.',
+      'Cannot reach the server. The API may be down — check that the backend is running and connected to the database.',
       0
     );
   }
