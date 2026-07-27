@@ -106,13 +106,15 @@ export function CompanyDrawer({ companyId, onClose }: CompanyDrawerProps) {
         companyId: detail.id
       });
       toast.success('Manager password reset', {
-        description: result.temporaryPassword
-          ? `${result.email} — temp password: ${result.temporaryPassword}${
-              result.credentialDelivery === 'log_only'
-                ? ' (also logged in backend console & audit)'
-                : ''
-            }`
-          : result.message || result.email,
+        description: result.credentialDelivery === 'email'
+          ? `${result.email} — temporary password emailed`
+          : result.temporaryPassword
+            ? `${result.email} — temp password: ${result.temporaryPassword}${
+                result.credentialDelivery === 'log_only'
+                  ? ' (also logged in backend console & audit)'
+                  : ''
+              }`
+            : result.message || result.email,
         duration: 15000
       });
     } catch (e) {

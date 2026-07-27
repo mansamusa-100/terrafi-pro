@@ -13,6 +13,8 @@ import {
   directPayPlanCodeForTier,
   priceFor
 } from '../lib/plans.js';
+import { sendCompanyWelcomeEmail } from '../lib/email.js';
+import { assertPasswordPolicy } from '../lib/password-policy.js';
 
 const router = Router();
 
@@ -41,8 +43,10 @@ router.post('/register-company', async (req, res, next) => {
         error: 'Company name, admin name, email, and password are required'
       });
     }
-    if (password.length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    try {
+      assertPasswordPolicy(password);
+    } catch (err) {
+      return res.status(err.status || 400).json({ error: err.message });
     }
 
     let plan;
@@ -118,6 +122,14 @@ router.post('/register-company', async (req, res, next) => {
     await notifyCompanyRegistered(result.company);
     await getOrCreateCompanySettings(result.company.id);
     await ensureDefaultTrainingModules(result.company.id);
+
+    sendCompanyWelcomeEmail({
+      user: result.user,
+      company: result.company,
+      planName: plan.name
+    }).catch((err) =>
+      console.warn('[register] welcome email failed:', err?.message || err)
+    );
 
     // Self-service DirectPay setup: provision + start CORPORATE + pay link.
     // Cap wait time so slow DirectPay never blocks registration for long.

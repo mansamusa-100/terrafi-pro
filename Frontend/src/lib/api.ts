@@ -38,7 +38,7 @@ async function request<T>(
     res = await fetch(`/api${path}`, { ...options, headers });
   } catch {
     throw new ApiError(
-      'Cannot reach the server. The API may be down — check that the backend is running and connected to the database.',
+      'Connection failed. Check your internet and try again.',
       0
     );
   }

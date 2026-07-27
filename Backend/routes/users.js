@@ -8,8 +8,7 @@ import { notifyMembershipAdded, notifyPasswordReset } from '../lib/notifications
 import { loadSupervisedAdrs, setSupervisedAdrs } from '../lib/team-lead.js';
 import {
   generateTemporaryPassword,
-  logInviteCredentials,
-  logTemporaryCredentials
+  deliverTemporaryCredentials
 } from '../lib/invite-credentials.js';
 import {
   findInviteEmailConflict,
@@ -217,12 +216,13 @@ router.post('/invite', requireRoles('system_owner', 'platform_staff', 'manager')
 
     await notifyMembershipAdded(user, req.user, company?.name || null);
 
-    const { credentialDelivery } = logInviteCredentials({
+    const { credentialDelivery, emailSent } = await deliverTemporaryCredentials({
       user,
       actor: req.user,
       company,
       temporaryPassword,
-      passwordReused: credentials.reuseExisting
+      passwordReused: credentials.reuseExisting,
+      purpose: 'invite'
     });
 
     await logAudit({
@@ -238,6 +238,7 @@ router.post('/invite', requireRoles('system_owner', 'platform_staff', 'manager')
         invitedName: user.name,
         credentialDelivery,
         passwordReused: credentials.reuseExisting,
+        emailSent: Boolean(emailSent),
         ...(credentialDelivery === 'log_only' && temporaryPassword
           ? { temporaryPassword }
           : {})
@@ -251,14 +252,20 @@ router.post('/invite', requireRoles('system_owner', 'platform_staff', 'manager')
       role: user.role,
       zone: user.zone,
       status: user.status,
-      temporaryPassword: temporaryPassword || undefined,
+      // Only return temp password when email was not delivered (manual share)
+      temporaryPassword:
+        credentialDelivery === 'log_only' ? temporaryPassword || undefined : undefined,
       credentialDelivery,
       passwordReused: credentials.reuseExisting,
       message: credentials.reuseExisting
         ? credentials.hasActiveAccount
-          ? 'Added to workspace. They keep their existing password and can switch after signing in.'
+          ? emailSent
+            ? 'Added to workspace. They were emailed a notice and can switch after signing in with their existing password.'
+            : 'Added to workspace. They keep their existing password and can switch after signing in.'
           : 'Added to workspace. They use the same temporary password as their other invite.'
-        : undefined
+        : credentialDelivery === 'email'
+          ? 'Invite sent by email with a temporary password.'
+          : undefined
     });
   } catch (err) {
     next(err);
@@ -483,7 +490,7 @@ router.post(
           })
         : null;
 
-      const { credentialDelivery } = logTemporaryCredentials({
+      const { credentialDelivery, emailSent } = await deliverTemporaryCredentials({
         user: updated,
         actor: req.user,
         company,
@@ -503,20 +510,25 @@ router.post(
         details: {
           email: user.email,
           role: user.role,
-          resetByPlatformOwner: req.user.role === 'system_owner' && Boolean(user.companyId),
+          resetByPlatformOwner:
+            req.user.role === 'system_owner' && Boolean(user.companyId),
           credentialDelivery,
+          emailSent: Boolean(emailSent),
           ...(credentialDelivery === 'log_only' ? { temporaryPassword } : {})
         }
       });
 
       res.json({
         ...(await mapUser(updated)),
-        temporaryPassword,
+        temporaryPassword:
+          credentialDelivery === 'log_only' ? temporaryPassword : undefined,
         credentialDelivery,
         message:
-          credentialDelivery === 'log_only'
-            ? 'Temporary password generated. Share it with the user — it is also logged in the server console and audit log.'
-            : 'Temporary password generated. Share it with the user so they can sign in and set a new password.'
+          credentialDelivery === 'email'
+            ? 'Temporary password emailed to the user. They must sign in and set a new password.'
+            : credentialDelivery === 'log_only'
+              ? 'Temporary password generated. Share it with the user — it is also logged in the server console and audit log.'
+              : 'Temporary password generated. Share it with the user so they can sign in and set a new password.'
       });
     } catch (err) {
       next(err);

@@ -333,12 +333,12 @@ export function LoginScreen({
                   </div>
                   <div>
                     <label className="text-xs font-semibold text-slate-600 mb-1.5 block">
-                      Password (min 6 characters)
+                      Password (min 8 characters)
                     </label>
                     <input
                       type="password"
                       required
-                      minLength={6}
+                      minLength={8}
                       value={registerForm.password}
                       onChange={(e) =>
                         setRegisterForm((f) => ({

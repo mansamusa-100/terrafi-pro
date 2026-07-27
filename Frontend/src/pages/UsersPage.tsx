@@ -222,13 +222,15 @@ export function UsersPage() {
     try {
       const result = await resetUserPassword(u.email);
       toast.success('Password reset', {
-        description: result.temporaryPassword
-          ? `${result.email} — temp password: ${result.temporaryPassword}${
-              result.credentialDelivery === 'log_only'
-                ? ' (also logged in backend console & audit)'
-                : ''
-            }`
-          : result.message || result.email,
+        description: result.credentialDelivery === 'email'
+          ? `${result.email} — temporary password emailed`
+          : result.temporaryPassword
+            ? `${result.email} — temp password: ${result.temporaryPassword}${
+                result.credentialDelivery === 'log_only'
+                  ? ' (also logged in backend console & audit)'
+                  : ''
+              }`
+            : result.message || result.email,
         duration: 15000
       });
     } catch (err) {
@@ -257,13 +259,11 @@ export function UsersPage() {
           description: created.passwordReused
             ? created.message ||
               `${created.email} keeps their password and can switch workspace after sign-in.`
-            : created.temporaryPassword
-              ? `${created.email} — temp password: ${created.temporaryPassword}${
-                  created.credentialDelivery === 'log_only'
-                    ? ' (also logged in backend console & audit)'
-                    : ''
-                }`
-              : created.email,
+            : created.credentialDelivery === 'email'
+              ? `${created.email} — invite emailed with a temporary password`
+              : created.temporaryPassword
+                ? `${created.email} — temp password: ${created.temporaryPassword} (email not sent; share manually)`
+                : created.message || created.email,
           duration: 12000
         }
       );

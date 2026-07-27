@@ -1,18 +1,24 @@
 import jwt from 'jsonwebtoken';
 import { assertUserMayAccess } from '../lib/subscription-lifecycle.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'field-pro-dev-secret';
+const JWT_SECRET =
+  process.env.JWT_SECRET ||
+  (process.env.NODE_ENV === 'production' ? '' : 'field-pro-dev-secret');
+
+if (process.env.NODE_ENV === 'production' && !JWT_SECRET) {
+  throw new Error('JWT_SECRET is required in production');
+}
 
 export function signToken(user) {
   return jwt.sign(
     { sub: user.id, role: user.role, companyId: user.companyId ?? user.company_id },
     JWT_SECRET,
-    { expiresIn: '7d' }
+    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
   );
 }
 
 export function verifyToken(token) {
-  return jwt.verify(token, JWT_SECRET);
+  return jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
 }
 
 export function authMiddleware(req, res, next) {

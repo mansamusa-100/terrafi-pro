@@ -77,9 +77,9 @@ export async function handleAgentFloatDelivery(req, res, next) {
       const plaintext = decryptPayload(encryptedPayload, encryptionKey);
       inner = JSON.parse(plaintext);
     } catch (err) {
+      console.warn('[float-ingest] decrypt/parse failed:', err.message);
       return res.status(400).json({
-        message: 'Failed to decrypt or parse payload',
-        detail: err.message
+        message: 'Failed to decrypt or parse payload'
       });
     }
 

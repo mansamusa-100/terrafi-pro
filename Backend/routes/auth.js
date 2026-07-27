@@ -15,6 +15,7 @@ import {
   syncPasswordAcrossEmail,
   usersMatchingPassword
 } from '../lib/user-email.js';
+import { assertPasswordPolicy } from '../lib/password-policy.js';
 
 const router = Router();
 
@@ -161,10 +162,10 @@ router.post('/change-password', authMiddleware, loadUser, async (req, res, next)
         error: 'Current password and new password are required'
       });
     }
-    if (newPassword.length < 6) {
-      return res.status(400).json({
-        error: 'New password must be at least 6 characters'
-      });
+    try {
+      assertPasswordPolicy(newPassword);
+    } catch (err) {
+      return res.status(err.status || 400).json({ error: err.message });
     }
     if (currentPassword === newPassword) {
       return res.status(400).json({
@@ -214,6 +215,14 @@ router.post('/change-password', authMiddleware, loadUser, async (req, res, next)
 
 router.get('/demo-users', async (_req, res, next) => {
   try {
+    // Never expose account enumeration in production
+    if (
+      process.env.NODE_ENV === 'production' ||
+      process.env.ENABLE_DEMO_USERS !== 'true'
+    ) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+
     const order = [
       'system_owner',
       'platform_staff',
