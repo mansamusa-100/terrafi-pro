@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Plus, Users, Upload, FileSpreadsheet, Navigation } from 'lucide-react';
+import { Plus, Users, Upload, FileSpreadsheet, Navigation, Search } from 'lucide-react';
 import { AgentCard } from '../components/AgentCard';
 import { OnboardingModal } from '../components/OnboardingModal';
 import { BulkImportModal } from '../components/BulkImportModal';
@@ -16,10 +16,11 @@ import { PAGE_SIZE, useClientPagination } from '../lib/useClientPagination';
 
 interface AgentsPageProps {
   searchQ: string;
+  setSearchQ: (q: string) => void;
   onAgentClick: (agent: Agent) => void;
 }
 
-export function AgentsPage({ searchQ, onAgentClick }: AgentsPageProps) {
+export function AgentsPage({ searchQ, setSearchQ, onAgentClick }: AgentsPageProps) {
   const { agents, createAgent } = useAppData();
   const { user } = useAuth();
   const { coords: userCoords } = useUserLocation();
@@ -48,7 +49,8 @@ export function AgentsPage({ searchQ, onAgentClick }: AgentsPageProps) {
           a.id.toLowerCase().includes(q) ||
           a.zone.toLowerCase().includes(q) ||
           (a.outlet_name?.toLowerCase().includes(q) ?? false) ||
-          (a.town_village?.toLowerCase().includes(q) ?? false)
+          (a.town_village?.toLowerCase().includes(q) ?? false) ||
+          (a.phone?.toLowerCase().includes(q) ?? false)
       );
     }
     return [...list].sort((a, b) => {
@@ -75,24 +77,37 @@ export function AgentsPage({ searchQ, onAgentClick }: AgentsPageProps) {
 
   return (
     <div className="page-pad">
-      <div className="flex flex-col gap-3 mb-5 sm:flex-row sm:flex-wrap sm:items-center">
-        <div className="flex bg-slate-100 rounded-lg p-1 gap-1 overflow-x-auto max-w-full">
-          {tabs.map(([id, label]) => (
-            <button
-              key={id}
-              onClick={() => setFilter(id)}
-              className={cn(
-                'px-3 py-1.5 rounded-md text-xs font-medium transition-all',
-                filter === id
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              )}>
-              {label}
-            </button>
-          ))}
+      <div className="flex flex-col gap-3 mb-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="flex bg-slate-100 rounded-lg p-1 gap-1 overflow-x-auto max-w-full">
+            {tabs.map(([id, label]) => (
+              <button
+                key={id}
+                onClick={() => setFilter(id)}
+                className={cn(
+                  'px-3 py-1.5 rounded-md text-xs font-medium transition-all',
+                  filter === id
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                )}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center bg-white border border-slate-200 rounded-lg px-3 py-1.5 gap-2 flex-1 min-w-[180px] max-w-sm sm:ml-auto">
+            <Search className="w-4 h-4 text-slate-400 shrink-0" />
+            <input
+              value={searchQ}
+              onChange={(e) => setSearchQ(e.target.value)}
+              placeholder="Search name, ID, zone, phone…"
+              aria-label="Search agents"
+              className="bg-transparent border-none outline-none text-xs text-slate-800 w-full placeholder:text-slate-400"
+            />
+          </div>
         </div>
 
-        <div className="flex flex-wrap gap-2 items-center sm:ml-auto">
+        <div className="flex flex-wrap gap-2 items-center">
           <span className="text-xs text-slate-500 font-medium">Sort by:</span>
           {[
             ['distance', 'Nearest'],

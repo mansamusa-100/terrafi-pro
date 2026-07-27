@@ -144,7 +144,13 @@ function AuthenticatedApp({
         />
       ),
     companies: <CompaniesPage onOpenCompany={setSelectedCompanyId} />,
-    agents: <AgentsPage searchQ={searchQ} onAgentClick={setSelectedAgent} />,
+    agents: (
+      <AgentsPage
+        searchQ={searchQ}
+        setSearchQ={setSearchQ}
+        onAgentClick={setSelectedAgent}
+      />
+    ),
     map: <MapPage setSelectedAgent={setSelectedAgent} />,
     visits: <VisitsPage />,
     float: <FloatPage />,

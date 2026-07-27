@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { UserPlus, Shield, X, Pencil, KeyRound } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { UserPlus, Shield, X, Pencil, KeyRound, Search } from 'lucide-react';
 import { MetricCard } from '../components/MetricCard';
 import { ROLE_META, Role, can } from '../lib/rbac';
 import { avatarColor, initials } from '../lib/data';
@@ -115,6 +115,8 @@ export function UsersPage() {
     resetUserPassword
   } = useAppData();
   const adrUsers = users.filter((u) => u.role === 'adr' && u.id);
+  const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState<'all' | Role>('all');
   const [inviteOpen, setInviteOpen] = useState(false);
   const [resettingEmail, setResettingEmail] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState<CompanyUser | null>(null);
@@ -157,13 +159,38 @@ export function UsersPage() {
     u.role !== 'system_owner' &&
     u.id !== user?.id;
 
+  const filteredUsers = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return users.filter((u) => {
+      if (roleFilter !== 'all' && u.role !== roleFilter) return false;
+      if (!q) return true;
+      const roleLabel = ROLE_META[u.role as Role]?.label?.toLowerCase() || '';
+      return (
+        u.name.toLowerCase().includes(q) ||
+        u.email.toLowerCase().includes(q) ||
+        (u.zone?.toLowerCase().includes(q) ?? false) ||
+        u.role.toLowerCase().includes(q) ||
+        roleLabel.includes(q)
+      );
+    });
+  }, [users, search, roleFilter]);
+
   const {
     pageItems: pageUsers,
     total: usersTotal,
     limit: usersLimit,
     offset: usersOffset,
     setOffset: setUsersOffset
-  } = useClientPagination(users, PAGE_SIZE.default);
+  } = useClientPagination(
+    filteredUsers,
+    PAGE_SIZE.compact,
+    `${roleFilter}|${search}`
+  );
+
+  const roleFilterOptions = useMemo(() => {
+    const roles = new Set(users.map((u) => u.role as Role));
+    return (Object.keys(ROLE_META) as Role[]).filter((r) => roles.has(r));
+  }, [users]);
 
   const openEdit = (u: CompanyUser) => {
     setEditTarget(u);
@@ -326,25 +353,58 @@ export function UsersPage() {
       </div>
 
       <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-          <div className="min-w-0">
-            <h3 className="text-sm font-semibold text-slate-900">
-              {isPlatform ? 'Platform users' : 'Company users & roles'}
-            </h3>
-            <p className="text-[11px] text-slate-500 mt-0.5">
-              {isPlatform
-                ? 'Invite platform staff only — companies register themselves'
-                : 'Invite users within your organisation'}
-            </p>
+        <div className="flex flex-col gap-3 mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold text-slate-900">
+                {isPlatform ? 'Platform users' : 'Company users & roles'}
+              </h3>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                {isPlatform
+                  ? 'Invite platform staff only — companies register themselves'
+                  : 'Invite users within your organisation'}
+              </p>
+            </div>
+            {canInvite && (
+              <button
+                onClick={() => setInviteOpen(true)}
+                className="flex items-center justify-center gap-2 px-4 py-2.5 sm:py-1.5 rounded-lg bg-navy text-white text-xs font-medium hover:bg-navyMid transition-colors shrink-0 w-full sm:w-auto">
+                <UserPlus className="w-4 h-4" />
+                Invite user
+              </button>
+            )}
           </div>
-          {canInvite && (
-            <button
-              onClick={() => setInviteOpen(true)}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 sm:py-1.5 rounded-lg bg-navy text-white text-xs font-medium hover:bg-navyMid transition-colors shrink-0 w-full sm:w-auto">
-              <UserPlus className="w-4 h-4" />
-              Invite user
-            </button>
-          )}
+          <div className="flex flex-col sm:flex-row flex-wrap gap-2">
+            <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 gap-2 flex-1 min-w-[180px] max-w-md">
+              <Search className="w-4 h-4 text-slate-400 shrink-0" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search name, email, zone…"
+                aria-label="Search users"
+                className="bg-transparent border-none outline-none text-xs text-slate-800 w-full placeholder:text-slate-400"
+              />
+            </div>
+            <select
+              value={roleFilter}
+              onChange={(e) =>
+                setRoleFilter(e.target.value as 'all' | Role)
+              }
+              aria-label="Filter by role"
+              className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700">
+              <option value="all">All roles</option>
+              {roleFilterOptions.map((r) => (
+                <option key={r} value={r}>
+                  {ROLE_META[r].label}
+                </option>
+              ))}
+            </select>
+            {(search.trim() || roleFilter !== 'all') && (
+              <p className="text-xs text-slate-500 self-center sm:ml-1">
+                {filteredUsers.length} of {users.length} users
+              </p>
+            )}
+          </div>
         </div>
 
         {/* Desktop table */}
@@ -367,7 +427,14 @@ export function UsersPage() {
             )}
           </div>
 
-          {pageUsers.map((u) => {
+          {filteredUsers.length === 0 ? (
+            <div className="py-12 text-center text-sm text-slate-500">
+              {users.length === 0
+                ? 'No users yet'
+                : 'No users match your search.'}
+            </div>
+          ) : (
+            pageUsers.map((u) => {
             const ac = avatarColor(u.name);
             const roleLocked =
               u.role === 'system_owner' || u.role === 'manager';
@@ -429,13 +496,18 @@ export function UsersPage() {
                 )}
               </div>
             );
-          })}
+          })
+          )}
         </div>
 
         {/* Mobile cards */}
         <div className="md:hidden space-y-3">
-          {users.length === 0 ? (
-            <p className="text-sm text-slate-500 text-center py-8">No users yet</p>
+          {filteredUsers.length === 0 ? (
+            <p className="text-sm text-slate-500 text-center py-8">
+              {users.length === 0
+                ? 'No users yet'
+                : 'No users match your search.'}
+            </p>
           ) : (
             pageUsers.map((u) => {
               const ac = avatarColor(u.name);
