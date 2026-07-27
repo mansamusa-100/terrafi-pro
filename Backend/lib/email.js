@@ -3,18 +3,66 @@ import { Resend } from 'resend';
 /**
  * Outbound email via Resend.
  * Requires RESEND_API_KEY and a verified domain on the From address.
+ *
+ * Prefer separate vars in Coolify (angle brackets break some env UIs):
+ *   RESEND_FROM_EMAIL=info@tarafipro.com
+ *   RESEND_FROM_NAME=Terrafi Pro
+ * Or a full RFC string:
+ *   RESEND_FROM_EMAIL=Terrafi Pro <info@tarafipro.com>
  */
 
 let client = null;
 
+const EMAIL_RE = /^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/;
+
+/** Strip quotes / normalize `Name <email>` or bare email for Resend. */
+export function normalizeFromAddress(raw, displayName = '') {
+  let value = String(raw || '')
+    .trim()
+    .replace(/^['"]|['"]$/g, '')
+    .trim();
+
+  // Already Name <email@domain>
+  const named = value.match(/^(.+?)\s*<([^>]+)>$/);
+  if (named) {
+    const name = named[1].trim().replace(/^['"]|['"]$/g, '');
+    const email = named[2].trim();
+    if (!EMAIL_RE.test(email)) {
+      throw new Error(`Invalid from email address: ${email}`);
+    }
+    return name ? `${name} <${email}>` : email;
+  }
+
+  // Bare email
+  if (EMAIL_RE.test(value)) {
+    const name = String(displayName || '')
+      .trim()
+      .replace(/^['"]|['"]$/g, '');
+    return name ? `${name} <${value}>` : value;
+  }
+
+  throw new Error(
+    `Invalid RESEND_FROM_EMAIL "${raw}". Use info@tarafipro.com or set RESEND_FROM_NAME + RESEND_FROM_EMAIL.`
+  );
+}
+
 export function getEmailConfig() {
   const apiKey = process.env.RESEND_API_KEY?.trim() || '';
-  const from =
-    process.env.RESEND_FROM_EMAIL?.trim() ||
-    'Terrafi Pro <info@tarafipro.com>';
+  const fromEmail =
+    process.env.RESEND_FROM_EMAIL?.trim() || 'info@reset.phantommetrics.gm';
+  const fromName =
+    process.env.RESEND_FROM_NAME?.trim() || 'Terrafi Pro';
+
+  let from = 'Terrafi Pro <info@reset.phantommetrics.gm>';
+  try {
+    from = normalizeFromAddress(fromEmail, fromName);
+  } catch (err) {
+    console.error('[email]', err.message);
+  }
+
   const appUrl = (
-    process.env.APP_PUBLIC_URL ||
     process.env.FRONTEND_URL ||
+    process.env.APP_PUBLIC_URL ||
     ''
   ).replace(/\/$/, '');
 
@@ -129,7 +177,11 @@ export async function sendEmail({ to, subject, html, text }) {
       text
     });
     if (error) {
-      console.error('[email] Resend error:', error.message || error);
+      console.error(
+        '[email] Resend error:',
+        error.message || error,
+        `(from=${JSON.stringify(from)})`
+      );
       return { ok: false, error: error.message || 'send_failed' };
     }
     return { ok: true, id: data?.id || null };
