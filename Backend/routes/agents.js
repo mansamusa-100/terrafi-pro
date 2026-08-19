@@ -16,6 +16,7 @@ import { KYC_DOC_TYPES, KYC_DOC_LABELS, parseKycFilename } from '../lib/kyc.js';
 import { syncKycStatus } from '../lib/kyc-status.js';
 import { notifyAgentOnboarded } from '../lib/notifications.js';
 import { logAgentOnboardedReport } from '../lib/notification-report.js';
+import { logAudit } from '../lib/audit.js';
 import { parseCsv, AGENT_IMPORT_TEMPLATE } from '../lib/csv.js';
 import { normalizePhone } from '../lib/phone.js';
 
@@ -421,6 +422,16 @@ router.post('/', requireRoles('manager', 'team_lead', 'adr'), async (req, res, n
     await notifyAgentOnboarded(agent, req.user);
     await logAgentOnboardedReport(agent, req.user);
 
+    await logAudit({
+      scope: 'company',
+      companyId,
+      actor: req.user,
+      action: 'agent.onboarded',
+      entityType: 'agent',
+      entityId: agent.id,
+      details: { name: agent.name, zone: agent.zone, officer: agent.officer }
+    });
+
     res.status(201).json(serializeAgent(agent));
   } catch (err) {
     if (err.code === 'P2002') {
@@ -549,6 +560,20 @@ router.post(
       });
 
       await syncKycStatus(agent.id);
+
+      await logAudit({
+        scope: 'company',
+        companyId: agent.companyId,
+        actor: req.user,
+        action: 'kyc.uploaded',
+        entityType: 'agent',
+        entityId: agent.id,
+        details: {
+          docType: doc.docType,
+          docLabel: KYC_DOC_LABELS[doc.docType] || doc.docType,
+          fileName: doc.fileName
+        }
+      });
 
       res.status(201).json({
         id: doc.id,

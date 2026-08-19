@@ -15,6 +15,8 @@ const ACTION_LABELS: Record<string, string> = {
   'user.updated': 'User updated',
   'company.registered': 'Company registered',
   'company.status_changed': 'Company status changed',
+  'agent.onboarded': 'Agent onboarded',
+  'kyc.uploaded': 'KYC uploaded',
   'kyc.approved': 'KYC approved',
   'kyc.rejected': 'KYC rejected',
   'visit.scheduled': 'Visit scheduled',
@@ -31,7 +33,9 @@ const ACTION_FILTERS = [
   { value: 'user.invited', label: 'Invites' },
   { value: 'user.password_reset', label: 'Password resets' },
   { value: 'user.role_updated', label: 'Role changes' },
-  { value: 'user.updated', label: 'User updates' }
+  { value: 'user.updated', label: 'User updates' },
+  { value: 'agent.onboarded', label: 'Agent onboarded' },
+  { value: 'kyc.uploaded', label: 'KYC uploads' }
 ];
 
 function formatAction(action: string) {
