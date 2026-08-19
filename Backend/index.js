@@ -25,6 +25,7 @@ import kycRoutes from './routes/kyc.js';
 import floatSyncRoutes from './routes/float-sync.js';
 import settingsRoutes from './routes/settings.js';
 import notificationsRoutes from './routes/notifications.js';
+import notificationReportsRoutes from './routes/notification-reports.js';
 import billingRoutes from './routes/billing.js';
 import platformRoutes from './routes/platform.js';
 import performanceRoutes from './routes/performance.js';
@@ -174,6 +175,7 @@ app.use('/api/performance', performanceRoutes);
 app.use('/api/export', exportsRoutes);
 app.use('/api/kyc', kycRoutes);
 app.use('/api/notifications', notificationsRoutes);
+app.use('/api/notification-reports', notificationReportsRoutes);
 app.use('/api', dataRoutes);
 
 if (isProd) {

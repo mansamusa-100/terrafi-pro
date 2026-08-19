@@ -14,14 +14,15 @@ import {
   Loader2,
   CheckCircle2,
   AlertCircle,
-  Navigation
+  Navigation,
+  Eye
 } from 'lucide-react';
 import { STATUS_META, fmt } from '../lib/data';
 import { cn } from '../lib/utils';
 import { ProgressBar } from './ProgressBar';
 import { api, Agent, AgentDetail } from '../lib/api';
 import { KYC_DOCS, isMultiPageKycDoc } from '../lib/kyc';
-import { downloadAuthenticated } from '../lib/download';
+import { downloadAuthenticated, viewAuthenticated } from '../lib/download';
 import { toast } from 'sonner';
 import { useAuth } from '../lib/auth';
 import { can } from '../lib/rbac';
@@ -57,6 +58,27 @@ export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
   const [reviewBusy, setReviewBusy] = useState(false);
   const [showReject, setShowReject] = useState(false);
   const [rejectNote, setRejectNote] = useState('');
+  const [viewerDoc, setViewerDoc] = useState<{
+    url: string;
+    mimeType: string;
+    title: string;
+  } | null>(null);
+
+  const handleView = async (docId: number, label: string) => {
+    if (!agent) return;
+    try {
+      const result = await viewAuthenticated(
+        `/agents/${agent.id}/kyc-docs/${docId}/view`
+      );
+      setViewerDoc({ ...result, title: label });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not open document');
+    }
+  };
+  const closeViewer = () => {
+    if (viewerDoc) URL.revokeObjectURL(viewerDoc.url);
+    setViewerDoc(null);
+  };
   const [editForm, setEditForm] = useState({
     name: '',
     phone: '',
@@ -681,14 +703,24 @@ export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
                                   ? 'PDF'
                                   : `Page ${index + 1}`}
                               </span>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleDownload(page.id, page.fileName)
-                                }
-                                className="text-[10px] font-medium text-apsBlue hover:underline">
-                                Download
-                              </button>
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleView(page.id, `${doc.label} page ${index + 1}`)
+                                  }
+                                  className="text-[10px] font-medium text-apsBlue hover:underline">
+                                  View
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleDownload(page.id, page.fileName)
+                                  }
+                                  className="text-[10px] font-medium text-slate-500 hover:underline">
+                                  Download
+                                </button>
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -737,6 +769,13 @@ export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
 
                     {!multiPage && uploaded && (
                       <div className="flex gap-2 mt-3">
+                        <button
+                          type="button"
+                          onClick={() => handleView(uploaded.id, doc.label)}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-apsBlueLt text-apsBlue text-xs font-medium hover:bg-apsBlue/10">
+                          <Eye className="w-3.5 h-3.5" />
+                          View
+                        </button>
                         <button
                           type="button"
                           onClick={() =>
@@ -800,6 +839,53 @@ export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
           )}
         </div>
       </div>
+
+      {viewerDoc && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
+          onClick={closeViewer}>
+          <div
+            className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 shrink-0">
+              <h3 className="text-sm font-semibold text-slate-900 truncate">
+                {viewerDoc.title}
+              </h3>
+              <button
+                type="button"
+                onClick={closeViewer}
+                className="p-1 rounded hover:bg-slate-100 text-slate-500">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-slate-50">
+              {viewerDoc.mimeType.startsWith('image/') ? (
+                <img
+                  src={viewerDoc.url}
+                  alt={viewerDoc.title}
+                  className="max-w-full max-h-[75vh] object-contain rounded-lg shadow"
+                />
+              ) : viewerDoc.mimeType === 'application/pdf' ? (
+                <iframe
+                  src={viewerDoc.url}
+                  title={viewerDoc.title}
+                  className="w-full h-[75vh] rounded-lg border border-slate-200"
+                />
+              ) : (
+                <div className="text-center py-12">
+                  <FileText className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                  <p className="text-sm text-slate-600 font-medium">
+                    Preview not available for this file type
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Use the Download button to view this document
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

@@ -22,3 +22,23 @@ export async function downloadAuthenticated(
   a.remove();
   URL.revokeObjectURL(url);
 }
+
+/**
+ * Fetch a file as an object URL for in-app viewing.
+ * Caller is responsible for revoking via URL.revokeObjectURL().
+ */
+export async function viewAuthenticated(
+  apiPath: string
+): Promise<{ url: string; mimeType: string }> {
+  const token = getToken();
+  const res = await fetch(`/api${apiPath}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {}
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Could not load document');
+  }
+  const mimeType = res.headers.get('Content-Type') || 'application/octet-stream';
+  const blob = await res.blob();
+  return { url: URL.createObjectURL(blob), mimeType };
+}

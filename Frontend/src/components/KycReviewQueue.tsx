@@ -1,15 +1,17 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   CheckCircle2,
   XCircle,
   Download,
+  Eye,
   Loader2,
-  FileText
+  FileText,
+  X
 } from 'lucide-react';
 import { useAppData } from '../lib/data-context';
 import { useAuth } from '../lib/auth';
 import { can } from '../lib/rbac';
-import { downloadAuthenticated } from '../lib/download';
+import { downloadAuthenticated, viewAuthenticated } from '../lib/download';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
 import { ApiError } from '../lib/api';
@@ -21,6 +23,12 @@ interface KycReviewQueueProps {
   onOpenAgent?: (agentId: string) => void;
 }
 
+interface DocViewer {
+  url: string;
+  mimeType: string;
+  title: string;
+}
+
 export function KycReviewQueue({ onOpenAgent }: KycReviewQueueProps) {
   const { user } = useAuth();
   const { kycReviewQueue, reviewKyc } = useAppData();
@@ -28,6 +36,31 @@ export function KycReviewQueue({ onOpenAgent }: KycReviewQueueProps) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<KycReviewItem | null>(null);
   const [rejectNote, setRejectNote] = useState('');
+  const [viewing, setViewing] = useState<DocViewer | null>(null);
+  const [viewLoading, setViewLoading] = useState(false);
+
+  const closeViewer = useCallback(() => {
+    if (viewing) URL.revokeObjectURL(viewing.url);
+    setViewing(null);
+  }, [viewing]);
+
+  const viewDoc = async (
+    agentId: string,
+    docId: number,
+    docLabel: string
+  ) => {
+    setViewLoading(true);
+    try {
+      const result = await viewAuthenticated(
+        `/agents/${agentId}/kyc-docs/${docId}/view`
+      );
+      setViewing({ ...result, title: docLabel });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not open document');
+    } finally {
+      setViewLoading(false);
+    }
+  };
 
   const {
     pageItems: pageQueue,
@@ -156,13 +189,25 @@ export function KycReviewQueue({ onOpenAgent }: KycReviewQueueProps) {
                       </div>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    title="Download document"
-                    onClick={() => downloadDoc(item, doc.id, doc.fileName)}
-                    className="p-1.5 rounded hover:bg-white text-slate-500">
-                    <Download className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      title="View document"
+                      disabled={viewLoading}
+                      onClick={() =>
+                        viewDoc(item.id, doc.id, doc.docLabel || doc.docType)
+                      }
+                      className="p-1.5 rounded hover:bg-white text-apsBlue">
+                      <Eye className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Download document"
+                      onClick={() => downloadDoc(item, doc.id, doc.fileName)}
+                      className="p-1.5 rounded hover:bg-white text-slate-500">
+                      <Download className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -217,6 +262,53 @@ export function KycReviewQueue({ onOpenAgent }: KycReviewQueueProps) {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {viewing && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={closeViewer}>
+          <div
+            className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 shrink-0">
+              <h3 className="text-sm font-semibold text-slate-900 truncate">
+                {viewing.title}
+              </h3>
+              <button
+                type="button"
+                onClick={closeViewer}
+                className="p-1 rounded hover:bg-slate-100 text-slate-500">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-slate-50">
+              {viewing.mimeType.startsWith('image/') ? (
+                <img
+                  src={viewing.url}
+                  alt={viewing.title}
+                  className="max-w-full max-h-[75vh] object-contain rounded-lg shadow"
+                />
+              ) : viewing.mimeType === 'application/pdf' ? (
+                <iframe
+                  src={viewing.url}
+                  title={viewing.title}
+                  className="w-full h-[75vh] rounded-lg border border-slate-200"
+                />
+              ) : (
+                <div className="text-center py-12">
+                  <FileText className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                  <p className="text-sm text-slate-600 font-medium">
+                    Preview not available for this file type
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Use the Download button to view this document
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </>

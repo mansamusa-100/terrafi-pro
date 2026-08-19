@@ -37,6 +37,7 @@ const TITLES: Record<string, string> = {
   training: 'Training',
   compliance: 'Compliance',
   users: 'Users & Roles',
+  'notification-report': 'Notification report',
   audit: 'Audit log',
   settings: 'Settings'
 };

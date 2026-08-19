@@ -15,6 +15,7 @@ import { kycUpload, bulkKycUpload, kycUploadDir, locationPhotoUpload } from '../
 import { KYC_DOC_TYPES, KYC_DOC_LABELS, parseKycFilename } from '../lib/kyc.js';
 import { syncKycStatus } from '../lib/kyc-status.js';
 import { notifyAgentOnboarded } from '../lib/notifications.js';
+import { logAgentOnboardedReport } from '../lib/notification-report.js';
 import { parseCsv, AGENT_IMPORT_TEMPLATE } from '../lib/csv.js';
 import { normalizePhone } from '../lib/phone.js';
 
@@ -167,6 +168,7 @@ router.post('/import', requireRoles('manager', 'team_lead', 'adr'), async (req, 
           return createdAgent;
         });
         created.push(serializeAgent(agent));
+        await logAgentOnboardedReport(agent, req.user);
       } catch (e) {
         const msg = e.code === 'P2002'
           ? 'An agent with this phone number already exists'
@@ -417,6 +419,7 @@ router.post('/', requireRoles('manager', 'team_lead', 'adr'), async (req, res, n
     });
 
     await notifyAgentOnboarded(agent, req.user);
+    await logAgentOnboardedReport(agent, req.user);
 
     res.status(201).json(serializeAgent(agent));
   } catch (err) {
@@ -588,27 +591,47 @@ router.get('/:id/kyc-docs', async (req, res, next) => {
   }
 });
 
+async function resolveKycDocFile(req, res) {
+  const agent = await prisma.agent.findUnique({ where: { id: req.params.id } });
+  const access = await assertAgentAccess(req, agent);
+  if (access) { res.status(access.status).json({ error: access.error }); return null; }
+
+  const doc = await prisma.kycDocument.findFirst({
+    where: { id: parseInt(req.params.docId, 10), agentId: agent.id }
+  });
+  if (!doc) { res.status(404).json({ error: 'Document not found' }); return null; }
+
+  const absPath = path.join(kycUploadDir, path.basename(doc.filePath));
+  if (!fs.existsSync(absPath)) { res.status(404).json({ error: 'File not found on disk' }); return null; }
+
+  return { doc, absPath };
+}
+
 router.get('/:id/kyc-docs/:docId/download', async (req, res, next) => {
   try {
-    const agent = await prisma.agent.findUnique({ where: { id: req.params.id } });
-    const access = await assertAgentAccess(req, agent);
-    if (access) return res.status(access.status).json({ error: access.error });
-
-    const doc = await prisma.kycDocument.findFirst({
-      where: { id: parseInt(req.params.docId, 10), agentId: agent.id }
-    });
-    if (!doc) return res.status(404).json({ error: 'Document not found' });
-
-    const absPath = path.join(kycUploadDir, path.basename(doc.filePath));
-    if (!fs.existsSync(absPath)) {
-      return res.status(404).json({ error: 'File not found on disk' });
-    }
+    const result = await resolveKycDocFile(req, res);
+    if (!result) return;
+    const { doc, absPath } = result;
 
     res.setHeader('Content-Type', doc.mimeType || 'application/octet-stream');
     res.setHeader(
       'Content-Disposition',
       `attachment; filename="${doc.fileName.replace(/"/g, '')}"`
     );
+    fs.createReadStream(absPath).pipe(res);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/:id/kyc-docs/:docId/view', async (req, res, next) => {
+  try {
+    const result = await resolveKycDocFile(req, res);
+    if (!result) return;
+    const { doc, absPath } = result;
+
+    res.setHeader('Content-Type', doc.mimeType || 'application/octet-stream');
+    res.setHeader('Content-Disposition', 'inline');
     fs.createReadStream(absPath).pipe(res);
   } catch (err) {
     next(err);

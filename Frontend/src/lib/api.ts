@@ -317,6 +317,26 @@ export interface AuditEntry {
   createdAt: string;
 }
 
+export interface NotificationReportEntry {
+  id: number;
+  scope: string;
+  type: string;
+  title: string;
+  detail: string;
+  actor_id: string;
+  actor_name: string;
+  actor_email: string;
+  actor_role: string;
+  actor_role_label: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  entity_label: string | null;
+  temporary_password: string | null;
+  credential_delivery: string | null;
+  company_id: string | null;
+  created_at: string;
+}
+
 export interface FloatTrend {
   labels: string[];
   efloat: number[];
@@ -753,6 +773,15 @@ export const api = {
     if (opts?.action) params.set('action', opts.action);
     const q = params.toString();
     return request<AuditEntry[]>(`/audit${q ? `?${q}` : ''}`);
+  },
+  notificationReports: (opts?: { limit?: number; type?: string }) => {
+    const params = new URLSearchParams();
+    if (opts?.limit != null) params.set('limit', String(opts.limit));
+    if (opts?.type) params.set('type', opts.type);
+    const q = params.toString();
+    return request<NotificationReportEntry[]>(
+      `/notification-reports${q ? `?${q}` : ''}`
+    );
   },
 
   zones: () => request<string[]>('/zones'),

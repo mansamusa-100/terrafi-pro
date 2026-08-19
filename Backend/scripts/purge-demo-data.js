@@ -23,6 +23,7 @@ async function purgeCompany(companyId) {
     await tx.officer.deleteMany({ where: { companyId } });
     await tx.leadAdrAssignment.deleteMany({ where: { companyId } });
     await tx.notification.deleteMany({ where: { companyId } });
+    await tx.notificationReport.deleteMany({ where: { companyId } });
     await tx.auditLog.deleteMany({ where: { companyId } });
 
     const agents = await tx.agent.findMany({

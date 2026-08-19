@@ -5,6 +5,10 @@ import { companyFilter } from '../middleware/user.js';
 import { requireRoles } from '../middleware/auth.js';
 import { logAudit, isPlatformRole, PLATFORM_ROLES, COMPANY_ROLES } from '../lib/audit.js';
 import { notifyMembershipAdded, notifyPasswordReset } from '../lib/notifications.js';
+import {
+  logUserInvitedReport,
+  logPasswordResetReport
+} from '../lib/notification-report.js';
 import { loadSupervisedAdrs, setSupervisedAdrs } from '../lib/team-lead.js';
 import {
   generateTemporaryPassword,
@@ -223,6 +227,14 @@ router.post('/invite', requireRoles('system_owner', 'platform_staff', 'manager')
       temporaryPassword,
       passwordReused: credentials.reuseExisting,
       purpose: 'invite'
+    });
+
+    await logUserInvitedReport({
+      user,
+      actor: req.user,
+      temporaryPassword,
+      credentialDelivery,
+      passwordReused: credentials.reuseExisting
     });
 
     await logAudit({
@@ -500,6 +512,13 @@ router.post(
 
       await notifyPasswordReset(updated, req.user).catch(() => null);
 
+      await logPasswordResetReport({
+        user: updated,
+        actor: req.user,
+        temporaryPassword,
+        credentialDelivery
+      });
+
       await logAudit({
         scope: user.companyId ? 'company' : 'platform',
         companyId: user.companyId,
@@ -525,10 +544,8 @@ router.post(
         credentialDelivery,
         message:
           credentialDelivery === 'email'
-            ? 'Temporary password emailed to the user. They must sign in and set a new password.'
-            : credentialDelivery === 'log_only'
-              ? 'Temporary password generated. Share it with the user — it is also logged in the server console and audit log.'
-              : 'Temporary password generated. Share it with the user so they can sign in and set a new password.'
+            ? 'Temporary password emailed to the user. They must sign in and set a new password. A copy is in Notification report.'
+            : 'Temporary password generated. Share it with the user — it is also in Notification report.'
       });
     } catch (err) {
       next(err);

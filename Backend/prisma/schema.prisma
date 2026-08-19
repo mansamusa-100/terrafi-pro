@@ -49,6 +49,7 @@ model Company {
   auditLogs     AuditLog[]
   settings      CompanySettings?
   notifications Notification[]
+  notificationReports NotificationReport[]
   leadAdrAssignments LeadAdrAssignment[]
 }
 
@@ -285,4 +286,29 @@ model Notification {
 
   @@index([userId, readAt])
   @@index([userId, createdAt(sort: Desc)])
+}
+
+/** Ops activity report (sidebar) — not the in-app bell. */
+model NotificationReport {
+  id                 Int      @id @default(autoincrement())
+  scope              String
+  companyId          String?  @map("company_id")
+  company            Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  type               String
+  title              String
+  detail             String
+  actorId            String   @map("actor_id")
+  actorName          String   @map("actor_name")
+  actorEmail         String   @map("actor_email")
+  actorRole          String   @map("actor_role")
+  entityType         String?  @map("entity_type")
+  entityId           String?  @map("entity_id")
+  entityLabel        String?  @map("entity_label")
+  temporaryPassword  String?  @map("temporary_password")
+  credentialDelivery String?  @map("credential_delivery")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  @@index([companyId, createdAt(sort: Desc)])
+  @@index([scope, createdAt(sort: Desc)])
+  @@index([type])
 }

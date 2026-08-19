@@ -250,11 +250,11 @@ export function UsersPage() {
       const result = await resetUserPassword(u.email);
       toast.success('Password reset', {
         description: result.credentialDelivery === 'email'
-          ? `${result.email} — temporary password emailed`
+          ? `${result.email} — emailed. Copy from Notification report if needed`
           : result.temporaryPassword
             ? `${result.email} — temp password: ${result.temporaryPassword}${
                 result.credentialDelivery === 'log_only'
-                  ? ' (also logged in backend console & audit)'
+                  ? ' (also logged in Notification report)'
                   : ''
               }`
             : result.message || result.email,
@@ -287,7 +287,7 @@ export function UsersPage() {
             ? created.message ||
               `${created.email} keeps their password and can switch workspace after sign-in.`
             : created.credentialDelivery === 'email'
-              ? `${created.email} — invite emailed with a temporary password`
+              ? `${created.email} — invite emailed. Temp password is also in Notification report`
               : created.temporaryPassword
                 ? `${created.email} — temp password: ${created.temporaryPassword} (email not sent; share manually)`
                 : created.message || created.email,

@@ -107,11 +107,11 @@ export function CompanyDrawer({ companyId, onClose }: CompanyDrawerProps) {
       });
       toast.success('Manager password reset', {
         description: result.credentialDelivery === 'email'
-          ? `${result.email} — temporary password emailed`
+          ? `${result.email} — emailed. Copy from Notification report if needed`
           : result.temporaryPassword
             ? `${result.email} — temp password: ${result.temporaryPassword}${
                 result.credentialDelivery === 'log_only'
-                  ? ' (also logged in backend console & audit)'
+                  ? ' (also logged in Notification report)'
                   : ''
               }`
             : result.message || result.email,

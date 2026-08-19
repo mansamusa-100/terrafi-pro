@@ -16,6 +16,8 @@ import {
   TrainingModule,
   Company,
   CompanyUser,
+  AuditEntry,
+  NotificationReportEntry,
   FloatTrend,
   NetworkStats,
   BulkImportResult,
@@ -50,6 +52,7 @@ interface AppDataContextValue {
   companies: Company[];
   users: CompanyUser[];
   auditLogs: AuditEntry[];
+  notificationReports: NotificationReportEntry[];
   zones: string[];
   floatTrend: FloatTrend | null;
   stats: NetworkStats | null;
@@ -146,6 +149,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [users, setUsers] = useState<CompanyUser[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditEntry[]>([]);
+  const [notificationReports, setNotificationReports] = useState<
+    NotificationReportEntry[]
+  >([]);
   const [zones, setZones] = useState<string[]>([]);
   const [floatTrend, setFloatTrend] = useState<FloatTrend | null>(null);
   const [stats, setStats] = useState<NetworkStats | null>(null);
@@ -174,6 +180,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       setCompanies([]);
       setUsers([]);
       setAuditLogs([]);
+      setNotificationReports([]);
       setZones([]);
       setFloatTrend(null);
       setStats(null);
@@ -204,12 +211,18 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         fetches.push(api.companies.list().then(setCompanies));
         fetches.push(api.users().then(setUsers));
         fetches.push(api.audit({ limit: 100 }).then(setAuditLogs));
+        fetches.push(
+          api.notificationReports({ limit: 200 }).then(setNotificationReports)
+        );
         fetches.push(api.platform.stats().then(setPlatformStats));
       }
 
       if (user.role === 'manager') {
         fetches.push(api.users().then(setUsers));
         fetches.push(api.audit().then(setAuditLogs));
+        fetches.push(
+          api.notificationReports({ limit: 200 }).then(setNotificationReports)
+        );
       }
 
       if (user.role === 'team_lead') {
@@ -574,6 +587,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         companies,
         users,
         auditLogs,
+        notificationReports,
         zones,
         floatTrend,
         stats,

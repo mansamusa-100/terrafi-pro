@@ -11,7 +11,8 @@ import {
   Building2,
   UserCog,
   ScrollText,
-  History
+  History,
+  ClipboardList
 } from
 'lucide-react';
 
@@ -113,14 +114,15 @@ export const PAGES = [
 { id: 'training', icon: GraduationCap, label: 'Training' },
 { id: 'compliance', icon: ShieldCheck, label: 'Compliance' },
 { id: 'users', icon: UserCog, label: 'Users & Roles' },
+{ id: 'notification-report', icon: ClipboardList, label: 'Notification report' },
 { id: 'audit', icon: ScrollText, label: 'Audit log' },
 { id: 'settings', icon: Settings, label: 'Settings' }] as
 const;
 
 // Which pages each role can access, in nav order
 export const PAGE_ACCESS: Record<Role, string[]> = {
-  system_owner: ['dashboard', 'companies', 'users', 'audit'],
-  platform_staff: ['dashboard', 'companies', 'users', 'audit'],
+  system_owner: ['dashboard', 'companies', 'users', 'notification-report', 'audit'],
+  platform_staff: ['dashboard', 'companies', 'users', 'notification-report', 'audit'],
   manager: [
   'dashboard',
   'agents',
@@ -132,6 +134,7 @@ export const PAGE_ACCESS: Record<Role, string[]> = {
   'training',
   'compliance',
   'users',
+  'notification-report',
   'audit',
   'settings'],
 

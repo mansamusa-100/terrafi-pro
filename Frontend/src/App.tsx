@@ -30,6 +30,7 @@ import { CompliancePage } from './pages/CompliancePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { CompaniesPage } from './pages/CompaniesPage';
 import { UsersPage } from './pages/UsersPage';
+import { NotificationReportPage } from './pages/NotificationReportPage';
 import { AuditPage } from './pages/AuditPage';
 import { AuthProvider, useAuth } from './lib/auth';
 import { AppDataProvider, useAppData } from './lib/data-context';
@@ -159,6 +160,7 @@ function AuthenticatedApp({
     training: <TrainingPage />,
     compliance: <CompliancePage onOpenAgent={setSelectedAgent} />,
     users: <UsersPage />,
+    'notification-report': <NotificationReportPage />,
     audit: <AuditPage />,
     settings: <SettingsPage />
   };
