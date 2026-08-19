@@ -65,6 +65,8 @@ app.use(
             connectSrc: ["'self'"],
             fontSrc: ["'self'", 'data:'],
             objectSrc: ["'none'"],
+            frameSrc: ["'self'", 'blob:'],
+            workerSrc: ["'self'", 'blob:'],
             frameAncestors: ["'none'"]
           }
         }
