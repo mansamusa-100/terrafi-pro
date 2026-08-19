@@ -173,14 +173,14 @@ export function KycReviewQueue({ onOpenAgent }: KycReviewQueueProps) {
                 </div>
               )}
             </div>
-            <div className="grid gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
               {item.kyc_docs.map((doc) => (
                 <div
                   key={doc.id}
-                  className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2">
-                  <div className="flex items-center gap-2 min-w-0">
+                  className="flex flex-col rounded-lg border border-slate-200 bg-slate-50 overflow-hidden">
+                  <div className="flex items-center gap-2 px-3 py-2 min-w-0">
                     <FileText className="w-4 h-4 text-slate-400 shrink-0" />
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <div className="text-xs font-medium text-slate-800 truncate">
                         {doc.docLabel || doc.docType}
                       </div>
@@ -189,7 +189,7 @@ export function KycReviewQueue({ onOpenAgent }: KycReviewQueueProps) {
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex items-center gap-1 px-3 py-1.5 border-t border-slate-200 bg-white">
                     <button
                       type="button"
                       title="View document"
@@ -197,15 +197,17 @@ export function KycReviewQueue({ onOpenAgent }: KycReviewQueueProps) {
                       onClick={() =>
                         viewDoc(item.id, doc.id, doc.docLabel || doc.docType)
                       }
-                      className="p-1.5 rounded hover:bg-white text-apsBlue">
-                      <Eye className="w-4 h-4" />
+                      className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-apsBlue hover:bg-apsBlueLt/40">
+                      <Eye className="w-3.5 h-3.5" />
+                      View
                     </button>
                     <button
                       type="button"
                       title="Download document"
                       onClick={() => downloadDoc(item, doc.id, doc.fileName)}
-                      className="p-1.5 rounded hover:bg-white text-slate-500">
-                      <Download className="w-4 h-4" />
+                      className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-slate-600 hover:bg-slate-100">
+                      <Download className="w-3.5 h-3.5" />
+                      Download
                     </button>
                   </div>
                 </div>
