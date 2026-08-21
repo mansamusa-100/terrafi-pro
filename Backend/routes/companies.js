@@ -3,15 +3,38 @@ import { prisma } from '../lib/prisma.js';
 import { requireRoles } from '../middleware/auth.js';
 import { logAudit } from '../lib/audit.js';
 import { cachedCompanySubscription } from '../lib/company-billing.js';
+import {
+  companyAttentionReasons,
+  formatAttentionReasons,
+  loadCompanyActivityMap,
+  loadCompanyPulse,
+  primarySeverity,
+  resolveLastActivity,
+  seatFill
+} from '../lib/company-health.js';
 
 const router = Router();
 
-function serializeCompanyList(c) {
+function serializeCompanyList(c, activity = null) {
+  const userCount = c._count?.users ?? 0;
+  const agentCount = c._count?.agentsRel ?? c.agents ?? 0;
+  const seats = seatFill(userCount, c.userSeats);
+  const lastActivity = resolveLastActivity({
+    lastVisitAt: activity?.lastVisitAt,
+    lastAuditAt: activity?.lastAuditAt,
+    registeredAt: c.registeredAt
+  });
+  const reasonCodes = companyAttentionReasons(
+    { ...c, agents: agentCount },
+    { agentCount }
+  );
+
   return {
     id: c.id,
     name: c.name,
     plan: c.plan,
-    agents: c.agents,
+    planTier: c.planTier || null,
+    agents: agentCount,
     officers: c.officers,
     status: c.status,
     mrr: c.mrr,
@@ -20,7 +43,17 @@ function serializeCompanyList(c) {
     registeredAt: c.registeredAt,
     subscriptionStatus: c.subscriptionStatus,
     subscriptionPlanCode: c.subscriptionPlanCode,
-    userCount: c._count?.users ?? 0
+    lockState: c.lockState || 'open',
+    userSeats: c.userSeats ?? null,
+    userCount,
+    seats: seats.label,
+    seatsUsed: seats.used,
+    seatsLimit: seats.seats,
+    lastActivityAt: lastActivity.at,
+    lastActivityDaysAgo: lastActivity.daysAgo,
+    attentionReasons: formatAttentionReasons(reasonCodes),
+    needsAttention: reasonCodes.length > 0,
+    attentionSeverity: primarySeverity(reasonCodes)
   };
 }
 
@@ -28,10 +61,17 @@ router.get('/', requireRoles('system_owner', 'platform_staff'), async (_req, res
   try {
     const companies = await prisma.company.findMany({
       orderBy: { registeredAt: 'desc' },
-      include: { _count: { select: { users: true } } }
+      include: { _count: { select: { users: true, agentsRel: true } } }
     });
 
-    res.json(companies.map(serializeCompanyList));
+    const activityMap = await loadCompanyActivityMap(
+      prisma,
+      companies.map((c) => c.id)
+    );
+
+    res.json(
+      companies.map((c) => serializeCompanyList(c, activityMap.get(c.id)))
+    );
   } catch (err) {
     next(err);
   }
@@ -60,19 +100,26 @@ router.get('/:id', requireRoles('system_owner', 'platform_staff'), async (req, r
 
     if (!company) return res.status(404).json({ error: 'Company not found' });
 
-    const recentAudit = await prisma.auditLog.findMany({
-      where: { companyId: company.id },
-      orderBy: { createdAt: 'desc' },
-      take: 10
-    });
+    const [recentAudit, activityMap, pulse] = await Promise.all([
+      prisma.auditLog.findMany({
+        where: { companyId: company.id },
+        orderBy: { createdAt: 'desc' },
+        take: 10
+      }),
+      loadCompanyActivityMap(prisma, [company.id]),
+      loadCompanyPulse(prisma, company.id)
+    ]);
+
+    const list = serializeCompanyList(company, activityMap.get(company.id));
 
     res.json({
-      ...serializeCompanyList(company),
+      ...list,
       visitCount: company._count.visits,
       agentCount: company._count.agentsRel,
       subscription: cachedCompanySubscription(company),
       directPaySlug: company.directPaySlug,
       users: company.users,
+      pulse,
       recentAudit: recentAudit.map((log) => ({
         id: log.id,
         action: log.action,

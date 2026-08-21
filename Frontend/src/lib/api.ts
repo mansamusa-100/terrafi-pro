@@ -224,6 +224,7 @@ export interface Company {
   id: string;
   name: string;
   plan: string;
+  planTier?: string | null;
   agents: number;
   officers: number;
   status: string;
@@ -233,7 +234,28 @@ export interface Company {
   registeredAt?: string;
   subscriptionStatus?: string | null;
   subscriptionPlanCode?: string | null;
+  lockState?: string;
+  userSeats?: number | null;
   userCount?: number;
+  seats?: string;
+  seatsUsed?: number;
+  seatsLimit?: number | null;
+  lastActivityAt?: string | null;
+  lastActivityDaysAgo?: number | null;
+  attentionReasons?: { code: string; label: string; severity: string }[];
+  needsAttention?: boolean;
+  attentionSeverity?: string | null;
+}
+
+export interface CompanyPulse {
+  visits7d: number;
+  kycPending: number;
+  lastVisitAt: string | null;
+  lastAgentOnboardedAt: string | null;
+  lastAuditAt: string | null;
+  lastAuditAction: string | null;
+  lastManagerEventAt: string | null;
+  lastManagerEvent: string | null;
 }
 
 export interface CompanySubscription {
@@ -262,6 +284,7 @@ export interface CompanyDetail extends Company {
   directPaySlug?: string | null;
   subscription: CompanySubscription;
   users: CompanyUser[];
+  pulse?: CompanyPulse;
   recentAudit: {
     id: number;
     action: string;
@@ -271,6 +294,18 @@ export interface CompanyDetail extends Company {
   }[];
 }
 
+export interface PlatformAttentionItem {
+  id: string;
+  name: string;
+  status: string;
+  subscriptionStatus: string | null;
+  lockState: string;
+  agents: number;
+  registeredAt: string;
+  reasons: { code: string; label: string; severity: string }[];
+  severity: string;
+}
+
 export interface PlatformStats {
   companies: {
     total: number;
@@ -278,11 +313,17 @@ export interface PlatformStats {
     suspended: number;
     signups7d: number;
     signups30d: number;
+    needsAttention?: number;
   };
   agents: { total: number };
   users: { platform: number; company: number };
   revenue: { mrr: number };
   subscriptions: Record<string, number>;
+  attention?: {
+    count: number;
+    bySeverity: { critical: number; high: number; medium: number };
+    items: PlatformAttentionItem[];
+  };
   recentSignups: {
     id: string;
     name: string;
@@ -290,6 +331,7 @@ export interface PlatformStats {
     contactEmail?: string | null;
     registeredAt: string;
     subscriptionStatus?: string | null;
+    lockState?: string;
   }[];
 }
 

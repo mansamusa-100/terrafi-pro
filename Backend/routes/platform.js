@@ -1,6 +1,10 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireRoles } from '../middleware/auth.js';
+import {
+  sortAttention,
+  toAttentionItem
+} from '../lib/company-health.js';
 
 const router = Router();
 
@@ -28,7 +32,10 @@ router.get('/stats', requireRoles('system_owner', 'platform_staff'), async (_req
           mrr: true,
           registeredAt: true,
           subscriptionStatus: true,
-          contactEmail: true
+          contactEmail: true,
+          lockState: true,
+          planTier: true,
+          userSeats: true
         }
       }),
       prisma.company.count({ where: { registeredAt: { gte: day7 } } }),
@@ -43,7 +50,6 @@ router.get('/stats', requireRoles('system_owner', 'platform_staff'), async (_req
     const active = companies.filter((c) => c.status === 'active').length;
     const suspended = companies.filter((c) => c.status === 'suspended').length;
     const mrr = companies.reduce((s, c) => {
-      // Only count paid (ACTIVE) subscriptions toward platform collected MRR
       if (c.subscriptionStatus !== 'ACTIVE') return s;
       return s + (c.mrr || 0);
     }, 0);
@@ -54,25 +60,44 @@ router.get('/stats', requireRoles('system_owner', 'platform_staff'), async (_req
       subscriptionCounts[key] = (subscriptionCounts[key] || 0) + 1;
     }
 
+    const attention = sortAttention(
+      companies
+        .map((c) => toAttentionItem(c, { agentCount: c.agents }))
+        .filter(Boolean)
+    );
+
+    const attentionBySeverity = {
+      critical: attention.filter((a) => a.severity === 'critical').length,
+      high: attention.filter((a) => a.severity === 'high').length,
+      medium: attention.filter((a) => a.severity === 'medium').length
+    };
+
     res.json({
       companies: {
         total: companies.length,
         active,
         suspended,
         signups7d,
-        signups30d
+        signups30d,
+        needsAttention: attention.length
       },
       agents: { total: agentTotal },
       users: { platform: platformUsers, company: companyUsers },
       revenue: { mrr },
       subscriptions: subscriptionCounts,
+      attention: {
+        count: attention.length,
+        bySeverity: attentionBySeverity,
+        items: attention.slice(0, 12)
+      },
       recentSignups: companies.slice(0, 5).map((c) => ({
         id: c.id,
         name: c.name,
         status: c.status,
         contactEmail: c.contactEmail,
         registeredAt: c.registeredAt,
-        subscriptionStatus: c.subscriptionStatus
+        subscriptionStatus: c.subscriptionStatus,
+        lockState: c.lockState
       }))
     });
   } catch (err) {

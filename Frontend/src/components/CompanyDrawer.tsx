@@ -8,15 +8,15 @@ import {
   Loader2,
   Ban,
   CheckCircle2,
-  KeyRound
+  KeyRound,
+  Activity
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api, ApiError, CompanyDetail } from '../lib/api';
 import { useAppData } from '../lib/data-context';
 import { useAuth } from '../lib/auth';
-import { can } from '../lib/rbac';
+import { can, ROLE_META } from '../lib/rbac';
 import { cn } from '../lib/utils';
-import { ROLE_META } from '../lib/rbac';
 
 interface CompanyDrawerProps {
   companyId: string | null;
@@ -36,7 +36,21 @@ const SUB_STYLE: Record<string, string> = {
   CANCELLED: 'text-slate-500'
 };
 
+const LOCK_STYLE: Record<string, string> = {
+  open: 'text-apsGreen',
+  grace: 'text-apsAmber',
+  locked: 'text-apsRed'
+};
+
 function formatWhen(iso: string) {
+  return new Date(iso).toLocaleString(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short'
+  });
+}
+
+function formatShort(iso: string | null | undefined) {
+  if (!iso) return '—';
   return new Date(iso).toLocaleString(undefined, {
     dateStyle: 'medium',
     timeStyle: 'short'
@@ -124,6 +138,8 @@ export function CompanyDrawer({ companyId, onClose }: CompanyDrawerProps) {
     }
   };
 
+  const pulse = detail?.pulse;
+
   return (
     <>
       <div
@@ -182,17 +198,37 @@ export function CompanyDrawer({ companyId, onClose }: CompanyDrawerProps) {
                     {detail.subscription.status.replace(/_/g, ' ')}
                   </span>
                 )}
+                <span
+                  className={cn(
+                    'text-[11px] font-semibold px-2.5 py-1 rounded-full bg-slate-100 capitalize',
+                    LOCK_STYLE[
+                      detail.lockState || detail.subscription?.lockState || 'open'
+                    ]
+                  )}>
+                  {detail.lockState || detail.subscription?.lockState || 'open'}
+                </span>
               </div>
+
+              {detail.attentionReasons && detail.attentionReasons.length > 0 && (
+                <div className="rounded-lg border border-apsAmber/30 bg-apsAmberLt/40 px-3 py-2.5">
+                  <p className="text-[10px] font-bold text-amber-800 uppercase tracking-wider mb-1">
+                    Needs attention
+                  </p>
+                  <p className="text-xs text-amber-900">
+                    {detail.attentionReasons.map((r) => r.label).join(' · ')}
+                  </p>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 {[
                   ['Agents', detail.agentCount ?? detail.agents],
                   ['Users', detail.userCount ?? 0],
                   ['Visits', detail.visitCount ?? 0],
-                  ['Plan', detail.plan]
+                  ['Seats', detail.seats || detail.plan]
                 ].map(([label, value]) => (
                   <div
-                    key={label}
+                    key={String(label)}
                     className="rounded-lg border border-slate-200 px-3 py-2.5">
                     <div className="text-[10px] text-slate-500 uppercase tracking-wider">
                       {label}
@@ -203,6 +239,62 @@ export function CompanyDrawer({ companyId, onClose }: CompanyDrawerProps) {
                   </div>
                 ))}
               </div>
+
+              {pulse && (
+                <div className="rounded-xl border border-slate-200 p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Activity className="w-4 h-4 text-slate-500" />
+                    <h3 className="text-sm font-semibold text-slate-900">
+                      Network pulse
+                    </h3>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div className="rounded-lg bg-slate-50 px-3 py-2">
+                      <div className="text-[10px] text-slate-500 uppercase">
+                        Visits (7d)
+                      </div>
+                      <div className="text-sm font-semibold text-slate-900 mt-0.5">
+                        {pulse.visits7d}
+                      </div>
+                    </div>
+                    <div className="rounded-lg bg-slate-50 px-3 py-2">
+                      <div className="text-[10px] text-slate-500 uppercase">
+                        KYC pending
+                      </div>
+                      <div className="text-sm font-semibold text-slate-900 mt-0.5">
+                        {pulse.kycPending}
+                      </div>
+                    </div>
+                  </div>
+                  <dl className="space-y-2 text-xs">
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-slate-500">Last visit</dt>
+                      <dd className="font-medium text-slate-900 text-right">
+                        {formatShort(pulse.lastVisitAt)}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-slate-500">Last agent onboarded</dt>
+                      <dd className="font-medium text-slate-900 text-right">
+                        {formatShort(pulse.lastAgentOnboardedAt)}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-slate-500">Last activity</dt>
+                      <dd className="font-medium text-slate-900 text-right">
+                        {pulse.lastAuditAction
+                          ? pulse.lastAuditAction.replace(/\./g, ' · ')
+                          : '—'}
+                        {pulse.lastAuditAt ? (
+                          <span className="block text-[10px] text-slate-500 font-normal">
+                            {formatShort(pulse.lastAuditAt)}
+                          </span>
+                        ) : null}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+              )}
 
               <div className="rounded-xl border border-slate-200 p-4">
                 <div className="flex items-center gap-2 mb-3">
@@ -219,7 +311,9 @@ export function CompanyDrawer({ companyId, onClose }: CompanyDrawerProps) {
                   <div className="flex justify-between">
                     <dt className="text-slate-500">Plan code</dt>
                     <dd className="font-medium text-slate-900">
-                      {detail.subscription.planCode || detail.subscriptionPlanCode || '—'}
+                      {detail.subscription.planCode ||
+                        detail.subscriptionPlanCode ||
+                        '—'}
                     </dd>
                   </div>
                   <div className="flex justify-between">
@@ -268,14 +362,17 @@ export function CompanyDrawer({ companyId, onClose }: CompanyDrawerProps) {
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
                           <span className="text-[10px] font-semibold text-slate-600">
-                            {ROLE_META[u.role as keyof typeof ROLE_META]?.short || u.role}
+                            {ROLE_META[u.role as keyof typeof ROLE_META]?.short ||
+                              u.role}
                           </span>
                           {canResetManagerPassword && u.role === 'manager' && (
                             <button
                               type="button"
                               title="Reset manager password"
                               disabled={resettingEmail === u.email}
-                              onClick={() => resetManagerPassword(u.email, u.name)}
+                              onClick={() =>
+                                resetManagerPassword(u.email, u.name)
+                              }
                               className="p-1 rounded hover:bg-slate-100 text-slate-500 disabled:opacity-50">
                               <KeyRound className="w-3.5 h-3.5" />
                             </button>
@@ -297,7 +394,9 @@ export function CompanyDrawer({ companyId, onClose }: CompanyDrawerProps) {
                   </div>
                   <div className="space-y-2">
                     {detail.recentAudit.map((e) => (
-                      <div key={e.id} className="text-xs border-b border-slate-50 pb-2 last:border-0">
+                      <div
+                        key={e.id}
+                        className="text-xs border-b border-slate-50 pb-2 last:border-0">
                         <div className="font-medium text-slate-800">
                           {e.action.replace(/\./g, ' · ')}
                         </div>
@@ -328,7 +427,9 @@ export function CompanyDrawer({ companyId, onClose }: CompanyDrawerProps) {
                   ) : (
                     <CheckCircle2 className="w-4 h-4" />
                   )}
-                  {detail.status === 'active' ? 'Suspend company' : 'Reactivate company'}
+                  {detail.status === 'active'
+                    ? 'Suspend company'
+                    : 'Reactivate company'}
                 </button>
               )}
             </>

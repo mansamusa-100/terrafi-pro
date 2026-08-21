@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Building2, Users, UserCog, DollarSign, Search } from 'lucide-react';
+import { Building2, Users, DollarSign, Search, ShieldAlert } from 'lucide-react';
 import { MetricCard } from '../components/MetricCard';
 import { useAppData } from '../lib/data-context';
 import { DataTable } from '../components/DataTable';
@@ -20,19 +20,45 @@ const SUB_BADGE: Record<string, string> = {
   EXPIRED: 'text-apsRed'
 };
 
+const LOCK_STYLE: Record<string, string> = {
+  open: 'text-apsGreen',
+  grace: 'text-apsAmber',
+  locked: 'text-apsRed'
+};
+
+type StatusFilter = 'all' | 'attention' | 'active' | 'suspended';
+
 interface CompaniesPageProps {
   onOpenCompany?: (companyId: string) => void;
+}
+
+function formatActivity(daysAgo: number | null | undefined, at?: string | null) {
+  if (daysAgo == null && !at) return '—';
+  if (daysAgo === 0) return 'Today';
+  if (daysAgo === 1) return '1d ago';
+  if (daysAgo != null && daysAgo < 30) return `${daysAgo}d ago`;
+  if (at) {
+    return new Date(at).toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric'
+    });
+  }
+  return '—';
 }
 
 export function CompaniesPage({ onOpenCompany }: CompaniesPageProps) {
   const { companies, loading, error } = useAppData();
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'suspended'>('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+
+  const attentionCount = companies.filter((c) => c.needsAttention).length;
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return companies.filter((c) => {
-      if (statusFilter !== 'all' && c.status !== statusFilter) return false;
+      if (statusFilter === 'attention' && !c.needsAttention) return false;
+      if (statusFilter === 'active' && c.status !== 'active') return false;
+      if (statusFilter === 'suspended' && c.status !== 'suspended') return false;
       if (!q) return true;
       return (
         c.name.toLowerCase().includes(q) ||
@@ -57,7 +83,10 @@ export function CompaniesPage({ onOpenCompany }: CompaniesPageProps) {
   const totalAgents = companies.reduce((s, c) => s + c.agents, 0);
   const activeCos = companies.filter((c) => c.status === 'active').length;
   const suspendedCos = companies.filter((c) => c.status === 'suspended').length;
-  const mrr = companies.reduce((s, c) => s + c.mrr, 0);
+  const mrr = companies.reduce((s, c) => {
+    if (c.subscriptionStatus !== 'ACTIVE') return s;
+    return s + c.mrr;
+  }, 0);
 
   if (loading && companies.length === 0) {
     return (
@@ -89,21 +118,24 @@ export function CompaniesPage({ onOpenCompany }: CompaniesPageProps) {
           accent="#1565C0"
         />
         <MetricCard
+          label="Needs attention"
+          value={attentionCount}
+          sub={attentionCount ? 'Filter the list below' : 'All clear'}
+          subColor={attentionCount ? 'text-apsAmber' : 'text-apsGreen'}
+          icon={<ShieldAlert className="w-5 h-5" />}
+          accent={attentionCount ? '#F59E0B' : '#22C55E'}
+          onClick={() => setStatusFilter('attention')}
+        />
+        <MetricCard
           label="Total agents (platform)"
           value={totalAgents.toLocaleString()}
           icon={<Users className="w-5 h-5" />}
           accent="#00897B"
         />
         <MetricCard
-          label="Company users"
-          value={companies.reduce((s, c) => s + (c.userCount ?? 0), 0)}
-          icon={<UserCog className="w-5 h-5" />}
-          accent="#F59E0B"
-        />
-        <MetricCard
-          label="Monthly recurring rev."
+          label="Collected MRR"
           value={fmtDalasi(mrr)}
-          sub="Collected in Dalasi (D)"
+          sub={`${companies.reduce((s, c) => s + (c.userCount ?? 0), 0)} company users`}
           subColor="text-apsGreen"
           icon={<DollarSign className="w-5 h-5" />}
           accent="#22C55E"
@@ -117,7 +149,7 @@ export function CompaniesPage({ onOpenCompany }: CompaniesPageProps) {
               Subscriber companies
             </h3>
             <p className="text-[11px] text-slate-500 mt-0.5">
-              Click a row for details, subscription status, and lifecycle actions
+              Health signals stay quiet unless a tenant needs action
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -132,27 +164,29 @@ export function CompaniesPage({ onOpenCompany }: CompaniesPageProps) {
             </div>
             <select
               value={statusFilter}
-              onChange={(e) =>
-                setStatusFilter(e.target.value as 'all' | 'active' | 'suspended')
-              }
-              aria-label="Filter by status"
+              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+              aria-label="Filter companies"
               className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700">
-              <option value="all">All statuses</option>
+              <option value="all">All companies</option>
+              <option value="attention">
+                Needs attention{attentionCount ? ` (${attentionCount})` : ''}
+              </option>
               <option value="active">Active</option>
               <option value="suspended">Suspended</option>
             </select>
           </div>
         </div>
 
-        <DataTable minWidth="800px">
-          <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_1fr] gap-4 pb-3 mb-2 border-b border-slate-200">
+        <DataTable minWidth="960px">
+          <div className="grid grid-cols-[1.8fr_0.9fr_0.7fr_0.9fr_0.9fr_0.8fr_0.8fr_0.7fr] gap-3 pb-3 mb-2 border-b border-slate-200">
             {[
               'Company',
               'Plan',
               'Agents',
-              'Users',
-              'Subscription',
-              'MRR',
+              'Seats',
+              'Access',
+              'Activity',
+              'Billing',
               'Status'
             ].map((h) => (
               <div
@@ -175,7 +209,7 @@ export function CompaniesPage({ onOpenCompany }: CompaniesPageProps) {
                 key={c.id}
                 type="button"
                 onClick={() => onOpenCompany?.(c.id)}
-                className="w-full grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_1fr] gap-4 py-3 border-b border-slate-100 last:border-0 items-center hover:bg-slate-50 -mx-2 px-2 rounded transition-colors text-left">
+                className="w-full grid grid-cols-[1.8fr_0.9fr_0.7fr_0.9fr_0.9fr_0.8fr_0.8fr_0.7fr] gap-3 py-3 border-b border-slate-100 last:border-0 items-center hover:bg-slate-50 -mx-2 px-2 rounded transition-colors text-left">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-9 h-9 rounded-lg bg-navy text-white flex items-center justify-center text-xs font-bold shrink-0">
                     {c.name
@@ -185,28 +219,49 @@ export function CompaniesPage({ onOpenCompany }: CompaniesPageProps) {
                       .slice(0, 2)}
                   </div>
                   <div className="min-w-0">
-                    <div className="text-sm font-medium text-slate-900 truncate">
-                      {c.name}
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <div className="text-sm font-medium text-slate-900 truncate">
+                        {c.name}
+                      </div>
+                      {c.needsAttention && (
+                        <span
+                          title={c.attentionReasons?.map((r) => r.label).join(' · ')}
+                          className="shrink-0 w-1.5 h-1.5 rounded-full bg-apsAmber"
+                        />
+                      )}
                     </div>
                     <div className="text-[10px] text-slate-500 truncate">
-                      {c.contactEmail || `since ${c.since}`}
+                      {c.attentionReasons?.length
+                        ? c.attentionReasons.map((r) => r.label).join(' · ')
+                        : c.contactEmail || `since ${c.since}`}
                     </div>
                   </div>
                 </div>
-                <div className="text-xs text-slate-700 font-medium">{c.plan}</div>
+                <div className="text-xs text-slate-700 font-medium truncate">
+                  {c.plan}
+                </div>
                 <div className="text-xs text-slate-700">
                   {c.agents.toLocaleString()}
                 </div>
-                <div className="text-xs text-slate-700">{c.userCount ?? '—'}</div>
+                <div className="text-xs text-slate-700 tabular-nums">
+                  {c.seats || `${c.userCount ?? 0}`}
+                </div>
+                <div
+                  className={cn(
+                    'text-xs font-medium capitalize',
+                    LOCK_STYLE[c.lockState || 'open'] || 'text-slate-600'
+                  )}>
+                  {c.lockState || 'open'}
+                </div>
+                <div className="text-xs text-slate-600">
+                  {formatActivity(c.lastActivityDaysAgo, c.lastActivityAt)}
+                </div>
                 <div
                   className={cn(
                     'text-xs font-medium',
                     SUB_BADGE[c.subscriptionStatus || ''] || 'text-slate-500'
                   )}>
                   {c.subscriptionStatus?.replace(/_/g, ' ') || '—'}
-                </div>
-                <div className="text-xs text-slate-700">
-                  {c.mrr ? fmtDalasi(c.mrr) : '—'}
                 </div>
                 <span
                   className={cn(
