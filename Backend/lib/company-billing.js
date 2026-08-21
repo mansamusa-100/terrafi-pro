@@ -22,6 +22,7 @@ import {
   clearSubscriptionLock,
   subscriptionViewExtras
 } from './subscription-lifecycle.js';
+import { logBillingLifecycleReport } from './notification-report.js';
 
 function slugify(name) {
   return String(name || '')
@@ -335,11 +336,37 @@ export async function syncCompanySubscription(companyId) {
     );
   }
 
+  const becameActive = previousStatus !== 'ACTIVE' && status === 'ACTIVE';
+  const wasBlocked =
+    company.lockState === 'grace' ||
+    company.lockState === 'locked' ||
+    ['PAST_DUE', 'EXPIRED', 'CANCELLED'].includes(previousStatus || '');
+
   if (status === 'ACTIVE' || status === 'TRIALING') {
     updated = await clearSubscriptionLock(companyId);
   } else {
     await applySubscriptionLifecycle(companyId, { notify: true });
     updated = await prisma.company.findUnique({ where: { id: companyId } });
+  }
+
+  if (becameActive) {
+    const periodLabel = updated.subscriptionPeriodEnd
+      ? new Date(updated.subscriptionPeriodEnd).toLocaleDateString(undefined, {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        })
+      : null;
+    await logBillingLifecycleReport({
+      company: updated,
+      type: 'billing.paid',
+      title: wasBlocked ? 'Subscription paid — access restored' : 'Subscription paid',
+      detail: `${updated.name} is ACTIVE${
+        mrr ? ` · MRR D ${mrr.toLocaleString()}` : ''
+      }${periodLabel ? ` · period ends ${periodLabel}` : ''}${
+        previousStatus ? ` · was ${previousStatus}` : ''
+      }`
+    });
   }
 
   return serializeSubscription(updated, {

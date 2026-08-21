@@ -13,14 +13,22 @@ import type { NotificationReportEntry } from '../lib/api';
 const TYPE_LABELS: Record<string, string> = {
   'agent.onboarded': 'Agent onboarded',
   'user.invited': 'User invited',
-  'user.password_reset': 'Password reset'
+  'user.password_reset': 'Password reset',
+  'billing.renewal_soon': 'Subscription ending soon',
+  'billing.period_ended': 'Subscription period ended',
+  'billing.locked': 'Subscription locked',
+  'billing.paid': 'Subscription paid'
 };
 
 const TYPE_FILTERS = [
   { value: '', label: 'All events' },
   { value: 'agent.onboarded', label: 'Agent onboarded' },
   { value: 'user.invited', label: 'User invited' },
-  { value: 'user.password_reset', label: 'Password reset' }
+  { value: 'user.password_reset', label: 'Password reset' },
+  { value: 'billing.renewal_soon', label: 'Ending soon' },
+  { value: 'billing.period_ended', label: 'Period ended' },
+  { value: 'billing.locked', label: 'Locked' },
+  { value: 'billing.paid', label: 'Paid' }
 ];
 
 function formatWhen(iso: string) {
@@ -31,6 +39,11 @@ function formatWhen(iso: string) {
 }
 
 function typeBadgeClass(type: string) {
+  if (type.startsWith('billing.')) {
+    if (type === 'billing.paid') return 'bg-apsGreenLt text-apsGreen';
+    if (type === 'billing.locked') return 'bg-apsRedLt text-apsRed';
+    return 'bg-apsAmberLt text-amber-700';
+  }
   if (type.startsWith('agent.')) return 'bg-apsTealLt text-apsTeal';
   if (type === 'user.password_reset') return 'bg-apsAmberLt text-amber-700';
   if (type.startsWith('user.')) return 'bg-apsBlueLt text-apsBlue';
@@ -152,8 +165,8 @@ export function NotificationReportPage() {
               Notification report
             </h3>
             <p className="text-[11px] text-slate-500 mt-0.5">
-              Agent onboarding, user invites, and password resets — including
-              temporary passwords for managers to copy.
+              Onboarding, invites, password resets, and subscription lifecycle
+              (ending soon, ended, locked, paid).
             </p>
           </div>
           <div className="flex flex-col sm:flex-row flex-wrap gap-2">

@@ -9,7 +9,16 @@ const ROLE_LABELS = {
   team_lead: 'Team lead',
   adr: 'ADR',
   agent: 'Agent',
-  teller: 'Teller'
+  teller: 'Teller',
+  system: 'System'
+};
+
+/** Automated actor for lifecycle / webhook events (no User FK required). */
+export const SYSTEM_ACTOR = {
+  id: 'system',
+  name: 'Terrafi Pro',
+  email: 'system@terrafi.pro',
+  role: 'system'
 };
 
 export function roleLabel(role) {
@@ -43,7 +52,8 @@ export function serializeNotificationReport(row) {
  * Does not write to the in-app bell. Failures are logged, never thrown.
  */
 export async function logNotificationReport({
-  actor,
+  actor = SYSTEM_ACTOR,
+  scope = null,
   type,
   title,
   detail,
@@ -54,19 +64,19 @@ export async function logNotificationReport({
   temporaryPassword = null,
   credentialDelivery = null
 }) {
-  if (!actor?.id) return;
+  const who = actor?.id ? actor : SYSTEM_ACTOR;
   try {
     await prisma.notificationReport.create({
       data: {
-        scope: companyId ? 'company' : 'platform',
+        scope: scope || (companyId ? 'company' : 'platform'),
         companyId,
         type,
         title,
         detail,
-        actorId: actor.id,
-        actorName: actor.name,
-        actorEmail: actor.email,
-        actorRole: actor.role,
+        actorId: who.id,
+        actorName: who.name,
+        actorEmail: who.email,
+        actorRole: who.role,
         entityType,
         entityId,
         entityLabel,
@@ -77,6 +87,30 @@ export async function logNotificationReport({
   } catch (err) {
     console.error('[notification-report]', err.message);
   }
+}
+
+/** Platform admin + company manager both see billing lifecycle events. */
+export async function logBillingLifecycleReport({
+  company,
+  type,
+  title,
+  detail
+}) {
+  if (!company?.id) return;
+  const base = {
+    actor: SYSTEM_ACTOR,
+    type,
+    title,
+    detail,
+    companyId: company.id,
+    entityType: 'company',
+    entityId: company.id,
+    entityLabel: company.name
+  };
+  await Promise.all([
+    logNotificationReport({ ...base, scope: 'platform' }),
+    logNotificationReport({ ...base, scope: 'company' })
+  ]);
 }
 
 export async function logAgentOnboardedReport(agent, actor) {

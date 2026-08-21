@@ -7,6 +7,7 @@ import {
 } from './plans.js';
 import { notifyCompanyRoles } from './notifications.js';
 import { isPlatformRole } from './audit.js';
+import { logBillingLifecycleReport } from './notification-report.js';
 
 function addDays(date, days) {
   const d = new Date(date);
@@ -204,6 +205,12 @@ export async function applySubscriptionLifecycle(companyId, { notify = true } = 
       entityType: 'company',
       entityId: companyId
     });
+    await logBillingLifecycleReport({
+      company: updated,
+      type: 'billing.renewal_soon',
+      title: 'Subscription ending soon',
+      detail: `${updated.name} period ends ${endLabel} · ${GRACE_DAYS}-day grace after end`
+    });
   }
 
   if (notify && patch.lockState === LOCK_STATES.GRACE) {
@@ -220,6 +227,12 @@ export async function applySubscriptionLifecycle(companyId, { notify = true } = 
       body: `Your subscription period has ended. You have until ${until} to settle payment. After that, only the network manager can access Terrafi Pro to pay.`,
       entityType: 'company',
       entityId: companyId
+    });
+    await logBillingLifecycleReport({
+      company: updated,
+      type: 'billing.period_ended',
+      title: 'Subscription period ended',
+      detail: `${updated.name} entered grace · pay by ${until || 'grace deadline'} · status ${updated.subscriptionStatus || '—'}`
     });
   }
 
@@ -241,6 +254,12 @@ export async function applySubscriptionLifecycle(companyId, { notify = true } = 
       body: 'Your organisation subscription is overdue. Contact your network manager to restore access after payment.',
       entityType: 'company',
       entityId: companyId
+    });
+    await logBillingLifecycleReport({
+      company: updated,
+      type: 'billing.locked',
+      title: 'Subscription locked',
+      detail: `${updated.name} access locked after grace · status ${updated.subscriptionStatus || '—'}`
     });
   }
 
