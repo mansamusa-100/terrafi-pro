@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { MapContainer, TileLayer, CircleMarker, Tooltip } from 'react-leaflet';
+import { MapContainer, CircleMarker, Tooltip } from 'react-leaflet';
+import { MapTileLayer } from '../components/MapTileLayer';
+import { MapResizeFix } from '../components/MapResizeFix';
 import { Layers, Activity, Droplets } from 'lucide-react';
 import { STATUS_META, fmt } from '../lib/data';
 import { useAppData } from '../lib/data-context';
@@ -148,10 +150,8 @@ export function MapPage({ setSelectedAgent }: MapPageProps) {
             zoom={9}
             scrollWheelZoom
             className="h-full w-full">
-            <TileLayer
-              attribution="&copy; OpenStreetMap"
-              url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-            />
+            <MapTileLayer />
+            <MapResizeFix />
             {filtered.map((a) => {
               const dist = agentDistanceMeters(a, userCoords);
               return (

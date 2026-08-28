@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from 'react-leaflet';
+import { MapContainer, Marker, useMap, useMapEvents } from 'react-leaflet';
+import { MapTileLayer } from './MapTileLayer';
+import { MapResizeFix } from './MapResizeFix';
 import L from 'leaflet';
 import { Crosshair, Loader2, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
@@ -28,15 +30,6 @@ interface LocationPickerProps {
   className?: string;
   mapHeightClass?: string;
   autoCapture?: boolean;
-}
-
-function MapResizeFix() {
-  const map = useMap();
-  useEffect(() => {
-    const t = window.setTimeout(() => map.invalidateSize(), 150);
-    return () => window.clearTimeout(t);
-  }, [map]);
-  return null;
 }
 
 function MapViewSync({ center, zoom }: { center: [number, number]; zoom: number }) {
@@ -115,10 +108,7 @@ export function LocationPicker({
           zoom={zoom}
           scrollWheelZoom
           className="h-full w-full">
-          <TileLayer
-            attribution="&copy; OpenStreetMap"
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
+          <MapTileLayer />
           <MapViewSync center={center} zoom={zoom} />
           <MapResizeFix />
           <MapClickToPlace onPick={onChange} />
