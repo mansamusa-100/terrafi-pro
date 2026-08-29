@@ -74,6 +74,10 @@ export interface Agent {
   kyc_reviewed_at?: string | null;
   last_visit: string | null;
   national_id?: string | null;
+  gender?: string | null;
+  created_at?: string | null;
+  onboarded_by_name?: string | null;
+  kyc_reviewed_by_name?: string | null;
   business_type?: string | null;
   business_type_other?: string | null;
   competitors_present?: string[];
@@ -444,6 +448,148 @@ export interface AgentSparklines {
   trends: Record<string, number[]>;
 }
 
+export interface AgentReportSummary {
+  total_agents: number;
+  onboarded_today: number;
+  agents_visited: number;
+  never_visited: number;
+  kyc_pending: number;
+  visits_done: number;
+  visit_target_total: number;
+  visit_coverage_pct: number;
+  visit_frequency_target: number;
+}
+
+export interface AgentReportRow {
+  id: string;
+  created_at: string;
+  name: string;
+  outlet_name: string | null;
+  business_type: string | null;
+  status: string;
+  kyc: string;
+  gender: string | null;
+  business_phone: string;
+  agent_number: string | null;
+  address: string;
+  region: string;
+  adr_id: string | null;
+  adr_name: string;
+  team_lead_id: string | null;
+  team_lead_name: string | null;
+  onboarded_by_id: string | null;
+  onboarded_by_name: string | null;
+  kyc_approved_by_id: string | null;
+  kyc_approved_by_name: string | null;
+  last_visit_date: string | null;
+  last_visited_by: string | null;
+}
+
+export interface AgentReport {
+  period: { preset: string; from: string; to: string; visit_from?: string; visit_to?: string };
+  table_scope: 'onboarded' | 'all';
+  sort: { by: string; dir: string };
+  summary: AgentReportSummary;
+  rows: AgentReportRow[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface VisitTargetClasses {
+  exceeded_min: number;
+  met_min: number;
+  below_min: number;
+}
+
+export interface OfficerReportSummary {
+  total_officers: number;
+  active_officers: number;
+  total_visit_target: number;
+  visits_done: number;
+  visit_coverage_pct: number;
+  visit_frequency_target: number;
+}
+
+export interface OfficerVisitAchievedRow {
+  officer_id: string;
+  name: string;
+  team_lead_id: string | null;
+  team_lead_name: string | null;
+  zone: string;
+  target: number;
+  visits_done: number;
+  visit_rate_pct: number;
+  target_class: 'exceeded' | 'met' | 'below' | 'critical';
+  target_class_label: string;
+  account_status: string;
+}
+
+export interface OfficerWorkDurationRow {
+  date: string;
+  officer_id: string;
+  name: string;
+  role: string;
+  team_lead_name: string | null;
+  zone: string;
+  visits_done: number;
+  unique_agents_visited: number;
+  earliest_visit: string | null;
+  latest_visit: string | null;
+  field_time_minutes: number | null;
+}
+
+export interface OfficerTeamActivityRow {
+  team_lead_id: string;
+  team_lead_name: string;
+  zone: string;
+  officer_count: number;
+  active_officer_count: number;
+  total_visit_target: number;
+  visits_done: number;
+  visit_coverage_pct: number;
+}
+
+export interface OfficerJourneyVisit {
+  id: number;
+  agent_id: string;
+  agent_name: string;
+  time: string;
+  type: string;
+  zone: string;
+  gps_verified: boolean;
+  distance_meters: number | null;
+  check_in_lat: number | null;
+  check_in_lng: number | null;
+}
+
+export interface OfficerJourney {
+  officer: { id: string; name: string; zone: string | null; status: string };
+  date: string;
+  sessions: { id: string; started_at: string; ended_at: string | null; active: boolean }[];
+  active_session: { id: string; started_at: string } | null;
+  path: {
+    lat: number;
+    lng: number;
+    captured_at: string;
+    source: string;
+    visit_id: number | null;
+    accuracy: number | null;
+  }[];
+  distance_km: number;
+  visits: OfficerJourneyVisit[];
+}
+
+export interface OfficerReport {
+  period: { preset: string; from: string; to: string };
+  target_classes: VisitTargetClasses;
+  summary: OfficerReportSummary;
+  visit_achieved: OfficerVisitAchievedRow[];
+  work_duration: OfficerWorkDurationRow[];
+  team_activity: OfficerTeamActivityRow[];
+  journey: OfficerJourney | null;
+}
+
 export interface OnboardingConfig {
   business_types: string[];
   zone_names: string[];
@@ -462,6 +608,7 @@ export interface CompanySettings {
     visit_frequency_target: number;
     alert_notification_delay_minutes: number;
     auto_suspend_missed_visits_days: number;
+    visit_target_classes: VisitTargetClasses;
   };
   zones: {
     active_zones: number;
@@ -567,6 +714,7 @@ export type CompanySettingsUpdate = Partial<{
   zone_names: string[] | string;
   competitor_names: string[] | string;
   branding_types: string[] | string;
+  visit_target_classes: VisitTargetClasses;
 }>;
 
 export interface DemoUser {
@@ -750,7 +898,52 @@ export const api = {
   performance: {
     adr: () => request<AdrPerformance[]>('/performance/adr'),
     adrMe: () => request<AdrPerformance | null>('/performance/adr/me'),
-    agentSparklines: () => request<AgentSparklines>('/performance/agent-sparklines')
+    agentSparklines: () => request<AgentSparklines>('/performance/agent-sparklines'),
+    agentReport: (params: Record<string, string | number | undefined>) => {
+      const q = new URLSearchParams();
+      for (const [key, val] of Object.entries(params)) {
+        if (val !== undefined && val !== '') q.set(key, String(val));
+      }
+      const qs = q.toString();
+      return request<AgentReport>(`/performance/agent-report${qs ? `?${qs}` : ''}`);
+    },
+    officerReport: (params: Record<string, string | number | undefined>) => {
+      const q = new URLSearchParams();
+      for (const [key, val] of Object.entries(params)) {
+        if (val !== undefined && val !== '') q.set(key, String(val));
+      }
+      const qs = q.toString();
+      return request<OfficerReport>(`/performance/officer-report${qs ? `?${qs}` : ''}`);
+    },
+    officerJourney: (officerId: string, date: string) =>
+      request<OfficerJourney>(
+        `/performance/officer-journey?officer_id=${encodeURIComponent(officerId)}&date=${encodeURIComponent(date)}`
+      )
+  },
+  tracking: {
+    getSession: () =>
+      request<{ active: boolean; session: { id: string; started_at: string; device_id: string | null } | null }>(
+        '/tracking/session'
+      ),
+    startSession: (body: { lat?: number; lng?: number; accuracy?: number; device_id?: string }) =>
+      request<{ resumed: boolean; session: { id: string; started_at: string; device_id: string | null } }>(
+        '/tracking/session/start',
+        { method: 'POST', body: JSON.stringify(body) }
+      ),
+    endSession: (body: { lat?: number; lng?: number; accuracy?: number; device_id?: string }) =>
+      request<{ session: { id: string; started_at: string; ended_at: string | null } }>(
+        '/tracking/session/end',
+        { method: 'POST', body: JSON.stringify(body) }
+      ),
+    recordPings: (body: {
+      session_id?: string;
+      device_id?: string;
+      pings: { lat: number; lng: number; accuracy?: number; captured_at?: string; source?: string }[];
+    }) =>
+      request<{ recorded: number }>('/tracking/pings', {
+        method: 'POST',
+        body: JSON.stringify(body)
+      })
   },
   export: {
     agents: () => '/export/agents',
@@ -762,7 +955,24 @@ export const api = {
       return `/export/visits${q ? `?${q}` : ''}`;
     },
     adrPerformance: () => '/export/adr-performance',
-    compliance: () => '/export/compliance'
+    compliance: () => '/export/compliance',
+    agentReport: (params: Record<string, string | undefined>) => {
+      const q = new URLSearchParams();
+      for (const [key, val] of Object.entries(params)) {
+        if (val) q.set(key, val);
+      }
+      const qs = q.toString();
+      return `/export/agent-report${qs ? `?${qs}` : ''}`;
+    },
+    officerReport: (params: Record<string, string | undefined>, table = 'visit_achieved') => {
+      const q = new URLSearchParams();
+      q.set('table', table);
+      for (const [key, val] of Object.entries(params)) {
+        if (val) q.set(key, val);
+      }
+      const qs = q.toString();
+      return `/export/officer-report?${qs}`;
+    }
   },
   users: () => request<CompanyUser[]>('/users'),
   inviteUser: (body: {

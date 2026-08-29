@@ -73,6 +73,7 @@ export function OnboardingModal({
   const [phone, setPhone] = useState('+220 ');
   const [personalPhone, setPersonalPhone] = useState('+220 ');
   const [nationalId, setNationalId] = useState('');
+  const [gender, setGender] = useState('');
   const [businessType, setBusinessType] = useState('');
   const [businessTypeOther, setBusinessTypeOther] = useState('');
   const [zone, setZone] = useState('');
@@ -147,6 +148,7 @@ export function OnboardingModal({
     setPhone('+220 ');
     setPersonalPhone('+220 ');
     setNationalId('');
+    setGender('');
     setBusinessType('');
     setBusinessTypeOther('');
     setZone('');
@@ -180,6 +182,7 @@ export function OnboardingModal({
     setPhone('+220 ');
     setPersonalPhone('+220 ');
     setNationalId('');
+    setGender('');
     setBusinessType('');
     setBusinessTypeOther('');
     setZone('');
@@ -255,6 +258,7 @@ export function OnboardingModal({
             ? { businessTypeOther: businessTypeOther.trim() }
             : {}),
           nationalId,
+          gender: gender || undefined,
           competitorsPresent: competitors,
           brandingPresent: branding,
           ...(canAssignAdr && officerId ? { officer_id: officerId } : {})
@@ -388,6 +392,19 @@ export function OnboardingModal({
                         onChange={(e) => setName(e.target.value)}
                         placeholder="e.g. Fatou Jallow"
                       />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Gender</label>
+                      <select
+                        className={inputClass}
+                        value={gender}
+                        onChange={(e) => setGender(e.target.value)}>
+                        <option value="">Select…</option>
+                        <option value="Female">Female</option>
+                        <option value="Male">Male</option>
+                        <option value="Other">Other</option>
+                        <option value="Prefer not to say">Prefer not to say</option>
+                      </select>
                     </div>
                     <div>
                       <label className={labelClass}>Business phone (float)</label>

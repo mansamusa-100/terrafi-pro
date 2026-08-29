@@ -7,6 +7,8 @@ export type FieldBarItem = {
   id: string;
   icon: LucideIcon;
   label: string;
+  /** When set, used instead of `active === id` to mark the tab active. */
+  isActive?: (page: string) => boolean;
 };
 
 interface MobileFieldBarProps {
@@ -34,7 +36,7 @@ export function MobileFieldBar({
       <div className="flex items-stretch h-16 max-w-lg mx-auto relative">
         {items.map((item) => {
           const Icon = item.icon;
-          const isActive = active === item.id;
+          const isActive = item.isActive?.(active) ?? active === item.id;
           return (
             <button
               key={item.id}

@@ -1,8 +1,8 @@
-import React from 'react';
-import { X } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { ChevronDown, X } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuth } from '../lib/auth';
-import { navFor, ROLE_META } from '../lib/rbac';
+import { navFor, navGroupForPage, ROLE_META, type NavEntry } from '../lib/rbac';
 import { useAppData } from '../lib/data-context';
 import { BrandMark } from './BrandMark';
 
@@ -23,6 +23,101 @@ function userInitials(name: string) {
     .slice(0, 2);
 }
 
+function NavGroupItem({
+  entry,
+  active,
+  collapsed,
+  expanded,
+  onToggle,
+  onNavigate,
+  badgeForPage
+}: {
+  entry: Extract<NavEntry, { kind: 'group' }>;
+  active: string;
+  collapsed: boolean;
+  expanded: boolean;
+  onToggle: () => void;
+  onNavigate: (id: string) => void;
+  badgeForPage: (pageId: string) => number | undefined;
+}) {
+  const Icon = entry.icon;
+  const childActive = entry.children.some((c) => c.id === active);
+  const groupActive = childActive;
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={onToggle}
+        className={cn(
+          'w-full flex items-center gap-3 rounded-lg transition-colors relative group',
+          'py-2.5 px-3 justify-start',
+          'lg:py-2',
+          collapsed && 'lg:py-2.5 lg:justify-center lg:px-0',
+          groupActive
+            ? 'bg-apsBlue/20 text-white'
+            : 'text-white/60 hover:bg-white/5 hover:text-white'
+        )}>
+        <Icon
+          className={cn(
+            'shrink-0 w-[18px] h-[18px]',
+            collapsed && 'lg:w-5 lg:h-5',
+            groupActive ? 'text-apsBlueLt' : 'text-white/50 group-hover:text-white/80'
+          )}
+        />
+        <span
+          className={cn(
+            'text-[13px] font-medium whitespace-nowrap flex-1 text-left',
+            collapsed && 'lg:hidden'
+          )}>
+          {entry.label}
+        </span>
+        <ChevronDown
+          className={cn(
+            'w-4 h-4 shrink-0 text-white/40 transition-transform',
+            collapsed && 'lg:hidden',
+            expanded && 'rotate-180'
+          )}
+        />
+      </button>
+
+      {expanded && (
+        <div
+          className={cn(
+            'mt-0.5 space-y-0.5',
+            collapsed ? 'lg:hidden' : 'pl-3 ml-3 border-l border-white/10'
+          )}>
+          {entry.children.map((child) => {
+            const isActive = active === child.id;
+            const badge = badgeForPage(child.id);
+            return (
+              <button
+                key={child.id}
+                type="button"
+                onClick={() => onNavigate(child.id)}
+                className={cn(
+                  'w-full flex items-center gap-2 rounded-lg py-2 px-3 text-left transition-colors',
+                  isActive
+                    ? 'bg-apsBlue/15 text-white'
+                    : 'text-white/55 hover:bg-white/5 hover:text-white'
+                )}>
+                <span className="text-[12px] font-medium flex-1 truncate">
+                  {child.label}
+                </span>
+                {badge != null && (
+                  <span className="bg-apsRed text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
+                    {badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Sidebar({
   active,
   setActive,
@@ -33,6 +128,19 @@ export function Sidebar({
 }: SidebarProps) {
   const { user } = useAuth();
   const { agents, kycReviewQueue, stats } = useAppData();
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set());
+
+  useEffect(() => {
+    const groupId = navGroupForPage(active);
+    if (!groupId) return;
+    setExpandedGroups((prev) => {
+      if (prev.has(groupId)) return prev;
+      const next = new Set(prev);
+      next.add(groupId);
+      return next;
+    });
+  }, [active]);
+
   if (!user) return null;
   const nav = navFor(user.role);
   const meta = ROLE_META[user.role];
@@ -48,6 +156,7 @@ export function Sidebar({
     }
     return undefined;
   }
+
   const branding =
     user.branding ??
     ({
@@ -59,6 +168,18 @@ export function Sidebar({
   const handleNav = (id: string) => {
     setActive(id);
     onMobileClose();
+  };
+
+  const toggleGroup = (groupId: string) => {
+    if (collapsed && window.matchMedia('(min-width: 1024px)').matches) {
+      setCollapsed(false);
+    }
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return next;
+    });
   };
 
   return (
@@ -116,6 +237,21 @@ export function Sidebar({
 
         <nav className="flex-1 py-4 px-3 overflow-y-auto space-y-1 custom-scrollbar">
           {nav.map((item) => {
+            if (item.kind === 'group') {
+              return (
+                <NavGroupItem
+                  key={item.id}
+                  entry={item}
+                  active={active}
+                  collapsed={collapsed}
+                  expanded={expandedGroups.has(item.id)}
+                  onToggle={() => toggleGroup(item.id)}
+                  onNavigate={handleNav}
+                  badgeForPage={navBadge}
+                />
+              );
+            }
+
             const Icon = item.icon;
             const isActive = active === item.id;
             const badge = navBadge(item.id);

@@ -7,6 +7,7 @@ import {
   parseStringArray
 } from './onboarding-config.js';
 import { companyLogoUrl } from './branding.js';
+import { parseVisitTargetClasses, serializeVisitTargetClasses } from './visit-target-classes.js';
 
 export const COVERAGE_MODELS = ['Officer-based', 'Zone-based', 'Hybrid'];
 
@@ -21,7 +22,8 @@ export const EDITABLE_FIELDS = new Set([
   'business_types',
   'zone_names',
   'competitor_names',
-  'branding_types'
+  'branding_types',
+  'visit_target_classes'
 ]);
 
 const FIELD_TO_COLUMN = {
@@ -35,7 +37,8 @@ const FIELD_TO_COLUMN = {
   business_types: 'businessTypes',
   zone_names: 'zoneNames',
   competitor_names: 'competitorNames',
-  branding_types: 'brandingTypes'
+  branding_types: 'brandingTypes',
+  visit_target_classes: 'visitTargetClasses'
 };
 
 const ARRAY_DEFAULTS = {
@@ -86,7 +89,8 @@ export async function serializeCompanySettings(row, company = null) {
       default_float_threshold: row.defaultFloatThreshold,
       visit_frequency_target: row.visitFrequencyTarget,
       alert_notification_delay_minutes: row.alertNotificationDelayMinutes,
-      auto_suspend_missed_visits_days: row.autoSuspendMissedVisitsDays
+      auto_suspend_missed_visits_days: row.autoSuspendMissedVisitsDays,
+      visit_target_classes: serializeVisitTargetClasses(row.visitTargetClasses)
     },
     zones: {
       active_zones: row.activeZones,
@@ -137,6 +141,18 @@ export function buildSettingsUpdate(body) {
         arr.push('Others');
       }
       data[column] = arr;
+      continue;
+    }
+    if (apiKey === 'visit_target_classes') {
+      let raw = body[apiKey];
+      if (typeof raw === 'string') {
+        try {
+          raw = JSON.parse(raw);
+        } catch {
+          throw new Error('Invalid visit_target_classes JSON');
+        }
+      }
+      data[column] = parseVisitTargetClasses(raw);
       continue;
     }
     data[column] = parseIntField(apiKey, body[apiKey]);

@@ -3,6 +3,9 @@ import { companyFilter } from '../middleware/user.js';
 import { requireRoles } from '../middleware/auth.js';
 import { buildAdrPerformance } from '../lib/performance.js';
 import { buildAgentVisitSparklines } from '../lib/analytics.js';
+import { buildAgentRegistryReport } from '../lib/agent-registry.js';
+import { buildOfficerReport } from '../lib/officer-report.js';
+import { buildOfficerJourney } from '../lib/journey-tracking.js';
 
 const router = Router();
 
@@ -57,5 +60,50 @@ router.get('/agent-sparklines', requireRoles('manager', 'internal', 'team_lead')
     next(err);
   }
 });
+
+router.get(
+  '/agent-report',
+  requireRoles('manager', 'internal', 'team_lead', 'adr'),
+  async (req, res, next) => {
+    try {
+      const report = await buildAgentRegistryReport(req.user, req.query);
+      res.json(report);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+router.get(
+  '/officer-report',
+  requireRoles('manager', 'internal', 'team_lead', 'adr'),
+  async (req, res, next) => {
+    try {
+      const report = await buildOfficerReport(req.user, req.query);
+      res.json(report);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+router.get(
+  '/officer-journey',
+  requireRoles('manager', 'internal', 'team_lead', 'adr'),
+  async (req, res, next) => {
+    try {
+      const journey = await buildOfficerJourney(req.user, {
+        officerId: req.query.officer_id,
+        date: req.query.date
+      });
+      if (!journey) {
+        return res.status(404).json({ error: 'Journey not found or access denied' });
+      }
+      res.json(journey);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 
 export default router;

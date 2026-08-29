@@ -51,6 +51,8 @@ model Company {
   notifications Notification[]
   notificationReports NotificationReport[]
   leadAdrAssignments LeadAdrAssignment[]
+  journeySessions JourneySession[]
+  locationPings   LocationPing[]
 }
 
 model CompanySettings {
@@ -71,6 +73,7 @@ model CompanySettings {
   zoneNames                      Json?   @map("zone_names")
   competitorNames                Json?   @map("competitor_names")
   brandingTypes                  Json?   @map("branding_types")
+  visitTargetClasses             Json?   @map("visit_target_classes")
   updatedAt                      DateTime @updatedAt @map("updated_at")
 }
 
@@ -87,10 +90,14 @@ model User {
   status       String     @default("active")
   auditLogs    AuditLog[] @relation("AuditActor")
   assignedAgents Agent[]  @relation("AgentOfficer")
+  onboardedAgents Agent[] @relation("AgentOnboarder")
   kycReviews     Agent[]  @relation("KycReviewer")
   notifications  Notification[]
   supervisedAdrs LeadAdrAssignment[] @relation("LeadSupervisor")
   leadOf         LeadAdrAssignment[] @relation("LeadAdr")
+  journeySessions JourneySession[]
+  locationPings   LocationPing[]
+  visitsLogged    Visit[]             @relation("VisitOfficer")
 }
 
 model LeadAdrAssignment {
@@ -144,6 +151,10 @@ model Agent {
   officer             String
   officerId           String?       @map("officer_id")
   officerUser         User?         @relation("AgentOfficer", fields: [officerId], references: [id], onDelete: SetNull)
+  onboardedById       String?       @map("onboarded_by_id")
+  onboardedBy         User?         @relation("AgentOnboarder", fields: [onboardedById], references: [id], onDelete: SetNull)
+  createdAt           DateTime      @default(now()) @map("created_at")
+  gender              String?
   joined              String
   lat                 Float
   lng                 Float
@@ -203,6 +214,8 @@ model Visit {
   agent            Agent    @relation(fields: [agentId], references: [id])
   agentName        String   @map("agent_name")
   officer          String
+  officerId        String?  @map("officer_id")
+  officerUser      User?    @relation("VisitOfficer", fields: [officerId], references: [id], onDelete: SetNull)
   status           String   @default("done")
   time             String
   type             String
@@ -221,6 +234,7 @@ model Visit {
   capturedAt       DateTime? @map("captured_at")
   deviceId         String?  @map("device_id")
   createdAt        DateTime @default(now()) @map("created_at")
+  locationPings    LocationPing[]
 }
 
 model Alert {
@@ -311,4 +325,41 @@ model NotificationReport {
   @@index([companyId, createdAt(sort: Desc)])
   @@index([scope, createdAt(sort: Desc)])
   @@index([type])
+}
+
+model JourneySession {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId String    @map("company_id")
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  startedAt DateTime  @default(now()) @map("started_at")
+  endedAt   DateTime? @map("ended_at")
+  deviceId  String?   @map("device_id")
+  pings     LocationPing[]
+
+  @@index([userId, startedAt])
+  @@index([companyId, startedAt])
+}
+
+model LocationPing {
+  id         String          @id @default(cuid())
+  userId     String          @map("user_id")
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId  String          @map("company_id")
+  company    Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sessionId  String?         @map("session_id")
+  session    JourneySession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  lat        Float
+  lng        Float
+  accuracy   Float?
+  source     String
+  visitId    Int?            @map("visit_id")
+  visit      Visit?          @relation(fields: [visitId], references: [id], onDelete: SetNull)
+  capturedAt DateTime        @map("captured_at")
+  deviceId   String?         @map("device_id")
+
+  @@index([userId, capturedAt])
+  @@index([companyId, capturedAt])
+  @@index([sessionId])
 }

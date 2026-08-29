@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../lib/auth';
-import { ROLE_META } from '../lib/rbac';
+import { ROLE_META, pageTitleFor } from '../lib/rbac';
 import { api, ApiError, LoginWorkspace } from '../lib/api';
 import { cn } from '../lib/utils';
 import { NotificationBell } from './NotificationBell';
@@ -24,23 +24,6 @@ interface TopbarProps {
   setPage: (page: string) => void;
   setSelectedAgent: (agent: Agent | null) => void;
 }
-
-const TITLES: Record<string, string> = {
-  dashboard: 'Overview',
-  companies: 'Companies',
-  agents: 'Agent Directory',
-  map: 'Network Map',
-  visits: 'Field Visits',
-  float: 'Float Monitor',
-  'float-sync': 'Float sync log',
-  performance: 'Performance',
-  training: 'Training',
-  compliance: 'Compliance',
-  users: 'Users & Roles',
-  'notification-report': 'Notification report',
-  audit: 'Audit log',
-  settings: 'Settings'
-};
 
 export function Topbar({
   page,
@@ -80,15 +63,7 @@ export function Topbar({
 
   if (!user) return null;
   const meta = ROLE_META[user.role];
-  const isPlatform = user.role === 'system_owner' || user.role === 'platform_staff';
-  const pageTitle =
-    page === 'dashboard'
-      ? isPlatform
-        ? 'Platform Overview'
-        : user.role === 'team_lead'
-          ? 'Regional hub'
-          : 'Network Overview'
-      : TITLES[page] || 'Dashboard';
+  const pageTitle = pageTitleFor(page, user.role);
 
   const canSwitch = workspaces.length > 1;
 

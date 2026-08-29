@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Loader2, Upload, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { ApiError, api, CompanySettings, OnboardingConfig } from '../lib/api';
+import { ApiError, api, CompanySettings, OnboardingConfig, type VisitTargetClasses } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { can } from '../lib/rbac';
 import { cn } from '../lib/utils';
@@ -247,6 +247,120 @@ function OnboardingListsSection({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function VisitTargetClassesSection({
+  thresholds,
+  onSaved
+}: {
+  thresholds: VisitTargetClasses;
+  onSaved: (next: VisitTargetClasses) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(thresholds);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!editing) setDraft(thresholds);
+  }, [thresholds, editing]);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const updated = await api.settings.update({ visit_target_classes: draft });
+      onSaved(updated.network.visit_target_classes);
+      setEditing(false);
+      toast.success('Visit target classes saved');
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const fields: { key: keyof VisitTargetClasses; label: string; hint: string }[] = [
+    {
+      key: 'exceeded_min',
+      label: 'Exceeded (min %)',
+      hint: 'Visit rate at or above this → Exceeded'
+    },
+    {
+      key: 'met_min',
+      label: 'Met (min %)',
+      hint: 'At or above → Met (below Exceeded threshold)'
+    },
+    {
+      key: 'below_min',
+      label: 'Below (min %)',
+      hint: 'At or above → Below; under this → Critical'
+    }
+  ];
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm mb-4">
+      <h3 className="text-sm font-semibold text-slate-900 mb-1">Visit target classes</h3>
+      <p className="text-xs text-slate-500 mb-4">
+        Thresholds for officer visit achievement in Performance → Officer report.
+        Critical is anything below the Below minimum.
+      </p>
+      <div className="space-y-3">
+        {fields.map(({ key, label, hint }) => (
+          <div
+            key={key}
+            className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 py-2 border-b border-slate-100 last:border-0">
+            <div>
+              <div className="text-sm text-slate-900">{label}</div>
+              <div className="text-[11px] text-slate-500">{hint}</div>
+            </div>
+            {editing ? (
+              <input
+                type="number"
+                min={0}
+                max={200}
+                value={draft[key]}
+                onChange={(e) =>
+                  setDraft((d) => ({ ...d, [key]: Number.parseInt(e.target.value, 10) || 0 }))
+                }
+                className="text-sm border border-slate-200 rounded-md px-2.5 py-1.5 w-24"
+              />
+            ) : (
+              <span className="text-sm font-medium text-slate-500">{thresholds[key]}%</span>
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="flex justify-end gap-2 mt-4">
+        {editing ? (
+          <>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={save}
+              className="text-xs text-white bg-apsBlue hover:bg-apsBlue/90 px-3 py-1 rounded-md font-medium disabled:opacity-50">
+              Save
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => {
+                setEditing(false);
+                setDraft(thresholds);
+              }}
+              className="text-xs text-slate-600 hover:bg-slate-100 px-3 py-1 rounded-md font-medium">
+              Cancel
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="text-xs text-apsBlue bg-apsBlueLt hover:bg-apsBlue/20 px-3 py-1 rounded-md font-medium transition-colors">
+            Edit thresholds
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -507,6 +621,22 @@ export function SettingsPage() {
           })}
         </div>
       ))}
+
+      {canEdit && settings.network?.visit_target_classes && (
+        <VisitTargetClassesSection
+          thresholds={settings.network.visit_target_classes}
+          onSaved={(visit_target_classes) =>
+            setSettings((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    network: { ...prev.network, visit_target_classes }
+                  }
+                : prev
+            )
+          }
+        />
+      )}
 
       {canEdit && settings.onboarding && (
         <OnboardingListsSection

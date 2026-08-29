@@ -25,6 +25,8 @@ import { VisitsPage } from './pages/VisitsPage';
 import { FloatPage } from './pages/FloatPage';
 import { FloatSyncPage } from './pages/FloatSyncPage';
 import { PerformancePage } from './pages/PerformancePage';
+import { AgentReportPage } from './pages/AgentReportPage';
+import { OfficerReportPage } from './pages/OfficerReportPage';
 import { TrainingPage } from './pages/TrainingPage';
 import { CompliancePage } from './pages/CompliancePage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -42,6 +44,8 @@ import {
 } from './lib/useFieldMobileNav';
 import type { Agent } from './lib/api';
 import { toast } from 'sonner';
+import { useDutyTracking } from './lib/useDutyTracking';
+import { DutyTrackingBar } from './components/DutyTrackingBar';
 
 function AuthenticatedApp({
   page,
@@ -75,6 +79,7 @@ function AuthenticatedApp({
   const isAdr = user?.role === 'adr';
   const isTeamLead = user?.role === 'team_lead';
   const canLogVisit = user ? can(user.role, 'logVisit') : false;
+  const duty = useDutyTracking(isAdr);
 
   const handleSetPage = useCallback(
     (p: string) => {
@@ -157,6 +162,10 @@ function AuthenticatedApp({
     float: <FloatPage />,
     'float-sync': <FloatSyncPage />,
     performance: <PerformancePage />,
+    'performance-agent-report': (
+      <AgentReportPage onAgentClick={setSelectedAgent} />
+    ),
+    'performance-officer-report': <OfficerReportPage />,
     training: <TrainingPage />,
     compliance: <CompliancePage onOpenAgent={setSelectedAgent} />,
     users: <UsersPage />,
@@ -196,6 +205,17 @@ function AuthenticatedApp({
           />
         )}
         <SubscriptionBanner />
+        {isAdr && (
+          <DutyTrackingBar
+            onDuty={duty.onDuty}
+            startedAt={duty.startedAt}
+            busy={duty.busy}
+            initializing={duty.initializing}
+            gpsAvailable={duty.gpsAvailable}
+            onStart={() => void duty.startDuty()}
+            onEnd={() => void duty.endDuty()}
+          />
+        )}
         <main className={`flex-1 overflow-y-auto ${fieldMainClass}`}>
           {pageComponents[activePage] || pageComponents[firstPageFor(user.role)]}
         </main>

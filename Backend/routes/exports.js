@@ -5,6 +5,16 @@ import { requireRoles } from '../middleware/auth.js';
 import { toCsv, csvResponse } from '../lib/csv-export.js';
 import { buildAdrPerformance } from '../lib/performance.js';
 import { todayISO } from '../middleware/user.js';
+import {
+  buildAgentRegistryReport,
+  agentRegistryCsvRows,
+  AGENT_REGISTRY_CSV_HEADERS
+} from '../lib/agent-registry.js';
+import {
+  buildOfficerReport,
+  officerReportCsvSections,
+  OFFICER_CSV_HEADERS
+} from '../lib/officer-report.js';
 
 const router = Router();
 
@@ -194,6 +204,49 @@ router.get(
       );
 
       csvResponse(res, `compliance-${todayISO()}.csv`, csv);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+router.get(
+  '/agent-report',
+  requireRoles('manager', 'internal', 'team_lead', 'adr'),
+  async (req, res, next) => {
+    try {
+      const report = await buildAgentRegistryReport(req.user, {
+        ...req.query,
+        limit: '10000',
+        offset: '0'
+      });
+      const csv = toCsv(AGENT_REGISTRY_CSV_HEADERS, agentRegistryCsvRows(report));
+      const { from, to } = report.period;
+      csvResponse(res, `agent-report-${from}-to-${to}.csv`, csv);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+router.get(
+  '/officer-report',
+  requireRoles('manager', 'internal', 'team_lead', 'adr'),
+  async (req, res, next) => {
+    try {
+      const report = await buildOfficerReport(req.user, req.query);
+      const table = req.query.table || 'visit_achieved';
+      const sections = officerReportCsvSections(report);
+      const headers = OFFICER_CSV_HEADERS[table];
+      const rows = sections[table];
+      if (!headers || !rows) {
+        return res.status(400).json({
+          error: 'Invalid table — use visit_achieved, work_duration, or team_activity'
+        });
+      }
+      const csv = toCsv(headers, rows);
+      const { from, to } = report.period;
+      csvResponse(res, `officer-report-${table}-${from}-to-${to}.csv`, csv);
     } catch (err) {
       next(err);
     }

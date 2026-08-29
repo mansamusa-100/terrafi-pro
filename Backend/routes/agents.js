@@ -159,7 +159,8 @@ router.post('/import', requireRoles('manager', 'team_lead', 'adr'), async (req, 
               kyc: 'pending',
               lastVisit: 'Never',
               nationalId: row.national_id?.trim() || null,
-              businessType: row.business_type?.trim() || null
+              businessType: row.business_type?.trim() || null,
+              onboardedById: req.user.id
             }
           });
           await tx.company.update({
@@ -286,7 +287,8 @@ router.post('/', requireRoles('manager', 'team_lead', 'adr'), async (req, res, n
       personalPhone,
       townVillage,
       competitorsPresent,
-      brandingPresent
+      brandingPresent,
+      gender
     } = req.body;
 
     if (!name?.trim() || !phone?.trim() || !zone) {
@@ -409,7 +411,9 @@ router.post('/', requireRoles('manager', 'team_lead', 'adr'), async (req, res, n
           personalPhoneNormalized: personalFields.personalPhoneNormalized,
           townVillage: townVillage.trim(),
           competitorsPresent: competitors,
-          brandingPresent: branding
+          brandingPresent: branding,
+          onboardedById: req.user.id,
+          gender: gender?.trim() || null
         }
       });
       await tx.company.update({

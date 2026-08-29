@@ -17,6 +17,7 @@ import { recordFloatTrendSnapshot } from '../lib/analytics.js';
 import { refreshAgentScore } from '../lib/agent-score.js';
 import { buildVisitSummary, markOverdueVisits } from '../lib/visit-utils.js';
 import { logAudit } from '../lib/audit.js';
+import { recordVisitCheckInPing } from '../lib/journey-tracking.js';
 
 const router = Router();
 
@@ -153,6 +154,7 @@ router.post('/schedule', requireRoles('manager', 'team_lead', 'adr'), async (req
         agentId,
         agentName: agent.name,
         officer: officer.officer,
+        officerId: officer.officerId || null,
         status: 'pending',
         time: visitTime,
         type,
@@ -239,7 +241,8 @@ router.post('/', requireRoles('manager', 'team_lead', 'adr'), async (req, res, n
     const now = new Date();
     const time = now.toTimeString().slice(0, 5);
     const visitDate = todayISO();
-    const officer = req.user.role === 'adr' ? req.user.name : agent.officer;
+    const officerName = req.user.role === 'adr' ? req.user.name : agent.officer;
+    const officerId = req.user.role === 'adr' ? req.user.id : agent.officerId || null;
 
     const capturedAtDate =
       capturedAt && !Number.isNaN(Date.parse(capturedAt))
@@ -270,6 +273,8 @@ router.post('/', requireRoles('manager', 'team_lead', 'adr'), async (req, res, n
         status: 'done',
         time,
         type,
+        officer: officerName,
+        officerId,
         efloat: newEfloat,
         cash: newCash,
         notes: notes || null,
@@ -295,7 +300,8 @@ router.post('/', requireRoles('manager', 'team_lead', 'adr'), async (req, res, n
             companyId,
             agentId,
             agentName: agent.name,
-            officer,
+            officer: officerName,
+            officerId,
             zone: agent.zone,
             visitDate,
             ...visitData
@@ -315,7 +321,7 @@ router.post('/', requireRoles('manager', 'team_lead', 'adr'), async (req, res, n
       });
 
       await tx.officer.updateMany({
-        where: { name: officer, companyId },
+        where: { name: officerName, companyId },
         data: { visits: { increment: 1 } }
       });
 
@@ -326,6 +332,16 @@ router.post('/', requireRoles('manager', 'team_lead', 'adr'), async (req, res, n
     await recordFloatTrendSnapshot(companyId);
     await syncFloatAlertsForAgent(agentId);
     await notifyVisitLogged(visit, agent, req.user);
+
+    if (req.user.role === 'adr') {
+      await recordVisitCheckInPing(
+        req.user,
+        visit,
+        checkInLat,
+        checkInLng,
+        deviceId
+      );
+    }
 
     await logAudit({
       scope: 'company',
