@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { MapContainer, CircleMarker, Tooltip } from 'react-leaflet';
 import { MapTileLayer } from '../components/MapTileLayer';
 import { MapResizeFix } from '../components/MapResizeFix';
+import { MapInteractionDismiss } from '../components/MapInteractionDismiss';
 import { Layers, Activity, Droplets } from 'lucide-react';
 import { STATUS_META, fmt } from '../lib/data';
 import { useAppData } from '../lib/data-context';
@@ -12,6 +13,7 @@ import { compareAgentDistance, formatDistance, agentDistanceMeters } from '../li
 import { GoVisitButton } from '../components/GoVisitButton';
 import { Pagination } from '../components/Pagination';
 import { PAGE_SIZE, useClientPagination } from '../lib/useClientPagination';
+import { useAppOverlayOpen } from '../lib/app-overlay-context';
 
 interface MapPageProps {
   setSelectedAgent: (agent: Agent) => void;
@@ -35,6 +37,7 @@ function floatHex(efloat: number) {
 
 export function MapPage({ setSelectedAgent }: MapPageProps) {
   const { agents, zones } = useAppData();
+  const appOverlayOpen = useAppOverlayOpen();
   const { coords: userCoords } = useUserLocation();
   const [mode, setMode] = useState<Mode>('status');
   const [zoneFilter, setZoneFilter] = useState('all');
@@ -89,7 +92,7 @@ export function MapPage({ setSelectedAgent }: MapPageProps) {
 
   return (
     <div className="page-pad h-full flex flex-col min-h-[min(70dvh,640px)]">
-      <div className="flex flex-wrap items-center gap-3 mb-4">
+      <div className="flex flex-wrap items-center gap-3 mb-4" data-app-chrome>
         <div className="flex bg-slate-100 rounded-lg p-1 gap-1">
           <button
             onClick={() => setMode('status')}
@@ -144,7 +147,7 @@ export function MapPage({ setSelectedAgent }: MapPageProps) {
       </div>
 
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-4 min-h-0">
-        <div className="relative rounded-xl overflow-hidden border border-slate-200 shadow-sm min-h-[min(50dvh,420px)] lg:min-h-0">
+        <div className="app-map relative rounded-xl overflow-hidden border border-slate-200 shadow-sm min-h-[min(50dvh,420px)] lg:min-h-0 z-0">
           <MapContainer
             center={[13.45, -16.35]}
             zoom={9}
@@ -152,6 +155,7 @@ export function MapPage({ setSelectedAgent }: MapPageProps) {
             className="h-full w-full">
             <MapTileLayer />
             <MapResizeFix />
+            <MapInteractionDismiss />
             {filtered.map((a) => {
               const dist = agentDistanceMeters(a, userCoords);
               return (
@@ -168,7 +172,7 @@ export function MapPage({ setSelectedAgent }: MapPageProps) {
                   eventHandlers={{
                     click: () => setSelectedAgent(a)
                   }}>
-                  <Tooltip direction="top" offset={[0, -4]}>
+                  <Tooltip direction="top" offset={[0, -4]} sticky={false}>
                     <div className="text-xs min-w-[140px]">
                       <div className="font-semibold">{a.outlet_name || a.name}</div>
                       {a.outlet_name && (
@@ -190,7 +194,8 @@ export function MapPage({ setSelectedAgent }: MapPageProps) {
             })}
           </MapContainer>
 
-          <div className="absolute bottom-3 left-3 z-[400] bg-white/95 backdrop-blur rounded-lg border border-slate-200 shadow-sm px-3 py-2.5">
+          {!appOverlayOpen && (
+          <div className="absolute bottom-3 left-3 z-[1] pointer-events-none bg-white/95 backdrop-blur rounded-lg border border-slate-200 shadow-sm px-3 py-2.5">
             <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
               <Layers className="w-3 h-3" />
               {mode === 'status' ? 'Status' : 'E-float level'}
@@ -207,6 +212,7 @@ export function MapPage({ setSelectedAgent }: MapPageProps) {
               ))}
             </div>
           </div>
+          )}
         </div>
 
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col min-h-0 max-h-[min(40dvh,360px)] lg:max-h-none">

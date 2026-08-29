@@ -43,8 +43,7 @@ import {
   type FieldOverlayId
 } from './lib/useFieldMobileNav';
 import type { Agent } from './lib/api';
-import { toast } from 'sonner';
-import { useDutyTracking } from './lib/useDutyTracking';
+import { AppOverlayOpenContext } from './lib/app-overlay-context';
 import { DutyTrackingBar } from './components/DutyTrackingBar';
 
 function AuthenticatedApp({
@@ -175,8 +174,11 @@ function AuthenticatedApp({
   };
 
   const fieldMainClass = isFieldMobile ? 'pb-20 lg:pb-0 field-touch' : '';
+  const appOverlayOpen =
+    mobileNavOpen || visitLogOpen || !!selectedAgent || !!selectedCompanyId;
 
   return (
+    <AppOverlayOpenContext.Provider value={appOverlayOpen}>
     <div className="flex h-[100dvh] bg-slate-50 overflow-hidden">
       <Sidebar
         active={activePage}
@@ -251,6 +253,7 @@ function AuthenticatedApp({
         onClose={() => setSelectedCompanyId(null)}
       />
     </div>
+    </AppOverlayOpenContext.Provider>
   );
 }
 

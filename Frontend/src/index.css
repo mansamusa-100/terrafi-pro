@@ -65,21 +65,21 @@ body {
   z-index: 0;
 }
 
-/* Keep journey map layers below app chrome (sidebar z-50, mobile nav z-40) */
-.officer-journey-map {
+/* Keep embedded map layers below app chrome (sidebar z-50, mobile nav z-40) */
+.app-map {
   isolation: isolate;
 }
 
-.officer-journey-map .leaflet-pane,
-.officer-journey-map .leaflet-top,
-.officer-journey-map .leaflet-bottom {
+.app-map .leaflet-pane,
+.app-map .leaflet-top,
+.app-map .leaflet-bottom {
   z-index: 1 !important;
 }
 
-.officer-journey-map .leaflet-tooltip-pane {
+.app-map .leaflet-tooltip-pane {
   z-index: 2 !important;
 }
 
-.officer-journey-map .leaflet-popup-pane {
+.app-map .leaflet-popup-pane {
   z-index: 3 !important;
 }

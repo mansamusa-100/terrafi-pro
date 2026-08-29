@@ -3,6 +3,7 @@ import { MapContainer, Polyline, CircleMarker, Tooltip, useMap } from 'react-lea
 import type { LatLngExpression } from 'leaflet';
 import { MapTileLayer } from './MapTileLayer';
 import { MapResizeFix } from './MapResizeFix';
+import { MapInteractionDismiss } from './MapInteractionDismiss';
 import { GAMBIA_CENTER } from '../lib/geolocation';
 import { formatReportDateTime } from '../lib/date-range-presets';
 import type { OfficerJourney } from '../lib/api';
@@ -18,53 +19,6 @@ function FitBounds({ points }: { points: LatLngExpression[] }) {
       map.setView(points[0], 14);
     }
   }, [map, points]);
-  return null;
-}
-
-/** Close tooltips and clear pin selection when user opens app chrome (menu, tabs, etc.). */
-function MapInteractionDismiss({ onClearSelection }: { onClearSelection: () => void }) {
-  const map = useMap();
-
-  useEffect(() => {
-    const closeTooltips = () => {
-      map.eachLayer((layer) => {
-        if ('closeTooltip' in layer && typeof layer.closeTooltip === 'function') {
-          layer.closeTooltip();
-        }
-      });
-      map.closePopup();
-    };
-
-    const dismiss = () => {
-      closeTooltips();
-      onClearSelection();
-    };
-
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (!target) return;
-      if (target.closest('.officer-journey-map')) return;
-      if (
-        target.closest('[data-app-chrome]') ||
-        target.closest('nav') ||
-        target.closest('[role="dialog"]')
-      ) {
-        dismiss();
-      }
-    };
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') dismiss();
-    };
-
-    document.addEventListener('pointerdown', onPointerDown, true);
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown, true);
-      document.removeEventListener('keydown', onKeyDown);
-    };
-  }, [map, onClearSelection]);
-
   return null;
 }
 
@@ -188,7 +142,7 @@ export function OfficerJourneyMap({
     return (
       <div
         className={cn(
-          'officer-journey-map rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center text-sm text-slate-500 min-h-[280px]',
+          'app-map officer-journey-map rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center text-sm text-slate-500 min-h-[280px]',
           className
         )}>
         Loading journey…
@@ -200,7 +154,7 @@ export function OfficerJourneyMap({
     return (
       <div
         className={cn(
-          'officer-journey-map rounded-xl border border-dashed border-slate-200 bg-slate-50 flex flex-col items-center justify-center text-center px-6 min-h-[280px]',
+          'app-map officer-journey-map rounded-xl border border-dashed border-slate-200 bg-slate-50 flex flex-col items-center justify-center text-center px-6 min-h-[280px]',
           className
         )}>
         <Route className="w-8 h-8 text-slate-300 mb-2" />
@@ -216,7 +170,7 @@ export function OfficerJourneyMap({
   return (
     <div
       className={cn(
-        'officer-journey-map rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm flex flex-col lg:flex-row min-h-[320px]',
+        'app-map officer-journey-map rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm flex flex-col lg:flex-row min-h-[320px]',
         className
       )}>
       <div className="flex-1 min-h-[280px] relative z-0">
