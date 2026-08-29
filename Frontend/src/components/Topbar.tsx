@@ -84,7 +84,9 @@ export function Topbar({
   };
 
   return (
-    <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shrink-0 shadow-sm">
+    <header
+      data-app-chrome
+      className="bg-white border-b border-slate-200 sticky top-0 z-30 shrink-0 shadow-sm">
       <div className="h-14 sm:h-16 flex items-center px-3 sm:px-6 gap-2 sm:gap-4">
         <button
           type="button"

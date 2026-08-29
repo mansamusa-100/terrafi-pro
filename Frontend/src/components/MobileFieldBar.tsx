@@ -31,6 +31,7 @@ export function MobileFieldBar({
 }: MobileFieldBarProps) {
   return (
     <nav
+      data-app-chrome
       className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-slate-200 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_20px_rgba(0,0,0,0.06)]"
       aria-label={ariaLabel}>
       <div className="flex items-stretch h-16 max-w-lg mx-auto relative">

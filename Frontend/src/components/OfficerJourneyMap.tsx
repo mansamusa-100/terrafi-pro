@@ -21,6 +21,53 @@ function FitBounds({ points }: { points: LatLngExpression[] }) {
   return null;
 }
 
+/** Close tooltips and clear pin selection when user opens app chrome (menu, tabs, etc.). */
+function MapInteractionDismiss({ onClearSelection }: { onClearSelection: () => void }) {
+  const map = useMap();
+
+  useEffect(() => {
+    const closeTooltips = () => {
+      map.eachLayer((layer) => {
+        if ('closeTooltip' in layer && typeof layer.closeTooltip === 'function') {
+          layer.closeTooltip();
+        }
+      });
+      map.closePopup();
+    };
+
+    const dismiss = () => {
+      closeTooltips();
+      onClearSelection();
+    };
+
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+      if (target.closest('.officer-journey-map')) return;
+      if (
+        target.closest('[data-app-chrome]') ||
+        target.closest('nav') ||
+        target.closest('[role="dialog"]')
+      ) {
+        dismiss();
+      }
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') dismiss();
+    };
+
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [map, onClearSelection]);
+
+  return null;
+}
+
 type SelectedActivity =
   | { kind: 'visit'; id: number }
   | { kind: 'ping'; index: number }
@@ -30,14 +77,65 @@ interface OfficerJourneyMapProps {
   journey: OfficerJourney | null;
   loading?: boolean;
   className?: string;
+  /** Changes reset the activity panel (e.g. when report table tab changes). */
+  interactionResetKey?: string;
 }
 
-export function OfficerJourneyMap({ journey, loading, className }: OfficerJourneyMapProps) {
+function JourneyStatusChips({
+  journey,
+  hasTrackingPath,
+  visitOnlyMode,
+  noGeoData
+}: {
+  journey: OfficerJourney;
+  hasTrackingPath: boolean;
+  visitOnlyMode: boolean;
+  noGeoData: boolean;
+}) {
+  const chipClass =
+    'text-[10px] font-semibold uppercase tracking-wide px-2 py-1 rounded-md border shadow-sm';
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {visitOnlyMode && (
+        <span className={cn(chipClass, 'bg-amber-50 border-amber-200 text-amber-800')}>
+          Visit check-ins only
+        </span>
+      )}
+      {noGeoData && (
+        <span className={cn(chipClass, 'bg-slate-50 border-slate-200 text-slate-600')}>
+          No GPS data
+        </span>
+      )}
+      {hasTrackingPath && (
+        <span className={cn(chipClass, 'bg-white border-slate-200 text-slate-600')}>
+          {journey.distance_km} km tracked
+        </span>
+      )}
+      {journey.sessions.length > 0 && (
+        <span className={cn(chipClass, 'bg-white border-slate-200 text-slate-600')}>
+          {journey.sessions.length} session{journey.sessions.length !== 1 ? 's' : ''}
+        </span>
+      )}
+    </div>
+  );
+}
+
+export function OfficerJourneyMap({
+  journey,
+  loading,
+  className,
+  interactionResetKey
+}: OfficerJourneyMapProps) {
   const [selected, setSelected] = useState<SelectedActivity>(null);
 
   useEffect(() => {
     setSelected(null);
   }, [journey?.date, journey?.officer.id]);
+
+  useEffect(() => {
+    setSelected(null);
+  }, [interactionResetKey]);
 
   const pathPoints = useMemo(
     () => (journey?.path ?? []).map((p) => [p.lat, p.lng] as LatLngExpression),
@@ -90,7 +188,7 @@ export function OfficerJourneyMap({ journey, loading, className }: OfficerJourne
     return (
       <div
         className={cn(
-          'rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center text-sm text-slate-500 min-h-[280px]',
+          'officer-journey-map rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center text-sm text-slate-500 min-h-[280px]',
           className
         )}>
         Loading journey…
@@ -102,7 +200,7 @@ export function OfficerJourneyMap({ journey, loading, className }: OfficerJourne
     return (
       <div
         className={cn(
-          'rounded-xl border border-dashed border-slate-200 bg-slate-50 flex flex-col items-center justify-center text-center px-6 min-h-[280px]',
+          'officer-journey-map rounded-xl border border-dashed border-slate-200 bg-slate-50 flex flex-col items-center justify-center text-center px-6 min-h-[280px]',
           className
         )}>
         <Route className="w-8 h-8 text-slate-300 mb-2" />
@@ -118,10 +216,10 @@ export function OfficerJourneyMap({ journey, loading, className }: OfficerJourne
   return (
     <div
       className={cn(
-        'rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm flex flex-col lg:flex-row min-h-[320px]',
+        'officer-journey-map rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm flex flex-col lg:flex-row min-h-[320px]',
         className
       )}>
-      <div className="flex-1 min-h-[280px] relative">
+      <div className="flex-1 min-h-[280px] relative z-0">
         <MapContainer
           center={center}
           zoom={13}
@@ -129,6 +227,7 @@ export function OfficerJourneyMap({ journey, loading, className }: OfficerJourne
           scrollWheelZoom>
           <MapTileLayer />
           <MapResizeFix />
+          <MapInteractionDismiss onClearSelection={() => setSelected(null)} />
           <FitBounds points={fitPoints} />
           {hasTrackingPath && (
             <Polyline
@@ -155,7 +254,9 @@ export function OfficerJourneyMap({ journey, loading, className }: OfficerJourne
               eventHandlers={{
                 click: () => setSelected({ kind: 'ping', index: 0 })
               }}>
-              <Tooltip direction="top">Start</Tooltip>
+              <Tooltip direction="top" sticky={false}>
+                Start
+              </Tooltip>
             </CircleMarker>
           )}
           {hasTrackingPath && pathPoints.length > 1 && (
@@ -167,7 +268,9 @@ export function OfficerJourneyMap({ journey, loading, className }: OfficerJourne
                 click: () =>
                   setSelected({ kind: 'ping', index: pathPoints.length - 1 })
               }}>
-              <Tooltip direction="top">Latest ping</Tooltip>
+              <Tooltip direction="top" sticky={false}>
+                Latest ping
+              </Tooltip>
             </CircleMarker>
           )}
           {visitMarkers.map((v) => (
@@ -184,41 +287,27 @@ export function OfficerJourneyMap({ journey, loading, className }: OfficerJourne
               eventHandlers={{
                 click: () => setSelected({ kind: 'visit', id: v.id })
               }}>
-              <Tooltip direction="top">
+              <Tooltip direction="top" sticky={false}>
                 {v.agent_name} · {v.time}
               </Tooltip>
             </CircleMarker>
           ))}
         </MapContainer>
-        <div className="absolute top-3 left-3 z-[1000] flex flex-wrap gap-2 max-w-[min(100%,20rem)]">
-          {visitOnlyMode && (
-            <span className="text-[10px] font-semibold uppercase tracking-wide bg-amber-50 border border-amber-200 px-2 py-1 rounded-md text-amber-800 shadow-sm">
-              Visit check-ins only — no duty GPS path
-            </span>
-          )}
-          {noGeoData && (
-            <span className="text-[10px] font-semibold uppercase tracking-wide bg-slate-50 border border-slate-200 px-2 py-1 rounded-md text-slate-600 shadow-sm">
-              No GPS data for this day
-            </span>
-          )}
-          {hasTrackingPath && (
-            <span className="text-[10px] font-semibold uppercase tracking-wide bg-white/95 border border-slate-200 px-2 py-1 rounded-md text-slate-600 shadow-sm">
-              {journey.distance_km} km tracked
-            </span>
-          )}
-          {journey.sessions.length > 0 && (
-            <span className="text-[10px] font-semibold uppercase tracking-wide bg-white/95 border border-slate-200 px-2 py-1 rounded-md text-slate-600 shadow-sm">
-              {journey.sessions.length} session{journey.sessions.length !== 1 ? 's' : ''}
-            </span>
-          )}
-        </div>
       </div>
 
-      <aside className="w-full lg:w-72 border-t lg:border-t-0 lg:border-l border-slate-200 bg-slate-50/80 p-4 flex flex-col gap-3 shrink-0">
+      <aside className="w-full lg:w-72 border-t lg:border-t-0 lg:border-l border-slate-200 bg-slate-50/80 p-4 flex flex-col gap-3 shrink-0 relative z-[1]">
         <div>
           <div className="text-sm font-semibold text-slate-900">{journey.officer.name}</div>
           <div className="text-xs text-slate-500 mt-0.5">
             {journey.date} · {journey.officer.zone || 'No zone'}
+          </div>
+          <div className="mt-2">
+            <JourneyStatusChips
+              journey={journey}
+              hasTrackingPath={hasTrackingPath}
+              visitOnlyMode={visitOnlyMode}
+              noGeoData={noGeoData}
+            />
           </div>
         </div>
 
@@ -272,17 +361,23 @@ export function OfficerJourneyMap({ journey, loading, className }: OfficerJourne
               <div className="text-slate-600 mt-1">{selectedVisit.type}</div>
               <div className="text-slate-500 mt-1">Check-in {selectedVisit.time}</div>
               {selectedVisit.gps_verified && (
-                <div className="text-apsGreen mt-1">GPS verified · {selectedVisit.distance_meters}m</div>
+                <div className="text-apsGreen mt-1">
+                  GPS verified · {selectedVisit.distance_meters}m
+                </div>
               )}
             </div>
           ) : selectedPing ? (
             <div className="bg-white border border-blue-200 rounded-lg p-3 text-xs">
-              <div className="font-semibold text-slate-900 capitalize">{selectedPing.source.replace('_', ' ')}</div>
+              <div className="font-semibold text-slate-900 capitalize">
+                {selectedPing.source.replace('_', ' ')}
+              </div>
               <div className="text-slate-500 mt-1">
                 {formatReportDateTime(selectedPing.captured_at)}
               </div>
               {selectedPing.accuracy != null && (
-                <div className="text-slate-500 mt-0.5">±{Math.round(selectedPing.accuracy)}m</div>
+                <div className="text-slate-500 mt-0.5">
+                  ±{Math.round(selectedPing.accuracy)}m
+                </div>
               )}
             </div>
           ) : (

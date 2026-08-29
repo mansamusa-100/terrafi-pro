@@ -299,6 +299,7 @@ export function OfficerReportSection() {
         <OfficerJourneyMap
           journey={report?.journey ?? null}
           loading={journeyLoading}
+          interactionResetKey={activeTab}
         />
       </div>
 
@@ -430,7 +431,9 @@ export function OfficerReportSection() {
             </select>
           </div>
 
-          <div className="flex flex-wrap gap-1 bg-slate-100 rounded-lg p-1 w-fit">
+          <div
+            className="flex flex-wrap gap-1 bg-slate-100 rounded-lg p-1 w-fit"
+            data-app-chrome>
             {(
               [
                 ['visit_achieved', 'Visit achieved'],

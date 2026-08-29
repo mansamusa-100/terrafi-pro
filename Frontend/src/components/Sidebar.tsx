@@ -188,12 +188,14 @@ export function Sidebar({
         <button
           type="button"
           aria-label="Close menu"
+          data-app-chrome
           className="fixed inset-0 bg-black/50 z-40 lg:hidden"
           onClick={onMobileClose}
         />
       )}
 
       <aside
+        data-app-chrome
         className={cn(
           'bg-navy flex flex-col overflow-hidden shrink-0 z-50',
           'fixed inset-y-0 left-0 w-[min(18rem,85vw)] transition-transform duration-300 ease-in-out',
