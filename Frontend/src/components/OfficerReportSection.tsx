@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CalendarDays,
   ClipboardList,
@@ -30,6 +30,8 @@ import {
 } from '../lib/date-range-presets';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { cn } from '../lib/utils';
+import { Pagination } from './Pagination';
+import { PAGE_SIZE, useClientPagination } from '../lib/useClientPagination';
 
 const OFFICER_DATE_PRESETS = DATE_RANGE_PRESETS.filter((p) => p.value !== 'all');
 
@@ -86,6 +88,13 @@ export function OfficerReportSection() {
   const [report, setReport] = useState<OfficerReport | null>(null);
   const [journeyDate, setJourneyDate] = useState<string | null>(null);
   const [journeyOfficerId, setJourneyOfficerId] = useState<string | null>(null);
+  const journeyMapRef = useRef<HTMLDivElement>(null);
+
+  const scrollToJourneyMap = useCallback(() => {
+    requestAnimationFrame(() => {
+      journeyMapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, []);
 
   const isManagerLike = user?.role === 'manager' || user?.role === 'internal';
   const isTeamLead = user?.role === 'team_lead';
@@ -150,19 +159,23 @@ export function OfficerReportSection() {
     void loadReport();
   }, [loadReport]);
 
-  const loadJourney = useCallback(async (officerId: string, date: string) => {
-    setJourneyLoading(true);
-    setJourneyOfficerId(officerId);
-    setJourneyDate(date);
-    try {
-      const journey = await api.performance.officerJourney(officerId, date);
-      setReport((prev) => (prev ? { ...prev, journey } : prev));
-    } catch {
-      toast.error('Could not load journey map');
-    } finally {
-      setJourneyLoading(false);
-    }
-  }, []);
+  const loadJourney = useCallback(
+    async (officerId: string, date: string, scroll = true) => {
+      setJourneyLoading(true);
+      setJourneyOfficerId(officerId);
+      setJourneyDate(date);
+      try {
+        const journey = await api.performance.officerJourney(officerId, date);
+        setReport((prev) => (prev ? { ...prev, journey } : prev));
+        if (scroll) scrollToJourneyMap();
+      } catch {
+        toast.error('Could not load journey map');
+      } finally {
+        setJourneyLoading(false);
+      }
+    },
+    [scrollToJourneyMap]
+  );
 
   const summary = report?.summary;
   const period = report?.period;
@@ -193,6 +206,48 @@ export function OfficerReportSection() {
       setActiveTab('work_duration');
     }
   };
+
+  const paginationResetKey = useMemo(
+    () =>
+      [
+        preset,
+        dateFrom,
+        dateTo,
+        debouncedSearch,
+        zoneFilter,
+        officerFilter,
+        teamLeadFilter,
+        accountStatusFilter,
+        targetClassFilter
+      ].join('|'),
+    [
+      preset,
+      dateFrom,
+      dateTo,
+      debouncedSearch,
+      zoneFilter,
+      officerFilter,
+      teamLeadFilter,
+      accountStatusFilter,
+      targetClassFilter
+    ]
+  );
+
+  const visitAchievedPage = useClientPagination(
+    report?.visit_achieved ?? [],
+    PAGE_SIZE.compact,
+    `visit-${paginationResetKey}`
+  );
+  const workDurationPage = useClientPagination(
+    report?.work_duration ?? [],
+    PAGE_SIZE.compact,
+    `work-${paginationResetKey}`
+  );
+  const teamActivityPage = useClientPagination(
+    report?.team_activity ?? [],
+    PAGE_SIZE.compact,
+    `team-${paginationResetKey}`
+  );
 
   return (
     <div className="space-y-6">
@@ -240,10 +295,12 @@ export function OfficerReportSection() {
         />
       </div>
 
-      <OfficerJourneyMap
-        journey={report?.journey ?? null}
-        loading={journeyLoading}
-      />
+      <div ref={journeyMapRef} id="officer-journey-map" className="scroll-mt-4">
+        <OfficerJourneyMap
+          journey={report?.journey ?? null}
+          loading={journeyLoading}
+        />
+      </div>
 
       <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
         <div className="flex flex-col gap-3 mb-4">
@@ -405,6 +462,7 @@ export function OfficerReportSection() {
               No officers match your filters.
             </p>
           ) : (
+            <>
             <DataTable minWidth="960px">
               <div
                 className={cn(
@@ -420,7 +478,7 @@ export function OfficerReportSection() {
                 <span>Target class</span>
                 <span>Account status</span>
               </div>
-              {report.visit_achieved.map((row) => (
+              {visitAchievedPage.pageItems.map((row) => (
                 <div
                   key={row.officer_id}
                   role="button"
@@ -468,6 +526,13 @@ export function OfficerReportSection() {
                 </div>
               ))}
             </DataTable>
+            <Pagination
+              total={visitAchievedPage.total}
+              limit={visitAchievedPage.limit}
+              offset={visitAchievedPage.offset}
+              onPageChange={visitAchievedPage.setOffset}
+            />
+            </>
           )
         ) : activeTab === 'work_duration' ? (
           !report?.work_duration.length ? (
@@ -475,6 +540,7 @@ export function OfficerReportSection() {
               No field days in this period.
             </p>
           ) : (
+            <>
             <DataTable minWidth="1280px">
               <div
                 className={cn(
@@ -492,7 +558,7 @@ export function OfficerReportSection() {
                 <span>Latest visit</span>
                 <span>Field time</span>
               </div>
-              {report.work_duration.map((row) => (
+              {workDurationPage.pageItems.map((row) => (
                 <div
                   key={`${row.officer_id}-${row.date}`}
                   role="button"
@@ -528,12 +594,20 @@ export function OfficerReportSection() {
                 </div>
               ))}
             </DataTable>
+            <Pagination
+              total={workDurationPage.total}
+              limit={workDurationPage.limit}
+              offset={workDurationPage.offset}
+              onPageChange={workDurationPage.setOffset}
+            />
+            </>
           )
         ) : !report?.team_activity.length ? (
           <p className="text-sm text-slate-500 py-8 text-center">
             No team activity for this period.
           </p>
         ) : (
+          <>
           <DataTable minWidth="880px">
             <div
               className={cn(
@@ -548,7 +622,7 @@ export function OfficerReportSection() {
               <span>Visits done</span>
               <span>Coverage</span>
             </div>
-            {report.team_activity.map((row) => (
+            {teamActivityPage.pageItems.map((row) => (
               <div
                 key={row.team_lead_id}
                 className={cn(
@@ -565,6 +639,13 @@ export function OfficerReportSection() {
               </div>
             ))}
           </DataTable>
+          <Pagination
+            total={teamActivityPage.total}
+            limit={teamActivityPage.limit}
+            offset={teamActivityPage.offset}
+            onPageChange={teamActivityPage.setOffset}
+          />
+          </>
         )}
       </div>
     </div>

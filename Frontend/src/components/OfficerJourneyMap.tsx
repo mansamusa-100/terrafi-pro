@@ -52,17 +52,32 @@ export function OfficerJourneyMap({ journey, loading, className }: OfficerJourne
     [journey]
   );
 
+  const visitPathPoints = useMemo(
+    () =>
+      [...visitMarkers]
+        .sort((a, b) => a.time.localeCompare(b.time))
+        .map((v) => [v.check_in_lat!, v.check_in_lng!] as LatLngExpression),
+    [visitMarkers]
+  );
+
+  const hasTrackingPath = pathPoints.length >= 2;
+  const visitOnlyMode = !hasTrackingPath && visitMarkers.length > 0;
+  const noGeoData =
+    journey != null && !hasTrackingPath && visitMarkers.length === 0;
+
   const center = pathPoints[0] ?? visitMarkers[0]
     ? ([visitMarkers[0].check_in_lat!, visitMarkers[0].check_in_lng!] as LatLngExpression)
     : ([GAMBIA_CENTER.lat, GAMBIA_CENTER.lng] as LatLngExpression);
 
   const fitPoints = useMemo(() => {
-    const pts: LatLngExpression[] = [...pathPoints];
-    for (const v of visitMarkers) {
-      pts.push([v.check_in_lat!, v.check_in_lng!]);
+    const pts: LatLngExpression[] = hasTrackingPath ? [...pathPoints] : [...visitPathPoints];
+    if (hasTrackingPath) {
+      for (const v of visitMarkers) {
+        pts.push([v.check_in_lat!, v.check_in_lng!]);
+      }
     }
     return pts;
-  }, [pathPoints, visitMarkers]);
+  }, [hasTrackingPath, pathPoints, visitPathPoints, visitMarkers]);
 
   const selectedVisit =
     selected?.kind === 'visit'
@@ -115,13 +130,24 @@ export function OfficerJourneyMap({ journey, loading, className }: OfficerJourne
           <MapTileLayer />
           <MapResizeFix />
           <FitBounds points={fitPoints} />
-          {pathPoints.length >= 2 && (
+          {hasTrackingPath && (
             <Polyline
               positions={pathPoints}
               pathOptions={{ color: '#1565C0', weight: 4, opacity: 0.85 }}
             />
           )}
-          {pathPoints.length > 0 && (
+          {visitOnlyMode && visitPathPoints.length >= 2 && (
+            <Polyline
+              positions={visitPathPoints}
+              pathOptions={{
+                color: '#00897B',
+                weight: 3,
+                opacity: 0.7,
+                dashArray: '8 8'
+              }}
+            />
+          )}
+          {hasTrackingPath && pathPoints.length > 0 && (
             <CircleMarker
               center={pathPoints[0]}
               radius={8}
@@ -132,7 +158,7 @@ export function OfficerJourneyMap({ journey, loading, className }: OfficerJourne
               <Tooltip direction="top">Start</Tooltip>
             </CircleMarker>
           )}
-          {pathPoints.length > 1 && (
+          {hasTrackingPath && pathPoints.length > 1 && (
             <CircleMarker
               center={pathPoints[pathPoints.length - 1]}
               radius={8}
@@ -164,10 +190,22 @@ export function OfficerJourneyMap({ journey, loading, className }: OfficerJourne
             </CircleMarker>
           ))}
         </MapContainer>
-        <div className="absolute top-3 left-3 z-[1000] flex flex-wrap gap-2">
-          <span className="text-[10px] font-semibold uppercase tracking-wide bg-white/95 border border-slate-200 px-2 py-1 rounded-md text-slate-600 shadow-sm">
-            {journey.distance_km} km tracked
-          </span>
+        <div className="absolute top-3 left-3 z-[1000] flex flex-wrap gap-2 max-w-[min(100%,20rem)]">
+          {visitOnlyMode && (
+            <span className="text-[10px] font-semibold uppercase tracking-wide bg-amber-50 border border-amber-200 px-2 py-1 rounded-md text-amber-800 shadow-sm">
+              Visit check-ins only — no duty GPS path
+            </span>
+          )}
+          {noGeoData && (
+            <span className="text-[10px] font-semibold uppercase tracking-wide bg-slate-50 border border-slate-200 px-2 py-1 rounded-md text-slate-600 shadow-sm">
+              No GPS data for this day
+            </span>
+          )}
+          {hasTrackingPath && (
+            <span className="text-[10px] font-semibold uppercase tracking-wide bg-white/95 border border-slate-200 px-2 py-1 rounded-md text-slate-600 shadow-sm">
+              {journey.distance_km} km tracked
+            </span>
+          )}
           {journey.sessions.length > 0 && (
             <span className="text-[10px] font-semibold uppercase tracking-wide bg-white/95 border border-slate-200 px-2 py-1 rounded-md text-slate-600 shadow-sm">
               {journey.sessions.length} session{journey.sessions.length !== 1 ? 's' : ''}
@@ -183,6 +221,19 @@ export function OfficerJourneyMap({ journey, loading, className }: OfficerJourne
             {journey.date} · {journey.officer.zone || 'No zone'}
           </div>
         </div>
+
+        {visitOnlyMode && (
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-2">
+            Duty tracking was not active — map shows verified visit check-in locations
+            {visitPathPoints.length >= 2 ? ' connected in visit order.' : '.'}
+          </p>
+        )}
+        {noGeoData && journey.visits.length > 0 && (
+          <p className="text-xs text-slate-600 bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-2">
+            {journey.visits.length} visit{journey.visits.length !== 1 ? 's' : ''} logged but no
+            GPS coordinates were captured.
+          </p>
+        )}
 
         <div className="space-y-2 text-xs">
           <div className="font-semibold text-slate-700 flex items-center gap-1.5">

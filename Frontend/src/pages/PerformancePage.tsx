@@ -5,7 +5,10 @@ import {
   Trophy,
   AlertCircle,
   ArrowUpDown,
-  Users
+  Users,
+  ClipboardList,
+  ChevronRight,
+  Route
 } from 'lucide-react';
 import { MetricCard } from '../components/MetricCard';
 import { BarChart } from '../components/charts/BarChart';
@@ -14,6 +17,8 @@ import { ProgressBar } from '../components/ProgressBar';
 import { ExportButton } from '../components/ExportButton';
 import { initials, avatarColor } from '../lib/data';
 import { useAppData } from '../lib/data-context';
+import { useAuth } from '../lib/auth';
+import { canAccess } from '../lib/rbac';
 import { api } from '../lib/api';
 import { DataTable } from '../components/DataTable';
 import { Pagination } from '../components/Pagination';
@@ -24,7 +29,12 @@ function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function PerformancePage() {
+interface PerformancePageProps {
+  setPage?: (page: string) => void;
+}
+
+export function PerformancePage({ setPage }: PerformancePageProps) {
+  const { user } = useAuth();
   const { agents, adrPerformance, agentSparklines } = useAppData();
   const [sortConfig, setSortConfig] = useState<{
     key: string;
@@ -120,8 +130,63 @@ export function PerformancePage() {
 
   const monthStart = `${todayISO().slice(0, 7)}-01`;
 
+  const reportLinks = useMemo(() => {
+    if (!user || !setPage) return [];
+    const links: {
+      id: string;
+      title: string;
+      description: string;
+      icon: React.ReactNode;
+      accent: string;
+    }[] = [];
+    if (canAccess(user.role, 'performance-agent-report')) {
+      links.push({
+        id: 'performance-agent-report',
+        title: 'Agent report',
+        description: 'Onboarding, KYC, visits, and last-visit activity by agent',
+        icon: <ClipboardList className="w-5 h-5" />,
+        accent: '#1565C0'
+      });
+    }
+    if (canAccess(user.role, 'performance-officer-report')) {
+      links.push({
+        id: 'performance-officer-report',
+        title: 'Officer report',
+        description: 'ADR visit targets, field time, team activity, and GPS journeys',
+        icon: <Route className="w-5 h-5" />,
+        accent: '#00897B'
+      });
+    }
+    return links;
+  }, [user, setPage]);
+
   return (
     <div className="page-pad">
+      {reportLinks.length > 0 && (
+        <div className="grid sm:grid-cols-2 gap-3 mb-5">
+          {reportLinks.map((link) => (
+            <button
+              key={link.id}
+              type="button"
+              onClick={() => setPage!(link.id)}
+              className="group text-left bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-apsBlue/40 hover:shadow-md transition-all">
+              <div className="flex items-start justify-between gap-3">
+                <div
+                  className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 text-white"
+                  style={{ backgroundColor: link.accent }}>
+                  {link.icon}
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-apsBlue shrink-0 mt-1 transition-colors" />
+              </div>
+              <div className="mt-3">
+                <div className="text-sm font-semibold text-slate-900">{link.title}</div>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">{link.description}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="flex items-center justify-end gap-2 mb-5 flex-wrap">
         <ExportButton
           path={api.export.agents()}

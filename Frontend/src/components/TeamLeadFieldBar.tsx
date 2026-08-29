@@ -1,4 +1,4 @@
-import { LayoutDashboard, Map, MapPin, Users } from 'lucide-react';
+import { LayoutDashboard, Map, MapPin, Users, ClipboardList } from 'lucide-react';
 import { MobileFieldBar } from './MobileFieldBar';
 
 interface TeamLeadFieldBarProps {
@@ -11,6 +11,15 @@ const ITEMS = [
   { id: 'dashboard', icon: LayoutDashboard, label: 'Home' },
   { id: 'agents', icon: Users, label: 'Agents' },
   { id: 'visits', icon: Map, label: 'Visits' },
+  {
+    id: 'performance-officer-report',
+    icon: ClipboardList,
+    label: 'Report',
+    isActive: (page: string) =>
+      page === 'performance-officer-report' ||
+      page === 'performance-agent-report' ||
+      page === 'performance'
+  },
   { id: 'map', icon: MapPin, label: 'Map' }
 ] as const;
 

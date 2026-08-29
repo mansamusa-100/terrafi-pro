@@ -161,7 +161,7 @@ function AuthenticatedApp({
     visits: <VisitsPage />,
     float: <FloatPage />,
     'float-sync': <FloatSyncPage />,
-    performance: <PerformancePage />,
+    performance: <PerformancePage setPage={handleSetPage} />,
     'performance-agent-report': (
       <AgentReportPage onAgentClick={setSelectedAgent} />
     ),

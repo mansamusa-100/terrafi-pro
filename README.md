@@ -107,6 +107,9 @@ Use the login screen quick-access buttons to switch personas.
 - **Scoped audit logs** — separate platform and organisation audit trails
 - **KYC file uploads** — onboard agents with document uploads (JPEG, PNG, WebP, PDF)
 - **GPS visit check-in** — field officers must be within 50m of the agent to log a visit (browser geolocation)
+- **Performance reports** — Agent report (onboarding, KYC, visits) and Officer report (ADR targets, field time, team activity, GPS journeys) under **Performance** in the sidebar
+- **ADR duty tracking** — field officers start/end duty; GPS pings recorded every 2 minutes while on duty, plus check-in points on visit log
+- **Configurable visit target classes** — Exceeded / Met / Below / Critical thresholds editable in **Settings**
 
 ## Scripts
 
@@ -143,6 +146,16 @@ Use the login screen quick-access buttons to switch personas.
 | PATCH | `/api/notifications/:id/read` | Mark notification read |
 | POST | `/api/notifications/read-all` | Mark all notifications read |
 | POST | `/api/visits` | Log visit (requires GPS coordinates) |
+| GET | `/api/performance/agent-report` | Agent registry report (KPIs, filters, pagination) |
+| GET | `/api/performance/officer-report` | Officer report (visit achievement, work duration, team activity) |
+| GET | `/api/performance/officer-journey` | Officer GPS journey for a day (`?officer_id=&date=`) |
+| GET | `/api/export/agent-report` | Export agent report CSV |
+| GET | `/api/export/officer-report` | Export officer report CSV (`?table=visit_achieved\|work_duration\|team_activity`) |
+| GET | `/api/tracking/session` | ADR active duty session |
+| POST | `/api/tracking/session/start` | Start duty / journey tracking (ADR) |
+| POST | `/api/tracking/session/end` | End duty session (ADR) |
+| POST | `/api/tracking/pings` | Batch GPS pings while on duty (ADR) |
+| PATCH | `/api/settings` | Company settings incl. `visit_target_classes` thresholds |
 | POST | `/api/integrations/agent-float` | biReports float snapshot ingest (Bearer + HMAC; see `partner-agent-float-integration.md`) |
 | GET | `/api/float-sync/deliveries` | biReports delivery log (manager only; paginated) |
 | GET | `/api/float-sync/deliveries/:id` | Delivery detail report (`?limit=` `?offset=`) |
