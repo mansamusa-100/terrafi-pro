@@ -6,6 +6,7 @@ import { useAuth } from '../lib/auth';
 import { can } from '../lib/rbac';
 import { cn } from '../lib/utils';
 import { BillingCard } from '../components/BillingCard';
+import { FloatIntegrationCard } from '../components/FloatIntegrationCard';
 import { BrandMark } from '../components/BrandMark';
 
 type FieldConfig = {
@@ -646,6 +647,8 @@ export function SettingsPage() {
           }
         />
       )}
+
+      {canEdit && <FloatIntegrationCard />}
 
       <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
         <div className="flex items-center justify-between gap-3 mb-4">

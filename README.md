@@ -156,7 +156,7 @@ Use the login screen quick-access buttons to switch personas.
 | POST | `/api/tracking/session/end` | End duty session (ADR) |
 | POST | `/api/tracking/pings` | Batch GPS pings while on duty (ADR) |
 | PATCH | `/api/settings` | Company settings incl. `visit_target_classes` thresholds |
-| GET | `/api/settings/float-integration` | PrixBI float sync config (partner org code, ingest URL) |
+| GET | `/api/settings/float-integration` | PrixBI float sync config (also in Settings UI) |
 | PUT | `/api/settings/float-integration` | Save PrixBI org ID / credentials for this company |
 | POST | `/api/settings/float-integration/generate` | Generate new float integration secrets |
 | POST | `/api/integrations/agent-float` | biReports float snapshot ingest (Bearer + HMAC + partner org code; see `partner-agent-float-integration.md`) |

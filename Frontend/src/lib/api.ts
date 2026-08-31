@@ -626,6 +626,33 @@ export interface CompanySettings {
   updated_at: string;
 }
 
+export interface FloatIntegrationSettings {
+  partner_org_code: string;
+  bireports_organization_id: string | null;
+  enabled: boolean;
+  configured: boolean;
+  ingest_url: string | null;
+  updated_at: string | null;
+}
+
+export interface FloatIntegrationCredentials {
+  api_key: string;
+  hmac_secret: string;
+  encryption_key: string;
+}
+
+export interface FloatIntegrationGenerateResult extends FloatIntegrationSettings {
+  credentials: FloatIntegrationCredentials;
+}
+
+export interface FloatIntegrationUpdate {
+  bireports_organization_id?: string;
+  enabled?: boolean;
+  api_key?: string;
+  hmac_secret?: string;
+  encryption_key?: string;
+}
+
 export interface SubscriptionView {
   status: string | null;
   planCode: string | null;
@@ -1101,7 +1128,27 @@ export const api = {
       );
     },
     deleteLogo: () =>
-      request<{ logo_url: null }>('/settings/logo', { method: 'DELETE' })
+      request<{ logo_url: null }>('/settings/logo', { method: 'DELETE' }),
+    floatIntegration: {
+      get: (companyId?: string) => {
+        const q = companyId ? `?companyId=${encodeURIComponent(companyId)}` : '';
+        return request<FloatIntegrationSettings>(`/settings/float-integration${q}`);
+      },
+      update: (body: FloatIntegrationUpdate, companyId?: string) => {
+        const q = companyId ? `?companyId=${encodeURIComponent(companyId)}` : '';
+        return request<FloatIntegrationSettings>(`/settings/float-integration${q}`, {
+          method: 'PUT',
+          body: JSON.stringify(body)
+        });
+      },
+      generate: (companyId?: string) => {
+        const q = companyId ? `?companyId=${encodeURIComponent(companyId)}` : '';
+        return request<FloatIntegrationGenerateResult>(
+          `/settings/float-integration/generate${q}`,
+          { method: 'POST', body: JSON.stringify({}) }
+        );
+      }
+    }
   },
 
   billing: {
