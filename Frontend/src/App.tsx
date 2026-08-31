@@ -30,6 +30,7 @@ import { OfficerReportPage } from './pages/OfficerReportPage';
 import { TrainingPage } from './pages/TrainingPage';
 import { CompliancePage } from './pages/CompliancePage';
 import { SettingsPage } from './pages/SettingsPage';
+import { PartnerIntegrationPage } from './pages/PartnerIntegrationPage';
 import { CompaniesPage } from './pages/CompaniesPage';
 import { UsersPage } from './pages/UsersPage';
 import { NotificationReportPage } from './pages/NotificationReportPage';
@@ -172,7 +173,10 @@ function AuthenticatedApp({
     users: <UsersPage />,
     'notification-report': <NotificationReportPage />,
     audit: <AuditPage />,
-    settings: <SettingsPage />
+    settings: <SettingsPage setPage={handleSetPage} />,
+    'partner-integration': (
+      <PartnerIntegrationPage setPage={handleSetPage} />
+    )
   };
 
   const fieldMainClass = isFieldMobile ? 'pb-20 lg:pb-0 field-touch' : '';

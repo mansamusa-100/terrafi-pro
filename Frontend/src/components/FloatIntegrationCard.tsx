@@ -240,7 +240,7 @@ export function FloatIntegrationCard() {
   const secretPlaceholder = data.configured ? 'Leave blank to keep current' : 'Required';
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm mb-4">
+    <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-1">
         <div>
           <h3 className="text-sm font-semibold text-slate-900">Partner integration</h3>

@@ -6,7 +6,6 @@ import { useAuth } from '../lib/auth';
 import { can } from '../lib/rbac';
 import { cn } from '../lib/utils';
 import { BillingCard } from '../components/BillingCard';
-import { FloatIntegrationCard } from '../components/FloatIntegrationCard';
 import { BrandMark } from '../components/BrandMark';
 
 type FieldConfig = {
@@ -97,8 +96,12 @@ const EDITABLE_SECTIONS: { title: string; fields: FieldConfig[] }[] = [
   }
 ];
 
-const INTEGRATION_FIELDS: { label: string; key: keyof CompanySettings['integration'] }[] = [
-  { label: 'Core wallet API', key: 'core_wallet_api' },
+const INTEGRATION_FIELDS: {
+  label: string;
+  key: keyof CompanySettings['integration'];
+  viewPage?: string;
+}[] = [
+  { label: 'Core wallet API', key: 'core_wallet_api', viewPage: 'partner-integration' },
   { label: 'SMS gateway', key: 'sms_gateway' },
   { label: 'Email notifications', key: 'email_notifications' },
   { label: 'Export format', key: 'export_format' }
@@ -366,7 +369,7 @@ function VisitTargetClassesSection({
   );
 }
 
-export function SettingsPage() {
+export function SettingsPage({ setPage }: { setPage: (page: string) => void }) {
   const { user, refreshProfile } = useAuth();
   const canEdit = user ? can(user.role, 'configure') : false;
   const canBilling = user ? can(user.role, 'manageBilling') : false;
@@ -648,30 +651,35 @@ export function SettingsPage() {
         />
       )}
 
-      {canEdit && <FloatIntegrationCard />}
-
       <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
         <div className="flex items-center justify-between gap-3 mb-4">
           <h3 className="text-sm font-semibold text-slate-900">Integration</h3>
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 bg-slate-100 px-2 py-1 rounded">
-            Read-only for now
-          </span>
         </div>
-        {INTEGRATION_FIELDS.map(({ label, key }) => (
+        {INTEGRATION_FIELDS.map(({ label, key, viewPage }) => (
           <div
             key={key}
-            className="flex justify-between items-center py-3 border-b border-slate-100 last:border-0">
+            className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 py-3 border-b border-slate-100 last:border-0">
             <span className="text-sm text-slate-900">{label}</span>
-            <span
-              className={cn(
-                'text-sm font-medium',
-                settings.integration[key] === 'Connected' ||
-                  settings.integration[key] === 'Active'
-                  ? 'text-apsGreen'
-                  : 'text-slate-500'
-              )}>
-              {settings.integration[key]}
-            </span>
+            <div className="flex items-center gap-3 sm:justify-end">
+              <span
+                className={cn(
+                  'text-sm font-medium',
+                  settings.integration[key] === 'Connected' ||
+                    settings.integration[key] === 'Active'
+                    ? 'text-apsGreen'
+                    : 'text-slate-500'
+                )}>
+                {settings.integration[key]}
+              </span>
+              {canEdit && viewPage && (
+                <button
+                  type="button"
+                  onClick={() => setPage(viewPage)}
+                  className="text-xs text-apsBlue bg-apsBlueLt hover:bg-apsBlue/20 px-3 py-1 rounded-md font-medium transition-colors">
+                  View
+                </button>
+              )}
+            </div>
           </div>
         ))}
       </div>

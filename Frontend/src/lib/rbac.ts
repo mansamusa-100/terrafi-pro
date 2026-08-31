@@ -177,7 +177,8 @@ export const PAGE_ACCESS: Record<Role, string[]> = {
     'users',
     'notification-report',
     'audit',
-    'settings'
+    'settings',
+    'partner-integration'
   ],
   internal: [
     'dashboard',
@@ -217,7 +218,8 @@ export const PAGE_TITLES: Record<string, string> = {
   users: 'Users & Roles',
   'notification-report': 'Notification report',
   audit: 'Audit log',
-  settings: 'Settings'
+  settings: 'Settings',
+  'partner-integration': 'Partner integration'
 };
 
 export const CAPABILITIES: Record<Role, Record<string, boolean>> = {
