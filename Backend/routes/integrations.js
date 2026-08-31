@@ -8,6 +8,11 @@ import {
   resolveFloatIntegration,
   validateBireportsOrganizationId
 } from '../lib/float-integration.js';
+import {
+  FloatEnvelopeError,
+  parseEnvelope,
+  parseInnerPayload
+} from '../lib/float-envelope.js';
 
 export async function handleAgentFloatDelivery(req, res, next) {
   try {
@@ -50,34 +55,29 @@ export async function handleAgentFloatDelivery(req, res, next) {
       return res.status(401).json({ message: 'Invalid signature' });
     }
 
-    let envelope;
+    let envelopeJson;
     try {
-      envelope = JSON.parse(rawBody.toString('utf8'));
+      envelopeJson = JSON.parse(rawBody.toString('utf8'));
     } catch {
       return res.status(400).json({ message: 'Invalid JSON envelope' });
     }
 
-    const {
-      schema_version: schemaVersion,
-      delivery_id: deliveryId,
-      snapshot_at: snapshotAt,
-      record_count: recordCount,
-      encrypted_payload: encryptedPayload
-    } = envelope;
-
-    if (schemaVersion !== 1) {
-      return res.status(400).json({ message: 'Unsupported schema_version' });
-    }
-    if (!deliveryId || !snapshotAt || !encryptedPayload) {
-      return res.status(400).json({ message: 'Missing required envelope fields' });
+    let envelope;
+    try {
+      envelope = parseEnvelope(envelopeJson);
+    } catch (err) {
+      if (err instanceof FloatEnvelopeError) {
+        return res.status(err.status).json({ message: err.message });
+      }
+      throw err;
     }
 
     const headerDeliveryId = req.headers['x-bireports-delivery-id'];
-    if (headerDeliveryId && headerDeliveryId !== deliveryId) {
+    if (headerDeliveryId && headerDeliveryId !== envelope.deliveryId) {
       return res.status(400).json({ message: 'delivery_id header mismatch' });
     }
 
-    if (await isDeliveryProcessed(deliveryId)) {
+    if (await isDeliveryProcessed(envelope.deliveryId)) {
       return res.status(200).json({
         accepted: true,
         duplicate: true,
@@ -85,10 +85,10 @@ export async function handleAgentFloatDelivery(req, res, next) {
       });
     }
 
-    let inner;
+    let innerJson;
     try {
-      const plaintext = decryptPayload(encryptedPayload, encryptionKey);
-      inner = JSON.parse(plaintext);
+      const plaintext = decryptPayload(envelope.encryptedPayload, encryptionKey);
+      innerJson = JSON.parse(plaintext);
     } catch (err) {
       console.warn('[float-ingest] decrypt/parse failed:', err.message);
       return res.status(400).json({
@@ -96,30 +96,28 @@ export async function handleAgentFloatDelivery(req, res, next) {
       });
     }
 
-    if (inner.schema_version !== 1) {
-      return res.status(400).json({ message: 'Unsupported inner schema_version' });
-    }
-    if (inner.delivery_id !== deliveryId) {
-      return res.status(400).json({ message: 'Inner delivery_id mismatch' });
-    }
-    if (!Array.isArray(inner.agents)) {
-      return res.status(400).json({ message: 'agents must be an array' });
-    }
-    if (inner.agents.length !== recordCount) {
-      return res.status(400).json({ message: 'Record count mismatch' });
+    let inner;
+    try {
+      inner = parseInnerPayload(innerJson, envelope, companyId);
+    } catch (err) {
+      if (err instanceof FloatEnvelopeError) {
+        return res.status(err.status).json({ message: err.message });
+      }
+      throw err;
     }
 
     const result = await mergeAgentFloatSnapshot({
       companyId,
-      deliveryId,
-      snapshotAt: inner.snapshot_at || snapshotAt,
+      deliveryId: envelope.deliveryId,
+      snapshotAt: inner.snapshotAt,
       agents: inner.agents
     });
 
     return res.status(200).json({
       accepted: true,
-      delivery_id: deliveryId,
+      delivery_id: envelope.deliveryId,
       company_id: companyId,
+      schema_version: envelope.schemaVersion,
       ...result
     });
   } catch (err) {

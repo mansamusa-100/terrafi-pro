@@ -165,17 +165,29 @@ function main() {
     }
   }
 
-  console.log('Envelope:');
+  console.log(`  schema_version: ${envelope.schema_version}`);
   console.log(`  delivery_id:  ${envelope.delivery_id}`);
   console.log(`  snapshot_at:  ${envelope.snapshot_at}`);
   console.log(`  record_count: ${envelope.record_count}`);
   console.log(`  algorithm:    ${envelope.algorithm ?? 'aes-256-gcm'}`);
+  if (envelope.organization) {
+    console.log('  organization:');
+    console.log(`    id:               ${envelope.organization.id}`);
+    console.log(`    partner_org_code: ${envelope.organization.partner_org_code}`);
+  }
 
   const plaintext = decryptPayload(envelope.encrypted_payload, getEncryptionKey());
   const inner = JSON.parse(plaintext);
 
-  if (inner.schema_version !== 1) {
+  if (inner.schema_version !== 1 && inner.schema_version !== 2) {
     throw new Error(`Unsupported inner schema_version: ${inner.schema_version}`);
+  }
+  if (inner.organization && envelope.organization) {
+    for (const field of ['id', 'partner_org_code']) {
+      if (inner.organization[field] !== envelope.organization[field]) {
+        throw new Error(`organization.${field} mismatch between envelope and decrypted payload`);
+      }
+    }
   }
   if (inner.delivery_id !== envelope.delivery_id) {
     throw new Error('delivery_id mismatch between envelope and decrypted payload');

@@ -46,16 +46,24 @@ Legacy single-tenant deployments may still use global `PARTNER_AGENT_FLOAT_*` en
 
 ## Request body (envelope)
 
+Schema versions **1** and **2** are supported. Version 2 adds tenant metadata:
+
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "delivery_id": "550e8400-e29b-41d4-a716-446655440000",
   "snapshot_at": "2026-06-26T12:05:00.000Z",
   "record_count": 4821,
   "algorithm": "aes-256-gcm",
+  "organization": {
+    "id": "cmth7i6qz08iss63bsa0i89l8",
+    "partner_org_code": "co-test-company-mrjivv4d"
+  },
   "encrypted_payload": "<base64>"
 }
 ```
+
+Version 1 omits `organization` (tenant is implied by env or headers only).
 
 ## Processing steps
 
@@ -91,9 +99,13 @@ Decrypt with AES-256-GCM using `PARTNER_AGENT_FLOAT_ENCRYPTION_KEY` (32-byte key
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "delivery_id": "550e8400-e29b-41d4-a716-446655440000",
   "snapshot_at": "2026-06-26T12:05:00.000Z",
+  "organization": {
+    "id": "cmth7i6qz08iss63bsa0i89l8",
+    "partner_org_code": "co-test-company-mrjivv4d"
+  },
   "agents": [
     {
       "agent_number": "7957051",
@@ -106,10 +118,11 @@ Decrypt with AES-256-GCM using `PARTNER_AGENT_FLOAT_ENCRYPTION_KEY` (32-byte key
 
 Confirm:
 
-- `schema_version === 1`
+- `schema_version` is `1` or `2`
 - `delivery_id` matches envelope
 - `agents.length === record_count`
 - `after_balance` values are decimal strings
+- For v2, `organization.partner_org_code` matches `X-BIReports-Partner-Org-Code`
 
 ### 6. Merge into partner records
 
