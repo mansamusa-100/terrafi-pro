@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { MapContainer, Polyline, CircleMarker, Tooltip, useMap } from 'react-leaflet';
+import { MapContainer, Polyline, Marker, Tooltip, useMap } from 'react-leaflet';
 import type { LatLngExpression } from 'leaflet';
 import { MapTileLayer } from './MapTileLayer';
 import { MapResizeFix } from './MapResizeFix';
@@ -7,8 +7,31 @@ import { MapInteractionDismiss } from './MapInteractionDismiss';
 import { GAMBIA_CENTER } from '../lib/geolocation';
 import { formatReportDateTime } from '../lib/date-range-presets';
 import type { OfficerJourney } from '../lib/api';
+import {
+  buildJourneyTimeline,
+  pathUpToTime,
+  stopKindLabel,
+  type JourneyTimelineStop
+} from '../lib/journey-timeline';
+import {
+  isEndStop,
+  isStartStop,
+  journeyEndIcon,
+  journeyHeadIcon,
+  journeyStartIcon,
+  journeyVisitIcon
+} from '../lib/journey-map-icons';
 import { cn } from '../lib/utils';
-import { Clock, MapPin, Navigation, Route } from 'lucide-react';
+import {
+  Clock,
+  MapPin,
+  Navigation,
+  Pause,
+  Play,
+  Route,
+  SkipBack,
+  SkipForward
+} from 'lucide-react';
 
 function FitBounds({ points }: { points: LatLngExpression[] }) {
   const map = useMap();
@@ -22,16 +45,10 @@ function FitBounds({ points }: { points: LatLngExpression[] }) {
   return null;
 }
 
-type SelectedActivity =
-  | { kind: 'visit'; id: number }
-  | { kind: 'ping'; index: number }
-  | null;
-
 interface OfficerJourneyMapProps {
   journey: OfficerJourney | null;
   loading?: boolean;
   className?: string;
-  /** Changes reset the activity panel (e.g. when report table tab changes). */
   interactionResetKey?: string;
 }
 
@@ -75,21 +92,147 @@ function JourneyStatusChips({
   );
 }
 
+function visitReachedIndex(timeline: JourneyTimelineStop[], stopIndex: number, visitId: number) {
+  return timeline.findIndex((s, i) => i <= stopIndex && s.visitId === visitId);
+}
+
+function JourneyPlaybackControls({
+  timeline,
+  stopIndex,
+  playing,
+  onStopIndexChange,
+  onPlay,
+  onPause,
+  onStepBack,
+  onStepForward
+}: {
+  timeline: JourneyTimelineStop[];
+  stopIndex: number;
+  playing: boolean;
+  onStopIndexChange: (index: number) => void;
+  onPlay: () => void;
+  onPause: () => void;
+  onStepBack: () => void;
+  onStepForward: () => void;
+}) {
+  if (timeline.length < 2) return null;
+
+  const current = timeline[stopIndex];
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+          Journey playback
+        </div>
+        <span className="text-[10px] text-slate-400 tabular-nums">
+          {stopIndex + 1} / {timeline.length}
+        </span>
+      </div>
+
+      {current && (
+        <div className="rounded-md bg-slate-50 border border-slate-100 px-2.5 py-2 text-xs">
+          <div className="font-semibold text-slate-900">{current.title}</div>
+          <div className="text-slate-500 mt-0.5">
+            {stopKindLabel(current.kind)} · {formatReportDateTime(current.at)}
+          </div>
+          {current.subtitle && (
+            <div className="text-slate-500 mt-0.5 truncate">{current.subtitle}</div>
+          )}
+        </div>
+      )}
+
+      <input
+        type="range"
+        min={0}
+        max={timeline.length - 1}
+        value={stopIndex}
+        onChange={(e) => {
+          onPause();
+          onStopIndexChange(Number.parseInt(e.target.value, 10));
+        }}
+        className="w-full h-1.5 accent-apsBlue cursor-pointer"
+        aria-label="Journey timeline scrubber"
+      />
+
+      <div className="flex items-center justify-center gap-2">
+        <button
+          type="button"
+          onClick={onStepBack}
+          disabled={stopIndex === 0}
+          className="p-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+          aria-label="Previous stop">
+          <SkipBack className="w-4 h-4" />
+        </button>
+        {playing ? (
+          <button
+            type="button"
+            onClick={onPause}
+            className="p-2.5 rounded-lg bg-apsBlue text-white hover:bg-apsBlue/90"
+            aria-label="Pause playback">
+            <Pause className="w-4 h-4" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={onPlay}
+            className="p-2.5 rounded-lg bg-apsBlue text-white hover:bg-apsBlue/90"
+            aria-label="Play journey">
+            <Play className="w-4 h-4" />
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onStepForward}
+          disabled={stopIndex >= timeline.length - 1}
+          className="p-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+          aria-label="Next stop">
+          <SkipForward className="w-4 h-4" />
+        </button>
+      </div>
+
+      <p className="text-[10px] text-slate-500 leading-relaxed">
+        Green <strong>S</strong> = duty start · numbered stops = visits in order · red{' '}
+        <strong>E</strong> = duty end. The blue line grows as the officer moves.
+      </p>
+    </div>
+  );
+}
+
 export function OfficerJourneyMap({
   journey,
   loading,
   className,
   interactionResetKey
 }: OfficerJourneyMapProps) {
-  const [selected, setSelected] = useState<SelectedActivity>(null);
+  const [stopIndex, setStopIndex] = useState(0);
+  const [playing, setPlaying] = useState(false);
+
+  const timeline = useMemo(
+    () => (journey ? buildJourneyTimeline(journey) : []),
+    [journey]
+  );
 
   useEffect(() => {
-    setSelected(null);
-  }, [journey?.date, journey?.officer.id]);
+    setPlaying(false);
+    setStopIndex(timeline.length > 0 ? timeline.length - 1 : 0);
+  }, [journey?.date, journey?.officer.id, timeline.length, interactionResetKey]);
 
   useEffect(() => {
-    setSelected(null);
-  }, [interactionResetKey]);
+    if (!playing || timeline.length < 2) return;
+    const timer = window.setInterval(() => {
+      setStopIndex((prev) => {
+        if (prev >= timeline.length - 1) {
+          setPlaying(false);
+          return prev;
+        }
+        return prev + 1;
+      });
+    }, 1400);
+    return () => window.clearInterval(timer);
+  }, [playing, timeline.length]);
+
+  const currentStop = timeline[stopIndex] ?? null;
 
   const pathPoints = useMemo(
     () => (journey?.path ?? []).map((p) => [p.lat, p.lng] as LatLngExpression),
@@ -104,11 +247,8 @@ export function OfficerJourneyMap({
     [journey]
   );
 
-  const visitPathPoints = useMemo(
-    () =>
-      [...visitMarkers]
-        .sort((a, b) => a.time.localeCompare(b.time))
-        .map((v) => [v.check_in_lat!, v.check_in_lng!] as LatLngExpression),
+  const sortedVisits = useMemo(
+    () => [...visitMarkers].sort((a, b) => a.time.localeCompare(b.time)),
     [visitMarkers]
   );
 
@@ -117,9 +257,36 @@ export function OfficerJourneyMap({
   const noGeoData =
     journey != null && !hasTrackingPath && visitMarkers.length === 0;
 
-  const center = pathPoints[0] ?? visitMarkers[0]
-    ? ([visitMarkers[0].check_in_lat!, visitMarkers[0].check_in_lng!] as LatLngExpression)
-    : ([GAMBIA_CENTER.lat, GAMBIA_CENTER.lng] as LatLngExpression);
+  const activePathPoints = useMemo(() => {
+    if (!journey || !currentStop) return [];
+    if (hasTrackingPath) {
+      return pathUpToTime(journey.path, currentStop.at).map(
+        (p) => [p.lat, p.lng] as LatLngExpression
+      );
+    }
+    if (visitOnlyMode) {
+      const cutoff = currentStop.at;
+      return sortedVisits
+        .filter((v) => {
+          const ts = `${journey.date}T${v.time}:00`;
+          return Date.parse(ts) <= Date.parse(cutoff);
+        })
+        .map((v) => [v.check_in_lat!, v.check_in_lng!] as LatLngExpression);
+    }
+    return [];
+  }, [journey, currentStop, hasTrackingPath, visitOnlyMode, sortedVisits]);
+
+  const visitPathPoints = useMemo(
+    () =>
+      sortedVisits.map((v) => [v.check_in_lat!, v.check_in_lng!] as LatLngExpression),
+    [sortedVisits]
+  );
+
+  const center =
+    pathPoints[0] ??
+    (visitMarkers[0]
+      ? ([visitMarkers[0].check_in_lat!, visitMarkers[0].check_in_lng!] as LatLngExpression)
+      : ([GAMBIA_CENTER.lat, GAMBIA_CENTER.lng] as LatLngExpression));
 
   const fitPoints = useMemo(() => {
     const pts: LatLngExpression[] = hasTrackingPath ? [...pathPoints] : [...visitPathPoints];
@@ -131,12 +298,10 @@ export function OfficerJourneyMap({
     return pts;
   }, [hasTrackingPath, pathPoints, visitPathPoints, visitMarkers]);
 
-  const selectedVisit =
-    selected?.kind === 'visit'
-      ? journey?.visits.find((v) => v.id === selected.id)
-      : null;
-  const selectedPing =
-    selected?.kind === 'ping' ? journey?.path[selected.index] : null;
+  const startPlay = () => {
+    setStopIndex(0);
+    setPlaying(true);
+  };
 
   if (loading) {
     return (
@@ -181,75 +346,109 @@ export function OfficerJourneyMap({
           scrollWheelZoom>
           <MapTileLayer />
           <MapResizeFix />
-          <MapInteractionDismiss onClearSelection={() => setSelected(null)} />
+          <MapInteractionDismiss />
           <FitBounds points={fitPoints} />
-          {hasTrackingPath && (
+
+          {hasTrackingPath && pathPoints.length >= 2 && (
             <Polyline
               positions={pathPoints}
-              pathOptions={{ color: '#1565C0', weight: 4, opacity: 0.85 }}
+              pathOptions={{ color: '#94A3B8', weight: 3, opacity: 0.35, dashArray: '6 8' }}
             />
           )}
           {visitOnlyMode && visitPathPoints.length >= 2 && (
             <Polyline
               positions={visitPathPoints}
-              pathOptions={{
-                color: '#00897B',
-                weight: 3,
-                opacity: 0.7,
-                dashArray: '8 8'
-              }}
+              pathOptions={{ color: '#94A3B8', weight: 3, opacity: 0.35, dashArray: '6 8' }}
             />
           )}
-          {hasTrackingPath && pathPoints.length > 0 && (
-            <CircleMarker
-              center={pathPoints[0]}
-              radius={8}
-              pathOptions={{ color: '#22C55E', fillColor: '#22C55E', fillOpacity: 1 }}
-              eventHandlers={{
-                click: () => setSelected({ kind: 'ping', index: 0 })
-              }}>
-              <Tooltip direction="top" sticky={false}>
-                Start
-              </Tooltip>
-            </CircleMarker>
+
+          {activePathPoints.length >= 2 && (
+            <Polyline
+              positions={activePathPoints}
+              pathOptions={{ color: '#1565C0', weight: 5, opacity: 0.9 }}
+            />
           )}
-          {hasTrackingPath && pathPoints.length > 1 && (
-            <CircleMarker
-              center={pathPoints[pathPoints.length - 1]}
-              radius={8}
-              pathOptions={{ color: '#EF4444', fillColor: '#EF4444', fillOpacity: 1 }}
-              eventHandlers={{
-                click: () =>
-                  setSelected({ kind: 'ping', index: pathPoints.length - 1 })
-              }}>
-              <Tooltip direction="top" sticky={false}>
-                Latest ping
-              </Tooltip>
-            </CircleMarker>
+
+          {timeline.map((stop) => {
+            if (isStartStop(stop)) {
+              return (
+                <Marker
+                  key={stop.id}
+                  position={[stop.lat, stop.lng]}
+                  icon={journeyStartIcon()}
+                  eventHandlers={{
+                    click: () => {
+                      const idx = timeline.findIndex((s) => s.id === stop.id);
+                      if (idx >= 0) {
+                        setPlaying(false);
+                        setStopIndex(idx);
+                      }
+                    }
+                  }}>
+                  <Tooltip direction="top" sticky={false}>
+                    Start · {formatReportDateTime(stop.at)}
+                  </Tooltip>
+                </Marker>
+              );
+            }
+            if (isEndStop(stop)) {
+              const reached = timeline.findIndex((s) => s.id === stop.id) <= stopIndex;
+              if (!reached) return null;
+              return (
+                <Marker
+                  key={stop.id}
+                  position={[stop.lat, stop.lng]}
+                  icon={journeyEndIcon()}
+                  eventHandlers={{
+                    click: () => {
+                      const idx = timeline.findIndex((s) => s.id === stop.id);
+                      if (idx >= 0) {
+                        setPlaying(false);
+                        setStopIndex(idx);
+                      }
+                    }
+                  }}>
+                  <Tooltip direction="top" sticky={false}>
+                    End · {formatReportDateTime(stop.at)}
+                  </Tooltip>
+                </Marker>
+              );
+            }
+            if (stop.kind === 'visit' && stop.visitOrder != null) {
+              const stopIdx = timeline.findIndex((s) => s.id === stop.id);
+              const reached = stopIdx <= stopIndex;
+              const active = stopIdx === stopIndex;
+              return (
+                <Marker
+                  key={stop.id}
+                  position={[stop.lat, stop.lng]}
+                  icon={journeyVisitIcon(stop.visitOrder, active, reached)}
+                  eventHandlers={{
+                    click: () => {
+                      setPlaying(false);
+                      setStopIndex(stopIdx);
+                    }
+                  }}>
+                  <Tooltip direction="top" sticky={false}>
+                    {stop.visitOrder}. {stop.title} · {stop.subtitle}
+                  </Tooltip>
+                </Marker>
+              );
+            }
+            return null;
+          })}
+
+          {currentStop && playing && (
+            <Marker
+              position={[currentStop.lat, currentStop.lng]}
+              icon={journeyHeadIcon()}
+              zIndexOffset={1000}
+            />
           )}
-          {visitMarkers.map((v) => (
-            <CircleMarker
-              key={v.id}
-              center={[v.check_in_lat!, v.check_in_lng!]}
-              radius={10}
-              pathOptions={{
-                color: '#00897B',
-                fillColor: '#00897B',
-                fillOpacity: selected?.kind === 'visit' && selected.id === v.id ? 1 : 0.85,
-                weight: selected?.kind === 'visit' && selected.id === v.id ? 3 : 2
-              }}
-              eventHandlers={{
-                click: () => setSelected({ kind: 'visit', id: v.id })
-              }}>
-              <Tooltip direction="top" sticky={false}>
-                {v.agent_name} · {v.time}
-              </Tooltip>
-            </CircleMarker>
-          ))}
         </MapContainer>
       </div>
 
-      <aside className="w-full lg:w-72 border-t lg:border-t-0 lg:border-l border-slate-200 bg-slate-50/80 p-4 flex flex-col gap-3 shrink-0 relative z-[1]">
+      <aside className="w-full lg:w-80 border-t lg:border-t-0 lg:border-l border-slate-200 bg-slate-50/80 p-4 flex flex-col gap-3 shrink-0 relative z-[1]">
         <div>
           <div className="text-sm font-semibold text-slate-900">{journey.officer.name}</div>
           <div className="text-xs text-slate-500 mt-0.5">
@@ -265,16 +464,26 @@ export function OfficerJourneyMap({
           </div>
         </div>
 
+        <JourneyPlaybackControls
+          timeline={timeline}
+          stopIndex={stopIndex}
+          playing={playing}
+          onStopIndexChange={setStopIndex}
+          onPlay={startPlay}
+          onPause={() => setPlaying(false)}
+          onStepBack={() => {
+            setPlaying(false);
+            setStopIndex((i) => Math.max(0, i - 1));
+          }}
+          onStepForward={() => {
+            setPlaying(false);
+            setStopIndex((i) => Math.min(timeline.length - 1, i + 1));
+          }}
+        />
+
         {visitOnlyMode && (
           <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-2">
-            Duty tracking was not active — map shows verified visit check-in locations
-            {visitPathPoints.length >= 2 ? ' connected in visit order.' : '.'}
-          </p>
-        )}
-        {noGeoData && journey.visits.length > 0 && (
-          <p className="text-xs text-slate-600 bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-2">
-            {journey.visits.length} visit{journey.visits.length !== 1 ? 's' : ''} logged but no
-            GPS coordinates were captured.
+            Duty tracking was not active — playback follows visit check-ins in order.
           </p>
         )}
 
@@ -307,59 +516,59 @@ export function OfficerJourneyMap({
         <div className="flex-1 min-h-0 overflow-y-auto space-y-2">
           <div className="font-semibold text-slate-700 text-xs flex items-center gap-1.5">
             <Navigation className="w-3.5 h-3.5" />
-            Activity
-          </div>
-          {selectedVisit ? (
-            <div className="bg-white border border-teal-200 rounded-lg p-3 text-xs">
-              <div className="font-semibold text-slate-900">{selectedVisit.agent_name}</div>
-              <div className="text-slate-600 mt-1">{selectedVisit.type}</div>
-              <div className="text-slate-500 mt-1">Check-in {selectedVisit.time}</div>
-              {selectedVisit.gps_verified && (
-                <div className="text-apsGreen mt-1">
-                  GPS verified · {selectedVisit.distance_meters}m
-                </div>
-              )}
-            </div>
-          ) : selectedPing ? (
-            <div className="bg-white border border-blue-200 rounded-lg p-3 text-xs">
-              <div className="font-semibold text-slate-900 capitalize">
-                {selectedPing.source.replace('_', ' ')}
-              </div>
-              <div className="text-slate-500 mt-1">
-                {formatReportDateTime(selectedPing.captured_at)}
-              </div>
-              {selectedPing.accuracy != null && (
-                <div className="text-slate-500 mt-0.5">
-                  ±{Math.round(selectedPing.accuracy)}m
-                </div>
-              )}
-            </div>
-          ) : (
-            <p className="text-xs text-slate-500">
-              Click a visit marker or path point on the map for details.
-            </p>
-          )}
-
-          <div className="font-semibold text-slate-700 text-xs flex items-center gap-1.5 pt-2">
-            <MapPin className="w-3.5 h-3.5" />
-            Visits ({journey.visits.length})
+            Route stops
           </div>
           <ul className="space-y-1">
-            {journey.visits.map((v) => (
-              <li key={v.id}>
+            {timeline.map((stop, index) => (
+              <li key={stop.id}>
                 <button
                   type="button"
-                  onClick={() => setSelected({ kind: 'visit', id: v.id })}
+                  onClick={() => {
+                    setPlaying(false);
+                    setStopIndex(index);
+                  }}
                   className={cn(
                     'w-full text-left text-xs px-2 py-1.5 rounded-md border transition-colors',
-                    selected?.kind === 'visit' && selected.id === v.id
-                      ? 'bg-teal-50 border-teal-200 text-teal-900'
-                      : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+                    index === stopIndex
+                      ? 'bg-blue-50 border-blue-200 text-blue-900'
+                      : index <= stopIndex
+                        ? 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+                        : 'bg-slate-50 border-slate-100 text-slate-400'
                   )}>
-                  <span className="font-medium">{v.time}</span> · {v.agent_name}
+                  <span className="font-medium">{stopKindLabel(stop.kind)}</span>
+                  {' · '}
+                  {stop.title}
+                  <span className="block text-[10px] opacity-80 mt-0.5">
+                    {formatReportDateTime(stop.at)}
+                  </span>
                 </button>
               </li>
             ))}
+          </ul>
+
+          <div className="font-semibold text-slate-700 text-xs flex items-center gap-1.5 pt-2">
+            <MapPin className="w-3.5 h-3.5" />
+            All visits ({journey.visits.length})
+          </div>
+          <ul className="space-y-1">
+            {journey.visits.map((v) => {
+              const reached =
+                v.check_in_lat != null &&
+                visitReachedIndex(timeline, stopIndex, v.id) >= 0;
+              return (
+                <li key={v.id}>
+                  <div
+                    className={cn(
+                      'text-xs px-2 py-1.5 rounded-md border',
+                      reached
+                        ? 'bg-teal-50 border-teal-100 text-teal-900'
+                        : 'bg-white border-slate-200 text-slate-500'
+                    )}>
+                    <span className="font-medium">{v.time}</span> · {v.agent_name}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </div>
       </aside>

@@ -83,3 +83,24 @@ body {
 .app-map .leaflet-popup-pane {
   z-index: 3 !important;
 }
+
+.journey-map-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+.journey-head-icon {
+  animation: journey-head-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes journey-head-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.12);
+    opacity: 0.85;
+  }
+}
