@@ -25,10 +25,24 @@ Your server must expose an HTTPS POST endpoint configured as `PARTNER_AGENT_FLOA
 
 | Header | Description |
 |--------|-------------|
-| `Authorization` | `Bearer <PARTNER_AGENT_FLOAT_API_KEY>` |
+| `Authorization` | `Bearer <API key>` — per-organization secret |
+| `X-BIReports-Organization-Id` | PrixBI organization ID (must match Field-Pro config when set) |
+| `X-BIReports-Partner-Org-Code` | Field-Pro `Company.id` — routes the delivery to that tenant |
 | `X-BIReports-Delivery-Id` | UUID for this delivery (same as body `delivery_id`) |
 | `X-BIReports-Signature` | `sha256=<hex>` HMAC-SHA256 of the **raw request body** |
 | `Content-Type` | `application/json` |
+
+## Multi-tenant routing
+
+Each PrixBI organization delivers to the same Field-Pro URL. Field-Pro selects the tenant using **`X-BIReports-Partner-Org-Code`**, which must equal an existing **`Company.id`** (for example `co-test-company-mrjivv4d`).
+
+Credentials are stored **per company** in Field-Pro (`CompanyFloatIntegration`). Managers configure them via:
+
+- `GET /api/settings/float-integration` — partner org code, ingest URL, configured flag
+- `PUT /api/settings/float-integration` — save PrixBI org ID, enable/disable, or paste shared secrets
+- `POST /api/settings/float-integration/generate` — generate new secrets (copy into PrixBI)
+
+Legacy single-tenant deployments may still use global `PARTNER_AGENT_FLOAT_*` env vars for one `PARTNER_AGENT_FLOAT_COMPANY_ID` when no per-company record exists.
 
 ## Request body (envelope)
 

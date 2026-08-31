@@ -12,10 +12,13 @@ import { companyLogoUpload, brandingUploadDir } from '../middleware/upload.js';
 import { companyLogoUrl } from '../lib/branding.js';
 import { prisma } from '../lib/prisma.js';
 import { logAudit } from '../lib/audit.js';
+import floatIntegrationSettings from './float-integration-settings.js';
 
 const router = Router();
 
 router.use(requireRoles('manager', 'system_owner'));
+
+router.use('/float-integration', floatIntegrationSettings);
 
 router.get('/', async (req, res, next) => {
   try {

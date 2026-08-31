@@ -48,6 +48,7 @@ model Company {
   floatTrend    FloatTrendPoint[]
   auditLogs     AuditLog[]
   settings      CompanySettings?
+  floatIntegration CompanyFloatIntegration?
   notifications Notification[]
   notificationReports NotificationReport[]
   leadAdrAssignments LeadAdrAssignment[]
@@ -270,6 +271,20 @@ model FloatTrendPoint {
   label     String
   efloat    Int
   cash      Int
+}
+
+model CompanyFloatIntegration {
+  companyId               String   @id @map("company_id")
+  company                 Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  bireportsOrganizationId String?  @map("bireports_organization_id")
+  apiKeyEnc               String?  @map("api_key_enc")
+  hmacSecretEnc           String?  @map("hmac_secret_enc")
+  encryptionKeyEnc        String?  @map("encryption_key_enc")
+  enabled                 Boolean  @default(true)
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  @@index([bireportsOrganizationId])
+  @@map("CompanyFloatIntegration")
 }
 
 model FloatDelivery {

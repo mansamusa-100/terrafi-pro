@@ -3,37 +3,46 @@ import {
   isDeliveryProcessed,
   mergeAgentFloatSnapshot
 } from '../lib/float-ingest.js';
-
-function integrationConfig() {
-  const apiKey = process.env.PARTNER_AGENT_FLOAT_API_KEY;
-  const hmacSecret = process.env.PARTNER_AGENT_FLOAT_HMAC_SECRET;
-  const encryptionKey = process.env.PARTNER_AGENT_FLOAT_ENCRYPTION_KEY;
-  const companyId = process.env.PARTNER_AGENT_FLOAT_COMPANY_ID || 'co-aps';
-
-  return { apiKey, hmacSecret, encryptionKey, companyId };
-}
-
-function configError(res) {
-  return res.status(503).json({
-    message: 'Float integration is not configured on this server'
-  });
-}
+import {
+  FloatIntegrationError,
+  resolveFloatIntegration,
+  validateBireportsOrganizationId
+} from '../lib/float-integration.js';
 
 export async function handleAgentFloatDelivery(req, res, next) {
   try {
-    const { apiKey, hmacSecret, encryptionKey, companyId } = integrationConfig();
-
-    if (!apiKey || !hmacSecret || !encryptionKey) {
-      return configError(res);
-    }
-
-    if (!verifyBearer(req.headers.authorization, apiKey)) {
-      return res.status(401).json({ message: 'Invalid API key' });
-    }
-
     const rawBody = req.body;
     if (!Buffer.isBuffer(rawBody) || rawBody.length === 0) {
       return res.status(400).json({ message: 'Request body is required' });
+    }
+
+    const partnerOrgCode = req.headers['x-bireports-partner-org-code'];
+    let integration;
+    try {
+      integration = await resolveFloatIntegration(partnerOrgCode);
+    } catch (err) {
+      if (err instanceof FloatIntegrationError) {
+        return res.status(err.status).json({ message: err.message });
+      }
+      throw err;
+    }
+
+    try {
+      validateBireportsOrganizationId(
+        req.headers['x-bireports-organization-id'],
+        integration.bireportsOrganizationId
+      );
+    } catch (err) {
+      if (err instanceof FloatIntegrationError) {
+        return res.status(err.status).json({ message: err.message });
+      }
+      throw err;
+    }
+
+    const { apiKey, hmacSecret, encryptionKey, companyId } = integration;
+
+    if (!verifyBearer(req.headers.authorization, apiKey)) {
+      return res.status(401).json({ message: 'Invalid API key' });
     }
 
     const signature = req.headers['x-bireports-signature'];
@@ -69,7 +78,11 @@ export async function handleAgentFloatDelivery(req, res, next) {
     }
 
     if (await isDeliveryProcessed(deliveryId)) {
-      return res.status(200).json({ accepted: true, duplicate: true });
+      return res.status(200).json({
+        accepted: true,
+        duplicate: true,
+        company_id: companyId
+      });
     }
 
     let inner;
@@ -106,6 +119,7 @@ export async function handleAgentFloatDelivery(req, res, next) {
     return res.status(200).json({
       accepted: true,
       delivery_id: deliveryId,
+      company_id: companyId,
       ...result
     });
   } catch (err) {

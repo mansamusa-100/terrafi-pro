@@ -16,6 +16,7 @@ const API_KEY = process.env.PARTNER_AGENT_FLOAT_API_KEY;
 const HMAC_SECRET = process.env.PARTNER_AGENT_FLOAT_HMAC_SECRET;
 const ENCRYPTION_KEY_B64 = process.env.PARTNER_AGENT_FLOAT_ENCRYPTION_KEY;
 const COMPANY_ID = process.env.PARTNER_AGENT_FLOAT_COMPANY_ID || 'co-aps';
+const BI_ORG_ID = process.env.PARTNER_AGENT_FLOAT_BIREPORTS_ORG_ID || '';
 
 function encryptPayload(plaintext, keyB64) {
   const key = Buffer.from(keyB64, 'base64');
@@ -73,14 +74,20 @@ async function main() {
     .update(rawBody)
     .digest('hex')}`;
 
+  const headers = {
+    Authorization: `Bearer ${API_KEY}`,
+    'Content-Type': 'application/json',
+    'X-BIReports-Delivery-Id': deliveryId,
+    'X-BIReports-Partner-Org-Code': COMPANY_ID,
+    'X-BIReports-Signature': signature
+  };
+  if (BI_ORG_ID) {
+    headers['X-BIReports-Organization-Id'] = BI_ORG_ID;
+  }
+
   const res = await fetch(API_URL, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${API_KEY}`,
-      'Content-Type': 'application/json',
-      'X-BIReports-Delivery-Id': deliveryId,
-      'X-BIReports-Signature': signature
-    },
+    headers,
     body: rawBody
   });
 
