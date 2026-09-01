@@ -25,7 +25,7 @@ interface CompliancePageProps {
 export function CompliancePage({ onOpenAgent }: CompliancePageProps) {
   const { alerts, kycStats, kycReviewQueue, agents, dismissAlert } = useAppData();
   const { user } = useAuth();
-  const canReview = user ? can(user.role, 'reviewKyc') : false;
+  const canReview = user ? can(user, 'reviewKyc') : false;
 
   const {
     pageItems: pageAlerts,
@@ -68,7 +68,7 @@ export function CompliancePage({ onOpenAgent }: CompliancePageProps) {
 
   return (
     <div className="page-pad">
-      {user && can(user.role, 'exportData') && (
+      {user && can(user, 'exportData') && (
         <div className="flex justify-end mb-4">
           <ExportButton
             path={api.export.compliance()}

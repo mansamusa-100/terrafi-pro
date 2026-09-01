@@ -11,6 +11,14 @@ import {
 } from '../lib/notification-report.js';
 import { loadSupervisedAdrs, setSupervisedAdrs } from '../lib/team-lead.js';
 import {
+  ASSIGNED_CAPABILITY_CATALOG,
+  ASSIGNED_CAPABILITY_IDS,
+  ASSIGNABLE_ROLES,
+  capabilityIdsForRole,
+  normalizeAssignedCapabilitiesInput,
+  parseAssignedCapabilities
+} from '../lib/internal-capabilities.js';
+import {
   generateTemporaryPassword,
   deliverTemporaryCredentials
 } from '../lib/invite-credentials.js';
@@ -90,7 +98,10 @@ async function mapUser(u) {
     role: u.role,
     zone: u.zone,
     status: u.status,
-    scope: u.companyId ? 'company' : 'platform'
+    scope: u.companyId ? 'company' : 'platform',
+    internal_capabilities: ASSIGNABLE_ROLES.includes(u.role)
+      ? parseAssignedCapabilities(u.internalCapabilities)
+      : []
   };
   if (u.role === 'team_lead') {
     const supervised = await loadSupervisedAdrs(u.id);
@@ -98,6 +109,13 @@ async function mapUser(u) {
   }
   return base;
 }
+
+router.get('/internal-capability-catalog', requireRoles('manager'), (_req, res) => {
+  res.json({
+    ids: ASSIGNED_CAPABILITY_IDS,
+    catalog: ASSIGNED_CAPABILITY_CATALOG
+  });
+});
 
 router.get('/', async (req, res, next) => {
   try {
@@ -126,7 +144,7 @@ router.get('/', async (req, res, next) => {
 
 router.post('/invite', requireRoles('system_owner', 'platform_staff', 'manager'), async (req, res, next) => {
   try {
-    const { name, email, role, zone, supervised_adr_ids } = req.body;
+    const { name, email, role, zone, supervised_adr_ids, internal_capabilities } = req.body;
     if (!name?.trim() || !email?.trim() || !role) {
       return res.status(400).json({ error: 'Name, email, and role are required' });
     }
@@ -193,6 +211,20 @@ router.post('/invite', requireRoles('system_owner', 'platform_staff', 'manager')
       status = 'invited';
     }
 
+    let assignedCapabilities = [];
+    if (ASSIGNABLE_ROLES.includes(role) && !isPlatform) {
+      if (internal_capabilities !== undefined) {
+        assignedCapabilities = normalizeAssignedCapabilitiesInput(
+          internal_capabilities,
+          role
+        );
+      }
+    } else if (internal_capabilities !== undefined && !ASSIGNABLE_ROLES.includes(role)) {
+      return res.status(400).json({
+        error: 'Capabilities can only be assigned to internal or team lead users'
+      });
+    }
+
     const user = await prisma.user.create({
       data: {
         id: `usr-${Date.now().toString(36)}`,
@@ -203,7 +235,10 @@ router.post('/invite', requireRoles('system_owner', 'platform_staff', 'manager')
         companyId,
         scope: isPlatform ? 'Platform operations' : zone?.trim() || 'Invited',
         zone: zone?.trim() || null,
-        status
+        status,
+        ...(ASSIGNABLE_ROLES.includes(role) && assignedCapabilities.length
+          ? { internalCapabilities: assignedCapabilities }
+          : {})
       }
     });
 
@@ -322,7 +357,10 @@ router.patch(
 
       const updated = await prisma.user.update({
         where: { id: user.id },
-        data: { role }
+        data: {
+          role,
+          ...(ASSIGNABLE_ROLES.includes(role) ? {} : { internalCapabilities: null })
+        }
       });
 
       if (role === 'team_lead' && user.companyId) {
@@ -341,6 +379,52 @@ router.patch(
 
       res.json(await mapUser(updated));
     } catch (err) {
+      next(err);
+    }
+  }
+);
+
+router.patch(
+  '/:email/capabilities',
+  requireRoles('manager'),
+  async (req, res, next) => {
+    try {
+      const user = await findUserInScope(req, req.params.email);
+      if (!user) return res.status(404).json({ error: 'User not found' });
+      if (user.companyId !== req.user.companyId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+      if (!ASSIGNABLE_ROLES.includes(user.role)) {
+        return res.status(400).json({
+          error: 'Capabilities can only be assigned to internal or team lead users'
+        });
+      }
+
+      const capabilities = normalizeAssignedCapabilitiesInput(
+        req.body.capabilities,
+        user.role
+      );
+
+      const updated = await prisma.user.update({
+        where: { id: user.id },
+        data: { internalCapabilities: capabilities }
+      });
+
+      await logAudit({
+        scope: 'company',
+        companyId: user.companyId,
+        actor: req.user,
+        action: 'user.capabilities_updated',
+        entityType: 'user',
+        entityId: user.id,
+        details: { email: user.email, capabilities }
+      });
+
+      res.json(await mapUser(updated));
+    } catch (err) {
+      if (err.status === 400) {
+        return res.status(400).json({ error: err.message });
+      }
       next(err);
     }
   }

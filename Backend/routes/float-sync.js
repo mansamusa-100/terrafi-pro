@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { companyFilter } from '../middleware/user.js';
-import { requireRoles } from '../middleware/auth.js';
+import { managerOrInternalCapability } from '../lib/internal-capabilities.js';
 import {
   serializeDelivery,
   serializeDeliveryAgent
@@ -9,7 +9,7 @@ import {
 
 const router = Router();
 
-router.use(requireRoles('manager'));
+router.use(managerOrInternalCapability('view_float_sync'));
 
 router.get('/deliveries', async (req, res, next) => {
   try {

@@ -24,7 +24,7 @@ export function AgentsPage({ searchQ, setSearchQ, onAgentClick }: AgentsPageProp
   const { agents, createAgent } = useAppData();
   const { user } = useAuth();
   const { coords: userCoords } = useUserLocation();
-  const canOnboard = user ? can(user.role, 'onboardAgent') : false;
+  const canOnboard = user ? can(user, 'onboardAgent') : false;
   const [filter, setFilter] = useState('all');
   const [sort, setSort] = useState('distance');
   const [onboardingOpen, setOnboardingOpen] = useState(false);

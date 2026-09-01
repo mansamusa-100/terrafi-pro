@@ -73,11 +73,11 @@ export function VisitsPage() {
     updateVisit,
     queuedVisitCount
   } = useAppData();
-  const canLog = user ? can(user.role, 'logVisit') : false;
-  const canSchedule = user ? can(user.role, 'scheduleVisit') : false;
+  const canLog = user ? can(user, 'logVisit') : false;
+  const canSchedule = user ? can(user, 'scheduleVisit') : false;
   const canManage = canLog || canSchedule;
   const canExport =
-    user && (can(user.role, 'exportData') || user.role === 'adr');
+    user && (can(user, 'exportData') || user.role === 'adr');
 
   const [sortConfig, setSortConfig] = useState<{
     key: string;

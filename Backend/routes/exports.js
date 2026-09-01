@@ -2,6 +2,10 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { companyFilter, visitOfficerFilter } from '../middleware/user.js';
 import { requireRoles } from '../middleware/auth.js';
+import {
+  managerOrInternalCapability,
+  requireRolesOrInternalCapability
+} from '../lib/internal-capabilities.js';
 import { toCsv, csvResponse } from '../lib/csv-export.js';
 import { buildAdrPerformance } from '../lib/performance.js';
 import { todayISO } from '../middleware/user.js';
@@ -27,7 +31,7 @@ function dateRange(query) {
 
 router.get(
   '/agents',
-  requireRoles('manager', 'internal'),
+  managerOrInternalCapability('export_data'),
   async (req, res, next) => {
     try {
       const companyId = companyFilter(req.user) || 'co-aps';
@@ -76,7 +80,7 @@ router.get(
 
 router.get(
   '/visits',
-  requireRoles('manager', 'internal', 'team_lead', 'adr'),
+  requireRolesOrInternalCapability(['manager', 'team_lead', 'adr'], 'export_data'),
   async (req, res, next) => {
     try {
       const companyId = companyFilter(req.user) || 'co-aps';
@@ -134,7 +138,7 @@ router.get(
 
 router.get(
   '/adr-performance',
-  requireRoles('manager', 'internal'),
+  managerOrInternalCapability('export_data'),
   async (req, res, next) => {
     try {
       const companyId = companyFilter(req.user) || 'co-aps';
@@ -180,7 +184,7 @@ router.get(
 
 router.get(
   '/compliance',
-  requireRoles('manager', 'internal'),
+  managerOrInternalCapability('export_data'),
   async (req, res, next) => {
     try {
       const companyId = companyFilter(req.user) || 'co-aps';
@@ -212,7 +216,7 @@ router.get(
 
 router.get(
   '/agent-report',
-  requireRoles('manager', 'internal', 'team_lead', 'adr'),
+  requireRolesOrInternalCapability(['manager', 'team_lead', 'adr'], 'export_data'),
   async (req, res, next) => {
     try {
       const report = await buildAgentRegistryReport(req.user, {
@@ -231,7 +235,7 @@ router.get(
 
 router.get(
   '/officer-report',
-  requireRoles('manager', 'internal', 'team_lead', 'adr'),
+  requireRolesOrInternalCapability(['manager', 'team_lead', 'adr'], 'export_data'),
   async (req, res, next) => {
     try {
       const report = await buildOfficerReport(req.user, req.query);

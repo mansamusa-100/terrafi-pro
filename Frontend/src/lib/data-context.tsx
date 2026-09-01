@@ -31,7 +31,7 @@ import {
   AgentSparklines
 } from './api';
 import { useAuth } from './auth';
-import { Role } from './rbac';
+import { Role, AppUser, hasAssignedCap } from './rbac';
 import {
   enqueueVisit,
   getDeviceId,
@@ -82,6 +82,7 @@ interface AppDataContextValue {
     email: string,
     body: { name?: string; zone?: string; status?: string }
   ) => Promise<void>;
+  updateUserCapabilities: (email: string, capabilities: string[]) => Promise<void>;
   updateSupervisedAdrs: (email: string, adrIds: string[]) => Promise<void>;
   inviteUser: (body: {
     name: string;
@@ -89,6 +90,7 @@ interface AppDataContextValue {
     role: string;
     zone?: string;
     supervised_adr_ids?: string[];
+    internal_capabilities?: string[];
   }) => Promise<
     CompanyUser & {
       temporaryPassword?: string;
@@ -123,16 +125,20 @@ interface AppDataContextValue {
 
 const AppDataContext = createContext<AppDataContextValue | null>(null);
 
-function needsAgents(role: Role) {
-  return !['system_owner', 'platform_staff'].includes(role);
+function needsAgents(user: AppUser) {
+  if (isPlatformRole(user.role)) return false;
+  if (user.role === 'internal') return hasAssignedCap(user, 'view_agents') || hasAssignedCap(user, 'edit_agents');
+  return true;
 }
 
 function isPlatformRole(role: Role) {
   return role === 'system_owner' || role === 'platform_staff';
 }
 
-function needsVisits(role: Role) {
-  return ['manager', 'internal', 'team_lead', 'adr', 'agent'].includes(role);
+function needsVisits(user: AppUser) {
+  if (['manager', 'team_lead', 'adr', 'agent'].includes(user.role)) return true;
+  if (user.role === 'internal') return hasAssignedCap(user, 'view_visits');
+  return false;
 }
 
 function needsNetworkData(role: Role) {
@@ -203,7 +209,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       const fetches: Promise<void>[] = [];
 
       fetches.push(
-        api.notifications.list().then(setNotifications),
+        api.notifications.list({ unreadOnly: true }).then(setNotifications),
         api.notifications.unreadCount().then((r) => setUnreadNotificationCount(r.count))
       );
 
@@ -225,16 +231,27 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         );
       }
 
+      if (user.role === 'internal') {
+        if (hasAssignedCap(user, 'view_audit')) {
+          fetches.push(api.audit().then(setAuditLogs));
+        }
+        if (hasAssignedCap(user, 'view_notification_report')) {
+          fetches.push(
+            api.notificationReports({ limit: 200 }).then(setNotificationReports)
+          );
+        }
+      }
+
       if (user.role === 'team_lead') {
         fetches.push(api.users().then(setUsers));
       }
 
-      if (needsAgents(user.role)) {
+      if (needsAgents(user)) {
         fetches.push(api.agents.list().then(setAgents));
         fetches.push(api.zones().then(setZones));
       }
 
-      if (needsVisits(user.role)) {
+      if (needsVisits(user)) {
         fetches.push(api.visits.list().then(setVisits));
         fetches.push(api.visits.summary().then(setVisitSummary));
       }
@@ -475,6 +492,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       role: string;
       zone?: string;
       supervised_adr_ids?: string[];
+      internal_capabilities?: string[];
     }) => {
       const created = await api.inviteUser(body);
       await refresh();
@@ -521,6 +539,14 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     [refresh]
   );
 
+  const updateUserCapabilities = useCallback(
+    async (email: string, capabilities: string[]) => {
+      await api.updateUserCapabilities(email, capabilities);
+      await refresh();
+    },
+    [refresh]
+  );
+
   const updateSupervisedAdrs = useCallback(
     async (email: string, adrIds: string[]) => {
       await api.updateSupervisedAdrs(email, adrIds);
@@ -540,7 +566,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const refreshNotifications = useCallback(async () => {
     if (!user) return;
     const [list, { count }] = await Promise.all([
-      api.notifications.list(),
+      api.notifications.list({ unreadOnly: true }),
       api.notifications.unreadCount()
     ]);
     setNotifications(list);
@@ -549,15 +575,25 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
   const markNotificationRead = useCallback(
     async (id: number) => {
-      await api.notifications.markRead(id);
-      await refreshNotifications();
+      setNotifications((prev) => prev.filter((n) => n.id !== id));
+      setUnreadNotificationCount((prev) => Math.max(0, prev - 1));
+      try {
+        await api.notifications.markRead(id);
+      } catch {
+        await refreshNotifications();
+      }
     },
     [refreshNotifications]
   );
 
   const markAllNotificationsRead = useCallback(async () => {
-    await api.notifications.markAllRead();
-    await refreshNotifications();
+    setNotifications([]);
+    setUnreadNotificationCount(0);
+    try {
+      await api.notifications.markAllRead();
+    } catch {
+      await refreshNotifications();
+    }
   }, [refreshNotifications]);
 
   const reviewKyc = useCallback(
@@ -604,6 +640,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         importAgents,
         bulkUploadKyc,
         updateUser,
+        updateUserCapabilities,
         updateSupervisedAdrs,
         updateAgent,
         reviewKyc,

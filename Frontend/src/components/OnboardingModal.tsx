@@ -53,9 +53,9 @@ export function OnboardingModal({
   const { user } = useAuth();
   const companyLabel = user?.branding?.title ?? user?.company ?? 'your company';
   const adrs = users.filter((u) => u.role === 'adr' && u.id);
-  const isManager = user ? can(user.role, 'editAgent') : false;
+  const isManager = user ? can(user, 'editAgent') : false;
   const canAssignAdr =
-    user && (can(user.role, 'editAgent') || can(user.role, 'assignAdr'));
+    user && (can(user, 'editAgent') || can(user, 'assignAdr'));
   const assignableAdrs =
     user?.role === 'team_lead' && user.supervised_adr_ids?.length
       ? adrs.filter((a) => a.id && user.supervised_adr_ids!.includes(a.id))

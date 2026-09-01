@@ -7,8 +7,12 @@ const router = Router();
 router.get('/', async (req, res, next) => {
   try {
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 30, 1), 100);
+    const unreadOnly = req.query.unread_only === 'true';
+    const where = { userId: req.user.id };
+    if (unreadOnly) where.readAt = null;
+
     const rows = await prisma.notification.findMany({
-      where: { userId: req.user.id },
+      where,
       orderBy: { createdAt: 'desc' },
       take: limit
     });

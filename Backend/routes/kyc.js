@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { companyFilter, serializeAgent } from '../middleware/user.js';
 import { requireRoles } from '../middleware/auth.js';
+import { managerOrInternalCapability } from '../lib/internal-capabilities.js';
 import { logAudit } from '../lib/audit.js';
 import {
   notifyKycApproved,
@@ -88,7 +89,7 @@ router.get('/review-queue', requireRoles('manager', 'internal'), async (req, res
 
 router.post(
   '/review/:agentId',
-  requireRoles('manager'),
+  managerOrInternalCapability('review_kyc'),
   async (req, res, next) => {
     try {
       const { action, note } = req.body;

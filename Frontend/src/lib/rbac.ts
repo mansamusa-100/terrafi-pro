@@ -45,6 +45,8 @@ export interface AppUser {
   status?: string;
   must_change_password?: boolean;
   supervised_adr_ids?: string[];
+  /** Manager-assigned keys when role is internal */
+  internal_capabilities?: string[];
   branding: AppBranding;
 }
 
@@ -73,7 +75,7 @@ export const ROLE_META: Record<
   internal: {
     label: 'Internal User',
     short: 'Internal',
-    description: 'Back-office staff — compliance, float & performance',
+    description: 'Back-office staff — manager assigns compliance, float & report access',
     level: 'Company'
   },
   team_lead: {
@@ -180,14 +182,7 @@ export const PAGE_ACCESS: Record<Role, string[]> = {
     'settings',
     'partner-integration'
   ],
-  internal: [
-    'dashboard',
-    'float',
-    'performance',
-    'performance-agent-report',
-    'performance-officer-report',
-    'compliance'
-  ],
+  internal: ['dashboard', 'float', 'performance', 'performance-agent-report', 'performance-officer-report', 'compliance'],
   team_lead: [
     'dashboard',
     'agents',
@@ -250,8 +245,7 @@ export const CAPABILITIES: Record<Role, Record<string, boolean>> = {
     exportData: true
   },
   internal: {
-    viewKycCompliance: true,
-    exportData: true
+    viewKycCompliance: true
   },
   team_lead: {
     onboardAgent: true,
@@ -266,16 +260,190 @@ export const CAPABILITIES: Record<Role, Record<string, boolean>> = {
   teller: {}
 };
 
-export function can(role: Role, capability: string): boolean {
+/** Assignable capability keys (mirrors backend catalog). */
+export const ASSIGNED_CAPABILITY_IDS = [
+  'review_kyc',
+  'export_data',
+  'view_float_sync',
+  'view_agents',
+  'edit_agents',
+  'view_visits',
+  'view_audit',
+  'view_notification_report'
+] as const;
+
+/** @deprecated Use ASSIGNED_CAPABILITY_IDS */
+export const INTERNAL_CAPABILITY_IDS = ASSIGNED_CAPABILITY_IDS;
+
+export type AssignedCapabilityId = (typeof ASSIGNED_CAPABILITY_IDS)[number];
+
+/** @deprecated Use AssignedCapabilityId */
+export type InternalCapabilityId = AssignedCapabilityId;
+
+export const ASSIGNED_CAPABILITY_META: Record<
+  AssignedCapabilityId,
+  { label: string; description: string; assignableRoles: Role[] }
+> = {
+  review_kyc: {
+    label: 'KYC review',
+    description: 'Approve or reject agent KYC submissions in Compliance',
+    assignableRoles: ['internal']
+  },
+  export_data: {
+    label: 'Export data',
+    description: 'Download CSV exports from reports and compliance',
+    assignableRoles: ['internal']
+  },
+  view_float_sync: {
+    label: 'Float sync log',
+    description: 'View float reconciliation sync history',
+    assignableRoles: ['internal']
+  },
+  view_agents: {
+    label: 'Agent directory',
+    description: 'View agent profiles (read-only)',
+    assignableRoles: ['internal']
+  },
+  edit_agents: {
+    label: 'Edit agents',
+    description: 'Edit agent profiles — name, phone, zone and status',
+    assignableRoles: ['internal', 'team_lead']
+  },
+  view_visits: {
+    label: 'Field visits',
+    description: 'View visit logs and summaries',
+    assignableRoles: ['internal']
+  },
+  view_audit: {
+    label: 'Audit log',
+    description: 'View company audit trail',
+    assignableRoles: ['internal']
+  },
+  view_notification_report: {
+    label: 'Notification report',
+    description: 'View credential delivery and notification logs',
+    assignableRoles: ['internal']
+  }
+};
+
+/** @deprecated Use ASSIGNED_CAPABILITY_META */
+export const INTERNAL_CAPABILITY_META = ASSIGNED_CAPABILITY_META;
+
+export const ASSIGNABLE_ROLES: Role[] = ['internal', 'team_lead'];
+
+export function capabilityIdsForRole(role: Role): AssignedCapabilityId[] {
+  if (!ASSIGNABLE_ROLES.includes(role)) return [];
+  return ASSIGNED_CAPABILITY_IDS.filter((id) =>
+    ASSIGNED_CAPABILITY_META[id].assignableRoles.includes(role)
+  );
+}
+
+const INTERNAL_BASE_PAGES = PAGE_ACCESS.internal;
+
+const ASSIGNED_CAP_PAGES: Record<AssignedCapabilityId, string[]> = {
+  review_kyc: [],
+  export_data: [],
+  view_float_sync: ['float-sync'],
+  view_agents: ['agents'],
+  edit_agents: ['agents'],
+  view_visits: ['visits'],
+  view_audit: ['audit'],
+  view_notification_report: ['notification-report']
+};
+
+const ASSIGNED_CAP_GRANTS: Record<AssignedCapabilityId, string[]> = {
+  review_kyc: ['reviewKyc'],
+  export_data: ['exportData'],
+  view_float_sync: ['viewFloatSync'],
+  view_agents: [],
+  edit_agents: ['editAgent'],
+  view_visits: [],
+  view_audit: ['viewCompanyAudit'],
+  view_notification_report: []
+};
+
+export type RbacSubject = Role | AppUser | null | undefined;
+
+function roleOf(subject: RbacSubject): Role | null {
+  if (!subject) return null;
+  return typeof subject === 'string' ? subject : subject.role;
+}
+
+export function assignedCapabilitiesFor(user: AppUser): string[] {
+  return user.internal_capabilities || [];
+}
+
+/** @deprecated Use assignedCapabilitiesFor */
+export function internalCapabilitiesFor(user: AppUser): string[] {
+  return assignedCapabilitiesFor(user);
+}
+
+export function hasAssignedCap(
+  user: AppUser | null | undefined,
+  capId: AssignedCapabilityId
+): boolean {
+  if (!user || !ASSIGNABLE_ROLES.includes(user.role)) return false;
+  return assignedCapabilitiesFor(user).includes(capId);
+}
+
+/** @deprecated Use hasAssignedCap */
+export function hasInternalCap(
+  user: AppUser | null | undefined,
+  capId: AssignedCapabilityId
+): boolean {
+  return hasAssignedCap(user, capId);
+}
+
+function grantedCapabilitiesFor(user: AppUser): string[] {
+  const granted: string[] = [];
+  for (const id of assignedCapabilitiesFor(user)) {
+    const caps = ASSIGNED_CAP_GRANTS[id as AssignedCapabilityId];
+    if (caps) granted.push(...caps);
+  }
+  return granted;
+}
+
+export function pagesFor(subject: RbacSubject): string[] {
+  const role = roleOf(subject);
+  if (!role) return [];
+  if (typeof subject === 'string') {
+    return PAGE_ACCESS[role] || [];
+  }
+  if (role === 'internal') {
+    const pages = new Set<string>(INTERNAL_BASE_PAGES);
+    for (const id of assignedCapabilitiesFor(subject)) {
+      const extra = ASSIGNED_CAP_PAGES[id as AssignedCapabilityId];
+      if (extra) extra.forEach((p) => pages.add(p));
+    }
+    return [...pages];
+  }
+  return PAGE_ACCESS[role] || [];
+}
+
+export function can(subject: RbacSubject, capability: string): boolean {
+  const role = roleOf(subject);
+  if (!role) return false;
+  if (typeof subject === 'string') {
+    return !!CAPABILITIES[role]?.[capability];
+  }
+  if (role === 'internal') {
+    if (capability === 'viewKycCompliance') return true;
+    return grantedCapabilitiesFor(subject).includes(capability);
+  }
+  if (role === 'team_lead') {
+    if (!!CAPABILITIES.team_lead?.[capability]) return true;
+    return grantedCapabilitiesFor(subject).includes(capability);
+  }
   return !!CAPABILITIES[role]?.[capability];
 }
 
-export function canAccess(role: Role, page: string): boolean {
-  return PAGE_ACCESS[role]?.includes(page) ?? false;
+export function canAccess(subject: RbacSubject, page: string): boolean {
+  return pagesFor(subject).includes(page);
 }
 
-export function firstPageFor(role: Role): string {
-  return PAGE_ACCESS[role]?.[0] ?? 'dashboard';
+export function firstPageFor(subject: Role | AppUser): string {
+  const pages = pagesFor(subject);
+  return pages[0] ?? 'dashboard';
 }
 
 export function pageTitleFor(page: string, role?: Role): string {
@@ -288,8 +456,9 @@ export function pageTitleFor(page: string, role?: Role): string {
 }
 
 /** Returns sidebar nav with Performance and Float Management as dropdown groups. */
-export function navFor(role: Role): NavEntry[] {
-  const allowed = PAGE_ACCESS[role] || [];
+export function navFor(subject: Role | AppUser): NavEntry[] {
+  const allowed = pagesFor(subject);
+  const role = roleOf(subject);
   const allowedSet = new Set(allowed);
   const consumed = new Set<string>();
   const entries: NavEntry[] = [];

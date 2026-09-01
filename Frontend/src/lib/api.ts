@@ -348,6 +348,7 @@ export interface CompanyUser {
   status: string;
   scope?: string;
   supervised_adr_ids?: string[];
+  internal_capabilities?: string[];
 }
 
 export interface AuditEntry {
@@ -1008,6 +1009,7 @@ export const api = {
     role: string;
     zone?: string;
     supervised_adr_ids?: string[];
+    internal_capabilities?: string[];
   }) =>
     request<
       CompanyUser & {
@@ -1034,6 +1036,11 @@ export const api = {
     request<CompanyUser>(`/users/${encodeURIComponent(email)}`, {
       method: 'PATCH',
       body: JSON.stringify(body)
+    }),
+  updateUserCapabilities: (email: string, capabilities: string[]) =>
+    request<CompanyUser>(`/users/${encodeURIComponent(email)}/capabilities`, {
+      method: 'PATCH',
+      body: JSON.stringify({ capabilities })
     }),
   resetUserPassword: (email: string, opts?: { companyId?: string }) =>
     request<
@@ -1097,8 +1104,12 @@ export const api = {
   stats: () => request<NetworkStats>('/stats'),
 
   notifications: {
-    list: (limit = 30) =>
-      request<Notification[]>(`/notifications?limit=${limit}`),
+    list: (opts?: { limit?: number; unreadOnly?: boolean }) => {
+      const q = new URLSearchParams();
+      q.set('limit', String(opts?.limit ?? 30));
+      if (opts?.unreadOnly) q.set('unread_only', 'true');
+      return request<Notification[]>(`/notifications?${q.toString()}`);
+    },
     unreadCount: () => request<{ count: number }>('/notifications/unread-count'),
     markRead: (id: number) =>
       request<Notification>(`/notifications/${id}/read`, { method: 'PATCH' }),

@@ -89,6 +89,8 @@ model User {
   scope        String
   zone         String?
   status       String     @default("active")
+  /// Manager-assigned capability keys for role=internal (e.g. review_kyc, export_data)
+  internalCapabilities Json? @map("internal_capabilities")
   auditLogs    AuditLog[] @relation("AuditActor")
   assignedAgents Agent[]  @relation("AgentOfficer")
   onboardedAgents Agent[] @relation("AgentOnboarder")

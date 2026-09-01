@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma.js';
 import { loadSupervisedAdrs, isTeamLeadRole } from '../lib/team-lead.js';
 import { resolveBranding } from '../lib/branding.js';
+import { parseAssignedCapabilities, ASSIGNABLE_ROLES } from '../lib/internal-capabilities.js';
 
 export async function loadUser(req, res, next) {
   try {
@@ -29,6 +30,7 @@ export async function loadUser(req, res, next) {
       scope: row.scope,
       zone: row.zone,
       status: row.status,
+      internalCapabilities: parseAssignedCapabilities(row.internalCapabilities),
       ...supervised
     };
     next();
@@ -250,6 +252,9 @@ export function serializeAgent(agent, extra = {}, options = {}) {
 
 export function serializeAppUser(row, supervised = null) {
   const branding = resolveBranding(row.role, row.company ?? null);
+  const internal_capabilities = ASSIGNABLE_ROLES.includes(row.role)
+    ? parseAssignedCapabilities(row.internalCapabilities)
+    : [];
   return {
     id: row.id,
     name: row.name,
@@ -262,6 +267,7 @@ export function serializeAppUser(row, supervised = null) {
     status: row.status,
     must_change_password: row.status === 'invited',
     supervised_adr_ids: supervised?.supervisedAdrIds ?? [],
+    internal_capabilities,
     branding
   };
 }

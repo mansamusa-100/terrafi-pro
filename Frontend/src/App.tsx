@@ -73,14 +73,14 @@ function AuthenticatedApp({
   }, [mobileNavOpen]);
 
   const activePage = user
-    ? canAccess(user.role, page)
+    ? canAccess(user, page)
       ? page
-      : firstPageFor(user.role)
+      : firstPageFor(user)
     : 'dashboard';
   const isFieldMobile = user ? isFieldMobileRole(user.role) : false;
   const isAdr = user?.role === 'adr';
   const isTeamLead = user?.role === 'team_lead';
-  const canLogVisit = user ? can(user.role, 'logVisit') : false;
+  const canLogVisit = user ? can(user, 'logVisit') : false;
   const duty = useDutyTracking(isAdr);
 
   const handleSetPage = useCallback(
@@ -225,7 +225,7 @@ function AuthenticatedApp({
           />
         )}
         <main className={`flex-1 overflow-y-auto ${fieldMainClass}`}>
-          {pageComponents[activePage] || pageComponents[firstPageFor(user.role)]}
+          {pageComponents[activePage] || pageComponents[firstPageFor(user)]}
         </main>
       </div>
 

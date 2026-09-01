@@ -55,7 +55,7 @@ export function AuthProvider({
       setToken(result.token);
       setUser(result.user);
       setSubscription(result.subscription ?? null);
-      onUserChange?.(firstPageFor(result.user.role));
+      onUserChange?.(firstPageFor(result.user));
     },
     [onUserChange]
   );
@@ -72,7 +72,7 @@ export function AuthProvider({
       setToken(token);
       setUser(u);
       setSubscription(s ?? null);
-      onUserChange?.(firstPageFor(u.role));
+      onUserChange?.(firstPageFor(u));
     },
     [onUserChange]
   );
@@ -90,7 +90,7 @@ export function AuthProvider({
         newPassword
       });
       setUser(u);
-      onUserChange?.(firstPageFor(u.role));
+      onUserChange?.(firstPageFor(u));
     },
     [onUserChange]
   );

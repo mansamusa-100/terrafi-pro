@@ -4,6 +4,7 @@ import {
   notificationReportWhereForUser,
   serializeNotificationReport
 } from '../lib/notification-report.js';
+import { hasInternalCapability } from '../lib/internal-capabilities.js';
 
 const router = Router();
 

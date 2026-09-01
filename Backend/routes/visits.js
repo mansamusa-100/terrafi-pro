@@ -18,6 +18,7 @@ import { refreshAgentScore } from '../lib/agent-score.js';
 import { buildVisitSummary, markOverdueVisits } from '../lib/visit-utils.js';
 import { logAudit } from '../lib/audit.js';
 import { recordVisitCheckInPing } from '../lib/journey-tracking.js';
+import { denyInternalWithout } from '../lib/internal-capabilities.js';
 
 const router = Router();
 
@@ -29,7 +30,7 @@ const VISIT_TYPES = [
   'Issue follow-up'
 ];
 
-router.get('/summary', async (req, res, next) => {
+router.get('/summary', denyInternalWithout('view_visits'), async (req, res, next) => {
   try {
     const summary = await buildVisitSummary(req.user);
     res.json(summary);
@@ -38,7 +39,7 @@ router.get('/summary', async (req, res, next) => {
   }
 });
 
-router.get('/', async (req, res, next) => {
+router.get('/', denyInternalWithout('view_visits'), async (req, res, next) => {
   try {
     const companyId = companyFilter(req.user);
     const visitDate =

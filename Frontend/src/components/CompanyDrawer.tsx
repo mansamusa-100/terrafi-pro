@@ -60,7 +60,7 @@ function formatShort(iso: string | null | undefined) {
 export function CompanyDrawer({ companyId, onClose }: CompanyDrawerProps) {
   const { user } = useAuth();
   const { updateCompanyStatus, resetUserPassword } = useAppData();
-  const canManageStatus = user ? can(user.role, 'manageCompanyStatus') : false;
+  const canManageStatus = user ? can(user, 'manageCompanyStatus') : false;
   const canResetManagerPassword = user?.role === 'system_owner';
   const [detail, setDetail] = useState<CompanyDetail | null>(null);
   const [loading, setLoading] = useState(false);

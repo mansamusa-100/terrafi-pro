@@ -32,7 +32,7 @@ interface DocViewer {
 export function KycReviewQueue({ onOpenAgent }: KycReviewQueueProps) {
   const { user } = useAuth();
   const { kycReviewQueue, reviewKyc } = useAppData();
-  const canReview = user ? can(user.role, 'reviewKyc') : false;
+  const canReview = user ? can(user, 'reviewKyc') : false;
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<KycReviewItem | null>(null);
   const [rejectNote, setRejectNote] = useState('');

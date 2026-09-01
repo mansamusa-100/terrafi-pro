@@ -34,7 +34,7 @@ export function ScheduleVisitModal({
   const { user } = useAuth();
   const { agents, users } = useAppData();
   const canAssignOfficer =
-    user && (can(user.role, 'editAgent') || can(user.role, 'assignAdr'));
+    user && (can(user, 'editAgent') || can(user, 'assignAdr'));
   const adrs = users.filter((u) => u.role === 'adr' && u.id);
   const assignableAdrs =
     user?.role === 'team_lead' && user.supervised_adr_ids?.length

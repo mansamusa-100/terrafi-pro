@@ -371,8 +371,8 @@ function VisitTargetClassesSection({
 
 export function SettingsPage({ setPage }: { setPage: (page: string) => void }) {
   const { user, refreshProfile } = useAuth();
-  const canEdit = user ? can(user.role, 'configure') : false;
-  const canBilling = user ? can(user.role, 'manageBilling') : false;
+  const canEdit = user ? can(user, 'configure') : false;
+  const canBilling = user ? can(user, 'manageBilling') : false;
   const [settings, setSettings] = useState<CompanySettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);

@@ -177,6 +177,13 @@ export function notificationReportWhereForUser(user) {
   if (user.role === 'manager') {
     return { scope: 'company', companyId: user.companyId };
   }
+  if (user.role === 'internal') {
+    const assigned = user.internalCapabilities || [];
+    if (assigned.includes('view_notification_report')) {
+      return { scope: 'company', companyId: user.companyId };
+    }
+    return null;
+  }
   if (user.role === 'system_owner') {
     return {
       OR: [{ scope: 'platform' }, { actorId: user.id }]

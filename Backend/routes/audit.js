@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { isPlatformRole } from '../lib/audit.js';
+import { hasInternalCapability } from '../lib/internal-capabilities.js';
 
 const router = Router();
 
@@ -41,6 +42,21 @@ router.get('/', async (req, res, next) => {
     }
 
     if (req.user.role === 'manager') {
+      const where = { scope: 'company', companyId: req.user.companyId };
+      if (action) where.action = action;
+
+      const logs = await prisma.auditLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: limit
+      });
+      return res.json(logs.map(formatLog));
+    }
+
+    if (
+      req.user.role === 'internal' &&
+      hasInternalCapability(req.user, 'view_audit')
+    ) {
       const where = { scope: 'company', companyId: req.user.companyId };
       if (action) where.action = action;
 

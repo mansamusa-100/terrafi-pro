@@ -139,7 +139,7 @@ export function PerformancePage({ setPage }: PerformancePageProps) {
       icon: React.ReactNode;
       accent: string;
     }[] = [];
-    if (canAccess(user.role, 'performance-agent-report')) {
+    if (canAccess(user, 'performance-agent-report')) {
       links.push({
         id: 'performance-agent-report',
         title: 'Agent report',
@@ -148,7 +148,7 @@ export function PerformancePage({ setPage }: PerformancePageProps) {
         accent: '#1565C0'
       });
     }
-    if (canAccess(user.role, 'performance-officer-report')) {
+    if (canAccess(user, 'performance-officer-report')) {
       links.push({
         id: 'performance-officer-report',
         title: 'Officer report',

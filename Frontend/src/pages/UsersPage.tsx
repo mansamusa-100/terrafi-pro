@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { UserPlus, Shield, X, Pencil, KeyRound, Search } from 'lucide-react';
 import { MetricCard } from '../components/MetricCard';
-import { ROLE_META, Role, can } from '../lib/rbac';
+import { ROLE_META, Role, can, capabilityIdsForRole, ASSIGNED_CAPABILITY_META, ASSIGNABLE_ROLES, type AssignedCapabilityId } from '../lib/rbac';
 import { avatarColor, initials } from '../lib/data';
 import { useAppData } from '../lib/data-context';
 import { useAuth } from '../lib/auth';
@@ -43,9 +43,75 @@ const COMPANY_EDIT_ROLES: Role[] = [
 const DESKTOP_GRID = 'md:grid-cols-[2fr_1.5fr_1.5fr_1fr_auto]';
 const DESKTOP_GRID_NO_EDIT = 'md:grid-cols-[2fr_1.5fr_1.5fr_1fr]';
 
+function assignedCapSummary(u: CompanyUser) {
+  const caps = u.internal_capabilities || [];
+  if (!caps.length) return 'No extra permissions';
+  if (caps.length <= 2) {
+    return caps
+      .map((id) => ASSIGNED_CAPABILITY_META[id as AssignedCapabilityId]?.label || id)
+      .join(', ');
+  }
+  return `${caps.length} permissions assigned`;
+}
+
+function AssignedCapabilitiesEditor({
+  role,
+  selected,
+  onChange
+}: {
+  role: Role;
+  selected: string[];
+  onChange: (caps: string[]) => void;
+}) {
+  const options = capabilityIdsForRole(role);
+
+  const toggle = (id: AssignedCapabilityId) => {
+    onChange(
+      selected.includes(id)
+        ? selected.filter((c) => c !== id)
+        : [...selected, id]
+    );
+  };
+
+  if (options.length === 0) return null;
+
+  return (
+    <div className="space-y-2 max-h-48 overflow-y-auto rounded-lg border border-slate-200 p-3 bg-slate-50/80">
+      {options.map((id) => {
+        const meta = ASSIGNED_CAPABILITY_META[id];
+        const checked = selected.includes(id);
+        return (
+          <label
+            key={id}
+            className="flex items-start gap-2.5 cursor-pointer rounded-lg p-2 hover:bg-white">
+            <input
+              type="checkbox"
+              checked={checked}
+              onChange={() => toggle(id)}
+              className="mt-0.5 rounded border-slate-300 text-navy focus:ring-apsBlue"
+            />
+            <span className="min-w-0">
+              <span className="block text-xs font-semibold text-slate-800">
+                {meta.label}
+              </span>
+              <span className="block text-[11px] text-slate-500 leading-snug mt-0.5">
+                {meta.description}
+              </span>
+            </span>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
 function zoneLabel(u: CompanyUser) {
   if (u.role === 'team_lead' && u.supervised_adr_ids?.length) {
     return `${u.supervised_adr_ids.length} ADR(s) · ${u.zone || '—'}`;
+  }
+  if (u.role === 'internal' || u.role === 'team_lead') {
+    const base = u.zone || (u.role === 'team_lead' ? 'Regional' : 'Back office');
+    return `${base} · ${assignedCapSummary(u)}`;
   }
   return u.zone || '—';
 }
@@ -111,6 +177,7 @@ export function UsersPage() {
     updateUserRole,
     inviteUser,
     updateUser,
+    updateUserCapabilities,
     updateSupervisedAdrs,
     resetUserPassword
   } = useAppData();
@@ -124,7 +191,8 @@ export function UsersPage() {
     name: '',
     zone: '',
     status: 'active',
-    supervisedAdrIds: [] as string[]
+    supervisedAdrIds: [] as string[],
+    internalCapabilities: [] as string[]
   });
   const [savingEdit, setSavingEdit] = useState(false);
   const [inviteForm, setInviteForm] = useState({
@@ -132,7 +200,8 @@ export function UsersPage() {
     email: '',
     role: 'platform_staff' as Role,
     zone: '',
-    supervisedAdrIds: [] as string[]
+    supervisedAdrIds: [] as string[],
+    internalCapabilities: [] as string[]
   });
   const [inviting, setInviting] = useState(false);
 
@@ -140,13 +209,13 @@ export function UsersPage() {
     user?.role === 'system_owner' || user?.role === 'platform_staff';
   const canInvite =
     user &&
-    (can(user.role, 'managePlatformUsers') ||
-      can(user.role, 'manageCompanyUsers'));
+    (can(user, 'managePlatformUsers') ||
+      can(user, 'manageCompanyUsers'));
   const canEditUsers =
     user &&
     (isPlatform
-      ? can(user.role, 'managePlatformUsers')
-      : can(user.role, 'editUsers'));
+      ? can(user, 'managePlatformUsers')
+      : can(user, 'editUsers'));
   const inviteRoles = isPlatform ? PLATFORM_INVITE_ROLES : COMPANY_INVITE_ROLES;
   const editableRoles = isPlatform ? PLATFORM_INVITE_ROLES : COMPANY_EDIT_ROLES;
   const canResetPasswords =
@@ -198,7 +267,8 @@ export function UsersPage() {
       name: u.name,
       zone: u.zone || '',
       status: u.status,
-      supervisedAdrIds: u.supervised_adr_ids || []
+      supervisedAdrIds: u.supervised_adr_ids || [],
+      internalCapabilities: u.internal_capabilities || []
     });
   };
 
@@ -220,6 +290,12 @@ export function UsersPage() {
       });
       if (!isPlatform && editTarget.role === 'team_lead') {
         await updateSupervisedAdrs(editTarget.email, editForm.supervisedAdrIds);
+      }
+      if (!isPlatform && ASSIGNABLE_ROLES.includes(editTarget.role as Role)) {
+        await updateUserCapabilities(
+          editTarget.email,
+          editForm.internalCapabilities
+        );
       }
       toast.success('User updated');
       setEditTarget(null);
@@ -278,6 +354,9 @@ export function UsersPage() {
         zone: inviteForm.zone.trim() || undefined,
         ...(inviteForm.role === 'team_lead'
           ? { supervised_adr_ids: inviteForm.supervisedAdrIds }
+          : {}),
+        ...(ASSIGNABLE_ROLES.includes(inviteForm.role)
+          ? { internal_capabilities: inviteForm.internalCapabilities }
           : {})
       });
       toast.success(
@@ -300,7 +379,8 @@ export function UsersPage() {
         email: '',
         role: isPlatform ? 'platform_staff' : 'internal',
         zone: '',
-        supervisedAdrIds: []
+        supervisedAdrIds: [],
+        internalCapabilities: []
       });
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Invite failed');
@@ -672,6 +752,25 @@ export function UsersPage() {
                   />
                 </div>
               )}
+              {!isPlatform && ASSIGNABLE_ROLES.includes(inviteForm.role) && (
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 mb-2 block">
+                    Permissions
+                  </label>
+                  <p className="text-[11px] text-slate-500 mb-2">
+                    {inviteForm.role === 'internal'
+                      ? 'Internal users always get dashboard, float, performance and compliance (view-only). Assign extra work below.'
+                      : 'Team leads get field ops by default. Assign extra permissions below.'}
+                  </p>
+                  <AssignedCapabilitiesEditor
+                    role={inviteForm.role}
+                    selected={inviteForm.internalCapabilities}
+                    onChange={(internalCapabilities) =>
+                      setInviteForm((f) => ({ ...f, internalCapabilities }))
+                    }
+                  />
+                </div>
+              )}
               {!isPlatform && inviteForm.role === 'team_lead' && (
                 <div>
                   <label className="text-xs font-semibold text-slate-600 mb-2 block">
@@ -777,6 +876,25 @@ export function UsersPage() {
                   </select>
                 )}
               </div>
+              {!isPlatform && ASSIGNABLE_ROLES.includes(editTarget.role as Role) && (
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 mb-2 block">
+                    Permissions
+                  </label>
+                  <p className="text-[11px] text-slate-500 mb-2">
+                    {editTarget.role === 'internal'
+                      ? 'Choose what this internal user can do beyond the default back-office access.'
+                      : 'Optional permissions beyond the default team lead field access.'}
+                  </p>
+                  <AssignedCapabilitiesEditor
+                    role={editTarget.role as Role}
+                    selected={editForm.internalCapabilities}
+                    onChange={(internalCapabilities) =>
+                      setEditForm((f) => ({ ...f, internalCapabilities }))
+                    }
+                  />
+                </div>
+              )}
               {!isPlatform && editTarget.role === 'team_lead' && (
                 <div>
                   <label className="text-xs font-semibold text-slate-600 mb-2 block">

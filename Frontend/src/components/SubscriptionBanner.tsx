@@ -43,7 +43,7 @@ export function SubscriptionBanner() {
   const [dismissed, setDismissed] = useState(false);
   const [paying, setPaying] = useState(false);
 
-  const canManage = user ? can(user.role, 'manageBilling') : false;
+  const canManage = user ? can(user, 'manageBilling') : false;
 
   const applySub = useCallback(
     (subscription: BillingStatus['subscription']) => {

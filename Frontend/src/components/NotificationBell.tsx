@@ -2,14 +2,14 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Bell,
   Building2,
-  Check,
+  CheckCircle2,
   MapPin,
   Shield,
   TrendingDown,
   User,
-  UserPlus
+  UserPlus,
+  X
 } from 'lucide-react';
-import { cn } from '../lib/utils';
 import { useAppData } from '../lib/data-context';
 import type { Notification } from '../lib/api';
 import type { Agent } from '../lib/api';
@@ -79,8 +79,8 @@ export function NotificationBell({
     return () => document.removeEventListener('mousedown', onClick);
   }, []);
 
-  const handleClick = async (n: Notification) => {
-    if (!n.read) await markNotificationRead(n.id);
+  const openNotification = async (n: Notification) => {
+    await markNotificationRead(n.id);
     setOpen(false);
     setPage(pageForNotification(n));
     if (n.entity_type === 'agent' && n.entity_id) {
@@ -89,6 +89,15 @@ export function NotificationBell({
     } else {
       setSelectedAgent(null);
     }
+  };
+
+  const dismissNotification = async (e: React.MouseEvent, id: number) => {
+    e.stopPropagation();
+    await markNotificationRead(id);
+  };
+
+  const clearAll = async () => {
+    await markAllNotificationsRead();
   };
 
   return (
@@ -110,62 +119,68 @@ export function NotificationBell({
       {open && (
         <div className="absolute right-0 mt-2 w-[min(22rem,calc(100vw-1.5rem))] bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-            <div className="text-sm font-semibold text-slate-900">Notifications</div>
-            {unreadNotificationCount > 0 && (
+            <div>
+              <div className="text-sm font-semibold text-slate-900">Notifications</div>
+              {notifications.length > 0 && (
+                <div className="text-[10px] text-slate-400 mt-0.5">Unread only</div>
+              )}
+            </div>
+            {notifications.length > 0 && (
               <button
                 type="button"
-                onClick={() => markAllNotificationsRead()}
+                onClick={clearAll}
                 className="text-xs font-medium text-apsBlue hover:underline">
-                Mark all read
+                Clear all
               </button>
             )}
           </div>
 
           <div className="max-h-80 overflow-y-auto">
             {notifications.length === 0 ? (
-              <div className="px-4 py-8 text-center text-sm text-slate-500">
-                No notifications yet
+              <div className="px-4 py-10 text-center">
+                <div className="w-10 h-10 rounded-full bg-apsGreenLt text-apsGreen flex items-center justify-center mx-auto mb-3">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+                <p className="text-sm font-medium text-slate-800">All caught up</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  New alerts will appear here until you open or dismiss them.
+                </p>
               </div>
             ) : (
               notifications.map((n) => {
                 const Icon = iconForType(n.type);
                 return (
-                  <button
+                  <div
                     key={n.id}
-                    type="button"
-                    onClick={() => handleClick(n)}
-                    className={cn(
-                      'w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0',
-                      !n.read && 'bg-apsBlueLt/20'
-                    )}>
-                    <div
-                      className={cn(
-                        'w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5',
-                        n.read ? 'bg-slate-100 text-slate-500' : 'bg-apsBlueLt text-apsBlue'
-                      )}>
-                      <Icon className="w-4 h-4" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <div
-                          className={cn(
-                            'text-xs font-semibold text-slate-900',
-                            !n.read && 'text-slate-950'
-                          )}>
+                    className="relative flex items-start gap-3 px-4 py-3 border-b border-slate-50 last:border-0 bg-apsBlueLt/15 hover:bg-apsBlueLt/25 transition-colors group">
+                    <button
+                      type="button"
+                      onClick={() => openNotification(n)}
+                      className="flex items-start gap-3 flex-1 min-w-0 text-left">
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 bg-apsBlueLt text-apsBlue">
+                        <Icon className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0 flex-1 pr-6">
+                        <div className="text-xs font-semibold text-slate-950">
                           {n.title}
                         </div>
-                        {n.read && (
-                          <Check className="w-3.5 h-3.5 text-slate-300 shrink-0 mt-0.5" />
-                        )}
+                        <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">
+                          {n.body}
+                        </p>
+                        <div className="text-[10px] text-slate-400 mt-1">
+                          {formatWhen(n.created_at)}
+                        </div>
                       </div>
-                      <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">
-                        {n.body}
-                      </p>
-                      <div className="text-[10px] text-slate-400 mt-1">
-                        {formatWhen(n.created_at)}
-                      </div>
-                    </div>
-                  </button>
+                    </button>
+                    <button
+                      type="button"
+                      title="Dismiss"
+                      aria-label="Dismiss notification"
+                      onClick={(e) => dismissNotification(e, n.id)}
+                      className="absolute top-3 right-3 p-1 rounded-md text-slate-400 hover:bg-white hover:text-slate-600 transition-colors sm:opacity-0 sm:group-hover:opacity-100">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 );
               })
             )}

@@ -113,7 +113,7 @@ export function TeamLeadDashboardPage({
       .slice(0, 6);
   }, [visits]);
 
-  const canOnboard = user ? can(user.role, 'onboardAgent') : false;
+  const canOnboard = user ? can(user, 'onboardAgent') : false;
 
   if (loading && agents.length === 0) {
     return (

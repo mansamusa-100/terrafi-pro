@@ -142,7 +142,7 @@ export function Sidebar({
   }, [active]);
 
   if (!user) return null;
-  const nav = navFor(user.role);
+  const nav = user ? navFor(user) : [];
   const meta = ROLE_META[user.role];
 
   function navBadge(pageId: string): number | undefined {

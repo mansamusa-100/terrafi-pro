@@ -17,7 +17,7 @@ import {
   Navigation,
   Eye
 } from 'lucide-react';
-import { STATUS_META, fmt } from '../lib/data';
+import { STATUS_META, fmtDalasi } from '../lib/data';
 import { cn } from '../lib/utils';
 import { ProgressBar } from './ProgressBar';
 import { api, Agent, AgentDetail } from '../lib/api';
@@ -41,12 +41,12 @@ type Tab = 'overview' | 'kyc' | 'visits';
 export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
   const { user } = useAuth();
   const { users, updateAgent, reviewKyc } = useAppData();
-  const canUploadKyc = user ? can(user.role, 'onboardAgent') : false;
-  const canEdit = user ? can(user.role, 'editAgent') : false;
-  const canEditOnboarding = user
-    ? can(user.role, 'editAgent') || can(user.role, 'editAgentOnboarding')
-    : false;
-  const canReview = user ? can(user.role, 'reviewKyc') : false;
+  const canUploadKyc = user ? can(user, 'onboardAgent') : false;
+  const canEdit = user ? can(user, 'editAgent') : false;
+  const canEditOnboarding =
+    user &&
+    (can(user, 'editAgent') || can(user, 'editAgentOnboarding'));
+  const canReview = user ? can(user, 'reviewKyc') : false;
   const adrs = users.filter((u) => u.role === 'adr' && u.id);
   const [mounted, setMounted] = useState(false);
   const [tab, setTab] = useState<Tab>('overview');
@@ -274,8 +274,8 @@ export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
 
           <div className="grid grid-cols-2 gap-3">
             {[
-              ['E-float', fmt(data.efloat), floatColorClass],
-              ['Cash float', fmt(data.cash), 'text-white/90'],
+              ['E-float', fmtDalasi(data.efloat), floatColorClass],
+              ['Cash float', fmtDalasi(data.cash), 'text-white/90'],
               ['Score', `${data.score}%`, scoreColor],
               ['Visits (Mo)', String(data.visits), 'text-white/90']
             ].map(([label, value, colorClass]) => (

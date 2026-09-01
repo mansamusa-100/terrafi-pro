@@ -11,6 +11,7 @@ import {
   resolveOfficerAssignment
 } from '../middleware/user.js';
 import { requireRoles } from '../middleware/auth.js';
+import { denyInternalWithout, userCanEditAgentProfile } from '../lib/internal-capabilities.js';
 import { kycUpload, bulkKycUpload, kycUploadDir, locationPhotoUpload } from '../middleware/upload.js';
 import { KYC_DOC_TYPES, KYC_DOC_LABELS, parseKycFilename } from '../lib/kyc.js';
 import { syncKycStatus } from '../lib/kyc-status.js';
@@ -52,7 +53,7 @@ async function assertAgentAccess(req, agent) {
   return null;
 }
 
-router.get('/', async (req, res, next) => {
+router.get('/', denyInternalWithout('view_agents', 'edit_agents'), async (req, res, next) => {
   try {
     const where = agentWhereForUser(req.user);
 
@@ -673,8 +674,9 @@ router.patch('/:id', async (req, res, next) => {
     const access = await assertAgentAccess(req, agent);
     if (access) return res.status(access.status).json({ error: access.error });
 
-    const isManager = req.user.role === 'manager';
-    const isTeamLead = req.user.role === 'team_lead';
+    const canEditProfile = userCanEditAgentProfile(req.user);
+    const canEditOnboarding =
+      req.user.role === 'manager' || req.user.role === 'team_lead';
     const profileKeys = [
       'name',
       'phone',
@@ -693,18 +695,11 @@ router.patch('/:id', async (req, res, next) => {
       'branding_present'
     ];
 
-    if (
-      !isManager &&
-      profileKeys.some((k) => req.body[k] !== undefined)
-    ) {
-      return res.status(403).json({ error: 'Only managers can edit agent profiles' });
+    if (!canEditProfile && profileKeys.some((k) => req.body[k] !== undefined)) {
+      return res.status(403).json({ error: 'Not allowed to edit agent profiles' });
     }
 
-    if (
-      !isManager &&
-      !isTeamLead &&
-      onboardingKeys.some((k) => req.body[k] !== undefined)
-    ) {
+    if (!canEditOnboarding && onboardingKeys.some((k) => req.body[k] !== undefined)) {
       return res.status(403).json({ error: 'Not allowed to edit onboarding details' });
     }
 
@@ -757,7 +752,7 @@ router.patch('/:id', async (req, res, next) => {
       data.personalPhoneNormalized = personalFields.phoneNormalized;
     }
 
-    if (req.body.officer_id !== undefined && isManager) {
+    if (req.body.officer_id !== undefined && req.user.role === 'manager') {
       if (req.body.officer_id === null || req.body.officer_id === '') {
         data.officerId = null;
         data.officer = 'Unassigned';
