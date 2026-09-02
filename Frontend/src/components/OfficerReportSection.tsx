@@ -60,6 +60,10 @@ const WORK_DURATION_COLS =
 const TEAM_ACTIVITY_COLS =
   'grid grid-cols-[repeat(7,minmax(0,1fr))] gap-2';
 
+function isFullMonthVisitTarget(preset: string) {
+  return preset === 'this_month' || preset === 'last_month';
+}
+
 function formatFieldTime(minutes: number | null) {
   if (minutes == null) return '—';
   if (minutes < 60) return `${minutes}m`;
@@ -269,8 +273,10 @@ export function OfficerReportSection() {
           label="Total visit target"
           value={String(summary?.total_visit_target ?? '—')}
           sub={
-            summary
-              ? `${summary.visit_frequency_target}/officer/mo prorated`
+            summary && period
+              ? isFullMonthVisitTarget(period.preset)
+                ? `${summary.visit_frequency_target}/officer/mo`
+                : `${summary.visit_frequency_target}/officer/mo prorated`
               : undefined
           }
           icon={<Target className="w-5 h-5" />}
@@ -313,7 +319,7 @@ export function OfficerReportSection() {
               </h3>
               <p className="text-[11px] text-slate-500 mt-0.5">
                 {period
-                  ? `${presetLabel(period.preset)} · ${formatReportDate(period.from)} → ${formatReportDate(period.to)} · Target ${summary?.visit_frequency_target ?? 25}/officer/mo (prorated)`
+                  ? `${presetLabel(period.preset)} · ${formatReportDate(period.from)} → ${formatReportDate(period.to)} · Target ${summary?.visit_frequency_target ?? 25}/officer/mo${isFullMonthVisitTarget(period.preset) ? '' : ' (prorated)'}`
                   : 'Visit achievement, field time, and team activity'}
               </p>
               {targetClasses && (

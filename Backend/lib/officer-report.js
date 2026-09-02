@@ -108,7 +108,11 @@ async function visitsForOfficer(companyId, officer, period) {
   });
 }
 
-function proratedTarget(baseTarget, period) {
+/** Monthly presets use the full configured target; shorter ranges scale by days/30. */
+function visitTargetForPeriod(baseTarget, period) {
+  if (period.preset === 'this_month' || period.preset === 'last_month') {
+    return baseTarget;
+  }
   const days = daysInclusive(period.from, period.to);
   return Math.max(1, Math.round(baseTarget * (days / 30)));
 }
@@ -135,7 +139,7 @@ export async function buildOfficerReport(user, query = {}) {
   const adrIds = officers.map((o) => o.id);
   const teamLeads = await teamLeadMap(companyId, adrIds);
 
-  const visitTargetPerOfficer = proratedTarget(baseTarget, period);
+  const visitTargetPerOfficer = visitTargetForPeriod(baseTarget, period);
   const totalVisitTarget = visitTargetPerOfficer * officers.length;
 
   let totalVisitsDone = 0;
