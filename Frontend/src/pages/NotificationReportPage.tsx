@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { CalendarDays, ClipboardList, Clock, Copy, Filter, Search } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { CalendarDays, ClipboardList, Copy, Filter, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { MetricCard } from '../components/MetricCard';
 import { useAppData } from '../lib/data-context';
@@ -30,6 +30,10 @@ const TYPE_FILTERS = [
   { value: 'billing.locked', label: 'Locked' },
   { value: 'billing.paid', label: 'Paid' }
 ];
+
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 function formatWhen(iso: string) {
   return new Date(iso).toLocaleString(undefined, {
@@ -86,34 +90,47 @@ function CredentialsCell({ row }: { row: NotificationReportEntry }) {
 
 export function NotificationReportPage() {
   const { user } = useAuth();
-  const { notificationReports } = useAppData();
+  const { notificationReports, loadNotificationReports } = useAppData();
   const isOwner = user?.role === 'system_owner';
   const isPlatform = isOwner || user?.role === 'platform_staff';
   const scopeLabel = isPlatform ? 'Platform' : 'Organisation';
+  const today = todayISO();
+
   const [typeFilter, setTypeFilter] = useState('');
   const [search, setSearch] = useState('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const [dateFrom, setDateFrom] = useState(today);
+  const [dateTo, setDateTo] = useState(today);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    loadNotificationReports({
+      from: dateFrom || today,
+      to: dateTo || dateFrom || today,
+      type: typeFilter || undefined,
+      limit: 300
+    })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [dateFrom, dateTo, typeFilter, loadNotificationReports, today]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const from = dateFrom ? new Date(dateFrom + 'T00:00:00').getTime() : 0;
-    const to = dateTo ? new Date(dateTo + 'T23:59:59').getTime() : Infinity;
-
-    return notificationReports.filter((row) => {
-      if (typeFilter && row.type !== typeFilter) return false;
-      const ts = new Date(row.created_at).getTime();
-      if (ts < from || ts > to) return false;
-      if (!q) return true;
-      return (
-        row.title.toLowerCase().includes(q) ||
-        row.detail.toLowerCase().includes(q) ||
-        row.actor_name.toLowerCase().includes(q) ||
-        row.actor_email.toLowerCase().includes(q) ||
-        (row.entity_label?.toLowerCase().includes(q) ?? false)
-      );
-    });
-  }, [notificationReports, typeFilter, search, dateFrom, dateTo]);
+    if (!q) return notificationReports;
+    return notificationReports.filter((row) =>
+      row.title.toLowerCase().includes(q) ||
+      row.detail.toLowerCase().includes(q) ||
+      row.actor_name.toLowerCase().includes(q) ||
+      row.actor_email.toLowerCase().includes(q) ||
+      (row.entity_label?.toLowerCase().includes(q) ?? false)
+    );
+  }, [notificationReports, search]);
 
   const {
     pageItems,
@@ -127,30 +144,27 @@ export function NotificationReportPage() {
     `${typeFilter}|${search}|${dateFrom}|${dateTo}`
   );
 
-  const withPassword = notificationReports.filter((r) => r.temporary_password)
-    .length;
-  const recent = notificationReports.filter((e) => {
-    const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
-    return new Date(e.created_at).getTime() > dayAgo;
-  }).length;
+  const withPassword = filtered.filter((r) => r.temporary_password).length;
+  const showingToday = dateFrom === today && dateTo === today;
 
   return (
     <div className="page-pad">
       <div className="metric-grid-3 mb-6">
         <MetricCard
-          label={`${scopeLabel} events`}
-          value={notificationReports.length}
+          label={showingToday ? 'Events today' : 'Events in range'}
+          value={filtered.length}
           icon={<ClipboardList className="w-5 h-5" />}
           accent="#1565C0"
         />
         <MetricCard
-          label="Last 24 hours"
-          value={recent}
-          icon={<Clock className="w-5 h-5" />}
+          label="Date range"
+          value={showingToday ? 'Today' : `${dateFrom} → ${dateTo}`}
+          sub={showingToday ? 'Change dates below for history' : undefined}
+          icon={<CalendarDays className="w-5 h-5" />}
           accent="#00897B"
         />
         <MetricCard
-          label="Passwords on file"
+          label="Passwords in view"
           value={withPassword}
           sub="Copy and share if the user missed email"
           icon={<Copy className="w-5 h-5" />}
@@ -165,8 +179,9 @@ export function NotificationReportPage() {
               Notification report
             </h3>
             <p className="text-[11px] text-slate-500 mt-0.5">
-              Onboarding, invites, password resets, and subscription lifecycle
-              (ending soon, ended, locked, paid).
+              Showing {showingToday ? "today's" : 'selected'} invites, password
+              resets, onboarding, and billing events. Search within the range or
+              pick past dates for history.
             </p>
           </div>
           <div className="flex flex-col sm:flex-row flex-wrap gap-2">
@@ -180,7 +195,7 @@ export function NotificationReportPage() {
                 className="bg-transparent border-none outline-none text-xs text-slate-800 w-full placeholder:text-slate-400"
               />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <Filter className="w-4 h-4 text-slate-400" />
               <select
                 value={typeFilter}
@@ -195,15 +210,12 @@ export function NotificationReportPage() {
                   </option>
                 ))}
               </select>
-            </div>
-            <div className="flex items-center gap-2">
-              <CalendarDays className="w-4 h-4 text-slate-400 shrink-0" />
               <input
                 type="date"
                 value={dateFrom}
                 onChange={(e) => setDateFrom(e.target.value)}
                 aria-label="From date"
-                className="px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700"
+                className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700"
               />
               <span className="text-xs text-slate-400">to</span>
               <input
@@ -211,14 +223,17 @@ export function NotificationReportPage() {
                 value={dateTo}
                 onChange={(e) => setDateTo(e.target.value)}
                 aria-label="To date"
-                className="px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700"
+                className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700"
               />
-              {(dateFrom || dateTo) && (
+              {!showingToday && (
                 <button
                   type="button"
-                  onClick={() => { setDateFrom(''); setDateTo(''); }}
-                  className="text-[11px] text-apsBlue hover:underline font-medium">
-                  Clear
+                  onClick={() => {
+                    setDateFrom(today);
+                    setDateTo(today);
+                  }}
+                  className="text-xs font-medium text-apsBlue hover:underline px-1">
+                  Today
                 </button>
               )}
             </div>
@@ -236,11 +251,15 @@ export function NotificationReportPage() {
             ))}
           </div>
 
-          {filtered.length === 0 ? (
+          {loading ? (
+            <p className="text-sm text-slate-500 py-8 text-center">Loading…</p>
+          ) : filtered.length === 0 ? (
             <p className="text-sm text-slate-500 py-8 text-center">
-              {notificationReports.length === 0
-                ? 'No notification report events yet.'
-                : 'No events match your search.'}
+              {search.trim()
+                ? 'No events match your search.'
+                : showingToday
+                  ? 'No notification events today.'
+                  : 'No events in this date range.'}
             </p>
           ) : (
             pageItems.map((row) => (

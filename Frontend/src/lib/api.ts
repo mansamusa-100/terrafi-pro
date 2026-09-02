@@ -1053,17 +1053,26 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ companyId: opts?.companyId })
     }),
-  audit: (opts?: { limit?: number; action?: string }) => {
+  audit: (opts?: { limit?: number; action?: string; from?: string; to?: string }) => {
     const params = new URLSearchParams();
     if (opts?.limit != null) params.set('limit', String(opts.limit));
     if (opts?.action) params.set('action', opts.action);
+    if (opts?.from) params.set('from', opts.from);
+    if (opts?.to) params.set('to', opts.to);
     const q = params.toString();
     return request<AuditEntry[]>(`/audit${q ? `?${q}` : ''}`);
   },
-  notificationReports: (opts?: { limit?: number; type?: string }) => {
+  notificationReports: (opts?: {
+    limit?: number;
+    type?: string;
+    from?: string;
+    to?: string;
+  }) => {
     const params = new URLSearchParams();
     if (opts?.limit != null) params.set('limit', String(opts.limit));
     if (opts?.type) params.set('type', opts.type);
+    if (opts?.from) params.set('from', opts.from);
+    if (opts?.to) params.set('to', opts.to);
     const q = params.toString();
     return request<NotificationReportEntry[]>(
       `/notification-reports${q ? `?${q}` : ''}`

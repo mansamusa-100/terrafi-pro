@@ -52,7 +52,19 @@ interface AppDataContextValue {
   companies: Company[];
   users: CompanyUser[];
   auditLogs: AuditEntry[];
+  loadAuditLogs: (opts?: {
+    from?: string;
+    to?: string;
+    action?: string;
+    limit?: number;
+  }) => Promise<void>;
   notificationReports: NotificationReportEntry[];
+  loadNotificationReports: (opts?: {
+    from?: string;
+    to?: string;
+    type?: string;
+    limit?: number;
+  }) => Promise<void>;
   zones: string[];
   floatTrend: FloatTrend | null;
   stats: NetworkStats | null;
@@ -145,6 +157,10 @@ function needsNetworkData(role: Role) {
   return ['manager', 'internal', 'team_lead', 'adr', 'agent', 'teller'].includes(role);
 }
 
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -175,6 +191,36 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const visitSyncingRef = useRef(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const loadAuditLogs = useCallback(
+    async (opts?: { from?: string; to?: string; action?: string; limit?: number }) => {
+      const from = opts?.from ?? todayISO();
+      const to = opts?.to ?? from;
+      const logs = await api.audit({
+        from,
+        to,
+        action: opts?.action,
+        limit: opts?.limit ?? 200
+      });
+      setAuditLogs(logs);
+    },
+    []
+  );
+
+  const loadNotificationReports = useCallback(
+    async (opts?: { from?: string; to?: string; type?: string; limit?: number }) => {
+      const from = opts?.from ?? todayISO();
+      const to = opts?.to ?? from;
+      const rows = await api.notificationReports({
+        from,
+        to,
+        type: opts?.type,
+        limit: opts?.limit ?? 200
+      });
+      setNotificationReports(rows);
+    },
+    []
+  );
 
   const refresh = useCallback(async () => {
     if (!user) {
@@ -216,28 +262,30 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       if (isPlatformRole(user.role)) {
         fetches.push(api.companies.list().then(setCompanies));
         fetches.push(api.users().then(setUsers));
-        fetches.push(api.audit({ limit: 100 }).then(setAuditLogs));
         fetches.push(
-          api.notificationReports({ limit: 200 }).then(setNotificationReports)
+          loadAuditLogs({ from: todayISO(), to: todayISO(), limit: 200 })
+        );
+        fetches.push(
+          loadNotificationReports({ from: todayISO(), to: todayISO(), limit: 200 })
         );
         fetches.push(api.platform.stats().then(setPlatformStats));
       }
 
       if (user.role === 'manager') {
         fetches.push(api.users().then(setUsers));
-        fetches.push(api.audit().then(setAuditLogs));
+        fetches.push(loadAuditLogs({ from: todayISO(), to: todayISO(), limit: 200 }));
         fetches.push(
-          api.notificationReports({ limit: 200 }).then(setNotificationReports)
+          loadNotificationReports({ from: todayISO(), to: todayISO(), limit: 200 })
         );
       }
 
       if (user.role === 'internal') {
         if (hasAssignedCap(user, 'view_audit')) {
-          fetches.push(api.audit().then(setAuditLogs));
+          fetches.push(loadAuditLogs({ from: todayISO(), to: todayISO(), limit: 200 }));
         }
         if (hasAssignedCap(user, 'view_notification_report')) {
           fetches.push(
-            api.notificationReports({ limit: 200 }).then(setNotificationReports)
+            loadNotificationReports({ from: todayISO(), to: todayISO(), limit: 200 })
           );
         }
       }
@@ -291,7 +339,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, loadAuditLogs, loadNotificationReports]);
 
   useEffect(() => {
     refresh();
@@ -623,7 +671,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         companies,
         users,
         auditLogs,
+        loadAuditLogs,
         notificationReports,
+        loadNotificationReports,
         zones,
         floatTrend,
         stats,

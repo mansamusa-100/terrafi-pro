@@ -7,8 +7,8 @@ import {
   ArrowUpDown,
   Plus,
   CalendarPlus,
-  MoreHorizontal,
-  Loader2
+  Loader2,
+  Eye
 } from 'lucide-react';
 import { MetricCard } from '../components/MetricCard';
 import { BarChart } from '../components/charts/BarChart';
@@ -25,7 +25,7 @@ import { toast } from 'sonner';
 import { useAuth } from '../lib/auth';
 import { can } from '../lib/rbac';
 import { ApiError, api } from '../lib/api';
-import type { Visit } from '../lib/api';
+import type { Visit, Agent } from '../lib/api';
 import { getQueuedVisits } from '../lib/offline-visits';
 
 function todayISO() {
@@ -62,7 +62,11 @@ const STATUS_STYLES: Record<
   }
 };
 
-export function VisitsPage() {
+export function VisitsPage({
+  onSelectAgent
+}: {
+  onSelectAgent?: (agent: Agent | null) => void;
+}) {
   const { user } = useAuth();
   const {
     visits,
@@ -71,7 +75,8 @@ export function VisitsPage() {
     logVisit,
     scheduleVisit,
     updateVisit,
-    queuedVisitCount
+    queuedVisitCount,
+    agents
   } = useAppData();
   const canLog = user ? can(user, 'logVisit') : false;
   const canSchedule = user ? can(user, 'scheduleVisit') : false;
@@ -482,8 +487,39 @@ export function VisitsPage() {
                           className="text-[10px] font-semibold px-2 py-1 rounded border border-apsBlue text-apsBlue hover:bg-apsBlueLt">
                           Reschedule
                         </button>
+                      ) : v.status === 'done' ? (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-apsGreen">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            Completed
+                          </span>
+                          {onSelectAgent && v.agent_id && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const agent = agents.find((a) => a.id === v.agent_id);
+                                if (agent) onSelectAgent(agent);
+                              }}
+                              className="text-[10px] font-semibold px-2 py-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-100 inline-flex items-center gap-1">
+                              <Eye className="w-3 h-3" />
+                              View
+                            </button>
+                          )}
+                          {canLog && (
+                            <button
+                              type="button"
+                              onClick={() => openLogForVisit(v)}
+                              className="text-[10px] font-semibold px-2 py-1 rounded border border-apsBlue text-apsBlue hover:bg-apsBlueLt">
+                              Log again
+                            </button>
+                          )}
+                        </div>
+                      ) : v.status === 'cancelled' ? (
+                        <span className="text-[10px] font-medium text-slate-400">
+                          Cancelled
+                        </span>
                       ) : (
-                        <MoreHorizontal className="w-4 h-4 text-slate-300" />
+                        <span className="text-[10px] font-medium text-slate-400">—</span>
                       )}
                     </div>
                   )}

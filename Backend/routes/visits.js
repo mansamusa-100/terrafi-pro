@@ -7,7 +7,8 @@ import {
   resolveOfficerAssignment,
   visitOfficerFilter,
   applyVisitOfficerFilter,
-  canAccessVisit
+  canAccessVisit,
+  visitOfficerForUser
 } from '../middleware/user.js';
 import { requireRoles } from '../middleware/auth.js';
 import { verifyGpsCheckIn, GPS_VERIFY_RADIUS_M } from '../lib/geo.js';
@@ -127,25 +128,7 @@ router.post('/schedule', requireRoles('manager', 'team_lead', 'adr'), async (req
       });
     }
 
-    let officer;
-    if (req.user.role === 'adr') {
-      officer = { officerId: req.user.id, officer: req.user.name };
-    } else {
-      const allowedAdrIds =
-        req.user.role === 'team_lead' ? req.user.supervisedAdrIds : null;
-      officer = await resolveOfficerAssignment(
-        companyId,
-        {
-          officerId: officer_id,
-          officerName: agent.officer,
-          fallback: { officerId: agent.officerId, officer: agent.officer }
-        },
-        { allowedAdrIds }
-      );
-      if (!officer) {
-        return res.status(400).json({ error: 'Invalid ADR assignment' });
-      }
-    }
+    const officer = visitOfficerForUser(req.user, agent);
 
     const visitTime = time?.trim() || '09:00';
 
@@ -242,8 +225,7 @@ router.post('/', requireRoles('manager', 'team_lead', 'adr'), async (req, res, n
     const now = new Date();
     const time = now.toTimeString().slice(0, 5);
     const visitDate = todayISO();
-    const officerName = req.user.role === 'adr' ? req.user.name : agent.officer;
-    const officerId = req.user.role === 'adr' ? req.user.id : agent.officerId || null;
+    const { officer: officerName, officerId } = visitOfficerForUser(req.user, agent);
 
     const capturedAtDate =
       capturedAt && !Number.isNaN(Date.parse(capturedAt))

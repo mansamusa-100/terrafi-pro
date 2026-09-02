@@ -160,7 +160,7 @@ function AuthenticatedApp({
       />
     ),
     map: <MapPage setSelectedAgent={setSelectedAgent} />,
-    visits: <VisitsPage />,
+    visits: <VisitsPage onSelectAgent={setSelectedAgent} />,
     float: <FloatPage />,
     'float-sync': <FloatSyncPage />,
     performance: <PerformancePage setPage={handleSetPage} />,

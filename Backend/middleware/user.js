@@ -90,7 +90,7 @@ export function isAgentAssignedToUser(agent, user) {
 export function visitOfficerFilter(user) {
   if (user.role === 'adr') return user.name;
   if (isTeamLeadRole(user.role)) {
-    const names = user.supervisedAdrNames || [];
+    const names = [...new Set([...(user.supervisedAdrNames || []), user.name])];
     return names.length ? { in: names } : { in: ['__none__'] };
   }
   return null;
@@ -106,9 +106,21 @@ export function canAccessVisit(visit, user) {
   if (!visit) return false;
   if (user.role === 'adr') return visit.officer === user.name;
   if (isTeamLeadRole(user.role)) {
-    return (user.supervisedAdrNames || []).includes(visit.officer);
+    const names = [...new Set([...(user.supervisedAdrNames || []), user.name])];
+    return names.includes(visit.officer);
   }
   return true;
+}
+
+/** Officer name + id recorded on a visit for the current user. */
+export function visitOfficerForUser(user, agent) {
+  if (user.role === 'adr' || user.role === 'manager' || user.role === 'team_lead') {
+    return { officerId: user.id, officer: user.name };
+  }
+  return {
+    officerId: agent.officerId || null,
+    officer: agent.officer
+  };
 }
 
 export async function resolveOfficerAssignment(
