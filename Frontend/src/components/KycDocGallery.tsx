@@ -221,7 +221,12 @@ export function KycDocGallery({
       if (e.key === 'ArrowLeft') go(-1);
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
   }, [go, onClose]);
 
   if (!doc) return null;
@@ -241,81 +246,93 @@ export function KycDocGallery({
     }
   };
 
+  const toolbarBtn =
+    'inline-flex items-center justify-center gap-1.5 min-h-11 min-w-11 px-3 rounded-xl text-sm font-semibold text-white bg-white/15 active:bg-white/30 touch-manipulation select-none';
+
   return (
     <div
-      className="fixed inset-0 z-[60] flex flex-col bg-black/80 backdrop-blur-[2px]"
-      onClick={onClose}
+      className="fixed inset-0 z-[60] flex flex-col bg-black/85 overscroll-none"
       role="dialog"
       aria-modal="true"
       aria-label={`Viewing ${doc.title}`}>
+      {/* Top chrome — padded for iPhone notch / Dynamic Island / PWA status bar */}
       <div
-        className="flex items-center justify-between gap-3 px-4 py-3 bg-black/40 text-white shrink-0"
-        onClick={(e) => e.stopPropagation()}>
-        <div className="min-w-0">
-          <div className="text-sm font-semibold truncate">{doc.title}</div>
-          <div className="text-[11px] text-white/60 truncate">
-            {doc.fileName}
-            {docs.length > 1 ? ` · ${index + 1} of ${docs.length}` : ''}
+        className="shrink-0 z-20 bg-black/70 border-b border-white/10"
+        style={{
+          paddingTop: 'max(12px, env(safe-area-inset-top, 0px))',
+          paddingLeft: 'max(12px, env(safe-area-inset-left, 0px))',
+          paddingRight: 'max(12px, env(safe-area-inset-right, 0px))'
+        }}>
+        <div className="flex items-start justify-between gap-3 px-3 pb-3 pt-1">
+          <div className="min-w-0 flex-1 pr-2 pt-1.5">
+            <div className="text-sm font-semibold text-white truncate">{doc.title}</div>
+            <div className="text-[11px] text-white/60 truncate mt-0.5">
+              {doc.fileName}
+              {docs.length > 1 ? ` · ${index + 1} of ${docs.length}` : ''}
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-          {image && (
-            <>
-              <button
-                type="button"
-                aria-label="Zoom out"
-                onClick={() =>
-                  setZoom((z) => Math.max(0.5, Number((z - 0.25).toFixed(2))))
-                }
-                className="p-2 rounded-lg hover:bg-white/10">
-                <ZoomOut className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                aria-label="Zoom in"
-                onClick={() =>
-                  setZoom((z) => Math.min(3, Number((z + 0.25).toFixed(2))))
-                }
-                className="p-2 rounded-lg hover:bg-white/10">
-                <ZoomIn className="w-4 h-4" />
-              </button>
-            </>
-          )}
-          <button
-            type="button"
-            onClick={handleDownload}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-white/10">
-            <Download className="w-3.5 h-3.5" />
-            Download
-          </button>
+          {/* Desktop/tablet: keep actions in header; phones use bottom bar */}
+          <div className="hidden sm:flex items-center gap-2 shrink-0">
+            {image && (
+              <>
+                <button
+                  type="button"
+                  aria-label="Zoom out"
+                  onClick={() =>
+                    setZoom((z) => Math.max(0.5, Number((z - 0.25).toFixed(2))))
+                  }
+                  className={toolbarBtn}>
+                  <ZoomOut className="w-5 h-5" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Zoom in"
+                  onClick={() =>
+                    setZoom((z) => Math.min(3, Number((z + 0.25).toFixed(2))))
+                  }
+                  className={toolbarBtn}>
+                  <ZoomIn className="w-5 h-5" />
+                </button>
+              </>
+            )}
+            <button type="button" onClick={handleDownload} className={toolbarBtn}>
+              <Download className="w-5 h-5" />
+              Download
+            </button>
+            <button type="button" aria-label="Close" onClick={onClose} className={toolbarBtn}>
+              <X className="w-5 h-5" />
+              Close
+            </button>
+          </div>
+          {/* Phone: large Close only in header (Download lives in bottom bar) */}
           <button
             type="button"
             aria-label="Close"
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-white/10">
-            <X className="w-4 h-4" />
+            className={cn(toolbarBtn, 'sm:hidden shrink-0 bg-white/20')}>
+            <X className="w-5 h-5" />
+            <span>Close</span>
           </button>
         </div>
       </div>
 
-      <div
-        className="flex-1 relative flex items-center justify-center min-h-0 p-4"
-        onClick={(e) => e.stopPropagation()}>
+      {/* Image / PDF area */}
+      <div className="flex-1 relative flex items-center justify-center min-h-0 px-2 py-3">
         {docs.length > 1 && (
           <>
             <button
               type="button"
               aria-label="Previous document"
               onClick={() => go(-1)}
-              className="absolute left-3 z-10 p-2 rounded-full bg-black/50 text-white hover:bg-black/70">
-              <ChevronLeft className="w-5 h-5" />
+              className="absolute left-2 z-10 min-h-12 min-w-12 inline-flex items-center justify-center rounded-full bg-black/60 text-white active:bg-black/80 touch-manipulation">
+              <ChevronLeft className="w-6 h-6" />
             </button>
             <button
               type="button"
               aria-label="Next document"
               onClick={() => go(1)}
-              className="absolute right-3 z-10 p-2 rounded-full bg-black/50 text-white hover:bg-black/70">
-              <ChevronRight className="w-5 h-5" />
+              className="absolute right-2 z-10 min-h-12 min-w-12 inline-flex items-center justify-center rounded-full bg-black/60 text-white active:bg-black/80 touch-manipulation">
+              <ChevronRight className="w-6 h-6" />
             </button>
           </>
         )}
@@ -323,19 +340,20 @@ export function KycDocGallery({
         {loading ? (
           <Loader2 className="w-8 h-8 text-white/70 animate-spin" />
         ) : image && preview ? (
-          <div className="relative max-w-full max-h-full overflow-auto">
+          <div className="relative max-w-full max-h-full overflow-auto touch-pan-x touch-pan-y">
             <img
               src={preview.url}
               alt={doc.title}
-              className="max-w-[92vw] max-h-[72vh] object-contain rounded-lg shadow-2xl transition-transform origin-center"
+              className="max-w-[92vw] max-h-[58vh] sm:max-h-[72vh] object-contain rounded-lg shadow-2xl transition-transform origin-center"
               style={{ transform: `scale(${zoom})` }}
+              draggable={false}
             />
           </div>
         ) : pdf && preview ? (
           <iframe
             src={preview.url}
             title={doc.title}
-            className="w-full max-w-4xl h-[75vh] rounded-lg border border-white/10 bg-white"
+            className="w-full max-w-4xl h-[58vh] sm:h-[75vh] rounded-lg border border-white/10 bg-white"
           />
         ) : (
           <div className="text-center text-white/80 py-16 px-6">
@@ -346,10 +364,9 @@ export function KycDocGallery({
         )}
       </div>
 
+      {/* Thumbnails */}
       {docs.length > 1 && (
-        <div
-          className="shrink-0 px-4 py-3 bg-black/50 overflow-x-auto"
-          onClick={(e) => e.stopPropagation()}>
+        <div className="shrink-0 z-20 px-3 py-2 bg-black/60 overflow-x-auto">
           <div className="flex gap-2 justify-center min-w-min mx-auto">
             {docs.map((d, i) => {
               const thumbSrc = staticPreviewSrc(d);
@@ -360,10 +377,10 @@ export function KycDocGallery({
                   type="button"
                   onClick={() => onIndexChange(i)}
                   className={cn(
-                    'shrink-0 w-16 h-16 rounded-md overflow-hidden border-2 transition-colors',
+                    'shrink-0 w-14 h-14 sm:w-16 sm:h-16 rounded-md overflow-hidden border-2 transition-colors touch-manipulation',
                     i === index
                       ? 'border-apsBlue'
-                      : 'border-transparent opacity-70 hover:opacity-100'
+                      : 'border-transparent opacity-70 active:opacity-100'
                   )}>
                   {thumbImage ? (
                     <img
@@ -383,6 +400,54 @@ export function KycDocGallery({
           </div>
         </div>
       )}
+
+      {/* Phone bottom action bar — large, thumb-friendly, above home indicator */}
+      <div
+        className="sm:hidden shrink-0 z-20 bg-black/80 border-t border-white/10"
+        style={{
+          paddingBottom: 'max(12px, env(safe-area-inset-bottom, 0px))',
+          paddingLeft: 'max(12px, env(safe-area-inset-left, 0px))',
+          paddingRight: 'max(12px, env(safe-area-inset-right, 0px))'
+        }}>
+        <div className="flex items-center gap-2 px-3 pt-3">
+          {image && (
+            <>
+              <button
+                type="button"
+                aria-label="Zoom out"
+                onClick={() =>
+                  setZoom((z) => Math.max(0.5, Number((z - 0.25).toFixed(2))))
+                }
+                className={toolbarBtn}>
+                <ZoomOut className="w-5 h-5" />
+              </button>
+              <button
+                type="button"
+                aria-label="Zoom in"
+                onClick={() =>
+                  setZoom((z) => Math.min(3, Number((z + 0.25).toFixed(2))))
+                }
+                className={toolbarBtn}>
+                <ZoomIn className="w-5 h-5" />
+              </button>
+            </>
+          )}
+          <button
+            type="button"
+            onClick={handleDownload}
+            className={cn(toolbarBtn, 'flex-1 bg-apsBlue active:bg-apsBlueMid')}>
+            <Download className="w-5 h-5" />
+            Download
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className={cn(toolbarBtn, 'flex-1 bg-white/25')}>
+            <X className="w-5 h-5" />
+            Close
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
