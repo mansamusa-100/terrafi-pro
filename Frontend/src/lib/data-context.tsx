@@ -42,6 +42,33 @@ import {
   removeQueuedVisit,
   updateQueuedVisitError
 } from './offline-visits';
+import { compressImageForUpload } from './compress-image';
+
+export type AgentCreateProgress = {
+  stage: 'preparing' | 'creating' | 'uploading' | 'finishing';
+  label: string;
+  current?: number;
+  total?: number;
+};
+
+async function mapPool<T>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<void>
+): Promise<void> {
+  if (items.length === 0) return;
+  let next = 0;
+  const runners = Array.from(
+    { length: Math.min(concurrency, items.length) },
+    async () => {
+      while (next < items.length) {
+        const index = next++;
+        await worker(items[index], index);
+      }
+    }
+  );
+  await Promise.all(runners);
+}
 
 interface AppDataContextValue {
   agents: Agent[];
@@ -76,7 +103,8 @@ interface AppDataContextValue {
   createAgent: (
     body: Record<string, unknown>,
     kycFiles?: Record<string, File | File[]>,
-    locationPhoto?: File
+    locationPhoto?: File,
+    onProgress?: (progress: AgentCreateProgress) => void
   ) => Promise<Agent>;
   logVisit: (body: Record<string, unknown>) => Promise<Visit>;
   scheduleVisit: (body: Record<string, unknown>) => Promise<Visit>;
@@ -349,20 +377,96 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     async (
       body: Record<string, unknown>,
       kycFiles?: Record<string, File | File[]>,
-      locationPhoto?: File
+      locationPhoto?: File,
+      onProgress?: (progress: AgentCreateProgress) => void
     ) => {
-      const agent = await api.agents.create(body);
-      try {
-        if (locationPhoto) {
-          await api.agents.uploadLocationPhoto(agent.id, locationPhoto);
+      const report = (progress: AgentCreateProgress) => {
+        onProgress?.(progress);
+      };
+
+      type UploadJob = {
+        label: string;
+        run: (agentId: string) => Promise<void>;
+      };
+
+      const rawItems: { label: string; file: File; kind: 'location' | 'kyc'; docType?: string }[] =
+        [];
+
+      if (locationPhoto) {
+        rawItems.push({
+          label: 'location photo',
+          file: locationPhoto,
+          kind: 'location'
+        });
+      }
+      if (kycFiles) {
+        for (const [docType, value] of Object.entries(kycFiles)) {
+          const files = Array.isArray(value) ? value : [value];
+          files.forEach((file, pageIndex) => {
+            rawItems.push({
+              label:
+                files.length > 1 ? `${docType} (page ${pageIndex + 1})` : docType,
+              file,
+              kind: 'kyc',
+              docType
+            });
+          });
         }
-        if (kycFiles && Object.keys(kycFiles).length > 0) {
-          for (const [docType, value] of Object.entries(kycFiles)) {
-            const files = Array.isArray(value) ? value : [value];
-            for (const file of files) {
-              await api.agents.uploadKyc(agent.id, docType, file);
-            }
+      }
+
+      report({
+        stage: 'preparing',
+        label:
+          rawItems.length > 0
+            ? 'Compressing photos for faster upload…'
+            : 'Preparing registration…',
+        current: 0,
+        total: rawItems.length
+      });
+
+      const uploadJobs: UploadJob[] = await Promise.all(
+        rawItems.map(async (item) => {
+          const prepared = await compressImageForUpload(item.file);
+          if (item.kind === 'location') {
+            return {
+              label: item.label,
+              run: (agentId: string) =>
+                api.agents.uploadLocationPhoto(agentId, prepared).then(() => undefined)
+            };
           }
+          return {
+            label: item.label,
+            run: (agentId: string) =>
+              api.agents
+                .uploadKyc(agentId, item.docType!, prepared)
+                .then(() => undefined)
+          };
+        })
+      );
+
+      report({ stage: 'creating', label: 'Creating agent record…' });
+      const agent = await api.agents.create(body);
+
+      try {
+        if (uploadJobs.length > 0) {
+          let completed = 0;
+          report({
+            stage: 'uploading',
+            label: `Uploading documents (0/${uploadJobs.length})…`,
+            current: 0,
+            total: uploadJobs.length
+          });
+
+          await mapPool(uploadJobs, 3, async (job) => {
+            await job.run(agent.id);
+            completed += 1;
+            report({
+              stage: 'uploading',
+              label: `Uploading documents (${completed}/${uploadJobs.length})…`,
+              current: completed,
+              total: uploadJobs.length
+            });
+          });
         }
       } catch (err) {
         const detail =
@@ -372,8 +476,15 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
           err instanceof ApiError ? err.status : 0
         );
       }
-      await refresh();
+
+      report({ stage: 'finishing', label: 'Finishing up…' });
       const refreshed = await api.agents.get(agent.id);
+      setAgents((prev) => {
+        const without = prev.filter((a) => a.id !== refreshed.id);
+        return [refreshed, ...without];
+      });
+      // Refresh secondary dashboards in the background — don't block success UI.
+      void refresh();
       return refreshed;
     },
     [refresh]

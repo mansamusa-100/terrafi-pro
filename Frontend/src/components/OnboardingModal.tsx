@@ -38,7 +38,13 @@ interface OnboardingModalProps {
   onSubmit: (
     body: Record<string, unknown>,
     kycFiles?: Record<string, File | File[]>,
-    locationPhoto?: File
+    locationPhoto?: File,
+    onProgress?: (progress: {
+      stage: string;
+      label: string;
+      current?: number;
+      total?: number;
+    }) => void
   ) => Promise<Agent>;
   onCreated?: (agent: Agent) => void;
 }
@@ -72,6 +78,7 @@ export function OnboardingModal({
 
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [submitProgress, setSubmitProgress] = useState<string | null>(null);
   const [configLoading, setConfigLoading] = useState(false);
   const [hydrating, setHydrating] = useState(false);
   const [onboardingConfig, setOnboardingConfig] = useState<OnboardingConfig | null>(
@@ -369,6 +376,7 @@ export function OnboardingModal({
 
   const handleSubmit = async () => {
     setSubmitting(true);
+    setSubmitProgress('Starting registration…');
     try {
       const kycFiles: Record<string, File | File[]> = {};
       for (const [key, file] of Object.entries(docs)) {
@@ -398,7 +406,8 @@ export function OnboardingModal({
           ...(canAssignAdr && officerId ? { officer_id: officerId } : {})
         },
         kycFiles,
-        locationPhoto || undefined
+        locationPhoto || undefined,
+        (progress) => setSubmitProgress(progress.label)
       );
       skipSaveRef.current = true;
       draftReadyRef.current = false;
@@ -411,6 +420,7 @@ export function OnboardingModal({
       );
     } finally {
       setSubmitting(false);
+      setSubmitProgress(null);
     }
   };
 
@@ -947,31 +957,46 @@ export function OnboardingModal({
           </div>
 
           {!createdAgent && !showLoading && (
-            <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-between shrink-0">
-              <button
-                onClick={() => {
-                  if (step === 0) void handleClose();
-                  else setStep(step - 1);
-                }}
-                className="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors">
-                {step === 0 ? 'Cancel' : 'Back'}
-              </button>
-              {step < STEPS.length - 1 ? (
-                <button
-                  onClick={() => setStep(step + 1)}
-                  disabled={!canAdvance}
-                  className="px-5 py-2 rounded-lg bg-apsBlue hover:bg-apsBlueMid text-white text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
-                  Continue
-                </button>
-              ) : (
-                <button
-                  onClick={handleSubmit}
-                  disabled={submitting}
-                  className="px-5 py-2 rounded-lg bg-apsGreen hover:bg-green-600 text-white text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-60">
-                  {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                  {submitting ? 'Registering…' : 'Register agent'}
-                </button>
+            <div className="px-6 py-4 border-t border-slate-200 shrink-0">
+              {submitting && submitProgress && (
+                <div className="mb-3 rounded-lg bg-slate-50 border border-slate-200 px-3 py-2.5">
+                  <div className="flex items-center gap-2 text-xs font-medium text-slate-700">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-apsBlue shrink-0" />
+                    <span>{submitProgress}</span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1 pl-5">
+                    Keep this screen open — large photos may take a moment on slow
+                    networks.
+                  </p>
+                </div>
               )}
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={() => {
+                    if (step === 0) void handleClose();
+                    else setStep(step - 1);
+                  }}
+                  disabled={submitting}
+                  className="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-40">
+                  {step === 0 ? 'Cancel' : 'Back'}
+                </button>
+                {step < STEPS.length - 1 ? (
+                  <button
+                    onClick={() => setStep(step + 1)}
+                    disabled={!canAdvance || submitting}
+                    className="px-5 py-2 rounded-lg bg-apsBlue hover:bg-apsBlueMid text-white text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                    Continue
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleSubmit}
+                    disabled={submitting}
+                    className="px-5 py-2 rounded-lg bg-apsGreen hover:bg-green-600 text-white text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-60">
+                    {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {submitting ? 'Registering…' : 'Register agent'}
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>

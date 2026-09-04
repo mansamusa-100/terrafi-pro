@@ -662,6 +662,7 @@ router.get('/:id/kyc-docs/:docId/view', async (req, res, next) => {
 
     res.setHeader('Content-Type', doc.mimeType || 'application/octet-stream');
     res.setHeader('Content-Disposition', 'inline');
+    res.setHeader('Cache-Control', 'private, max-age=600');
     fs.createReadStream(absPath).pipe(res);
   } catch (err) {
     next(err);

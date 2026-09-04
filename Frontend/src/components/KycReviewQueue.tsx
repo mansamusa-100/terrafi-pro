@@ -1,32 +1,23 @@
-import React, { useCallback, useState } from 'react';
-import {
-  CheckCircle2,
-  XCircle,
-  Download,
-  Eye,
-  Loader2,
-  FileText,
-  X
-} from 'lucide-react';
+import React, { useState } from 'react';
+import { CheckCircle2, XCircle, Loader2, Eye } from 'lucide-react';
 import { useAppData } from '../lib/data-context';
 import { useAuth } from '../lib/auth';
 import { can } from '../lib/rbac';
-import { downloadAuthenticated, viewAuthenticated } from '../lib/download';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
 import { ApiError } from '../lib/api';
 import type { KycReviewItem } from '../lib/api';
 import { Pagination } from './Pagination';
 import { PAGE_SIZE, useClientPagination } from '../lib/useClientPagination';
+import {
+  KycDocGallery,
+  KycDocThumb,
+  toGalleryDocs,
+  type GalleryDoc
+} from './KycDocGallery';
 
 interface KycReviewQueueProps {
   onOpenAgent?: (agentId: string) => void;
-}
-
-interface DocViewer {
-  url: string;
-  mimeType: string;
-  title: string;
 }
 
 export function KycReviewQueue({ onOpenAgent }: KycReviewQueueProps) {
@@ -36,31 +27,8 @@ export function KycReviewQueue({ onOpenAgent }: KycReviewQueueProps) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<KycReviewItem | null>(null);
   const [rejectNote, setRejectNote] = useState('');
-  const [viewing, setViewing] = useState<DocViewer | null>(null);
-  const [viewLoading, setViewLoading] = useState(false);
-
-  const closeViewer = useCallback(() => {
-    if (viewing) URL.revokeObjectURL(viewing.url);
-    setViewing(null);
-  }, [viewing]);
-
-  const viewDoc = async (
-    agentId: string,
-    docId: number,
-    docLabel: string
-  ) => {
-    setViewLoading(true);
-    try {
-      const result = await viewAuthenticated(
-        `/agents/${agentId}/kyc-docs/${docId}/view`
-      );
-      setViewing({ ...result, title: docLabel });
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not open document');
-    } finally {
-      setViewLoading(false);
-    }
-  };
+  const [galleryDocs, setGalleryDocs] = useState<GalleryDoc[] | null>(null);
+  const [galleryIndex, setGalleryIndex] = useState(0);
 
   const {
     pageItems: pageQueue,
@@ -69,6 +37,16 @@ export function KycReviewQueue({ onOpenAgent }: KycReviewQueueProps) {
     offset: queueOffset,
     setOffset: setQueueOffset
   } = useClientPagination(kycReviewQueue, PAGE_SIZE.compact);
+
+  const openGallery = (item: KycReviewItem, docId: number) => {
+    const docs = toGalleryDocs(item.id, item.kyc_docs);
+    const idx = Math.max(
+      0,
+      docs.findIndex((d) => d.id === docId)
+    );
+    setGalleryDocs(docs);
+    setGalleryIndex(idx);
+  };
 
   const handleApprove = async (item: KycReviewItem) => {
     setBusyId(item.id);
@@ -95,17 +73,6 @@ export function KycReviewQueue({ onOpenAgent }: KycReviewQueueProps) {
       toast.error(err instanceof ApiError ? err.message : 'Rejection failed');
     } finally {
       setBusyId(null);
-    }
-  };
-
-  const downloadDoc = async (item: KycReviewItem, docId: number, fileName: string) => {
-    try {
-      await downloadAuthenticated(
-        `/agents/${item.id}/kyc-docs/${docId}/download`,
-        fileName
-      );
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Download failed');
     }
   };
 
@@ -173,44 +140,35 @@ export function KycReviewQueue({ onOpenAgent }: KycReviewQueueProps) {
                 </div>
               )}
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <p className="text-[11px] text-slate-500">
+                Tap a document to review · use arrows for next/previous
+              </p>
+              <button
+                type="button"
+                onClick={() => openGallery(item, item.kyc_docs[0]?.id)}
+                disabled={!item.kyc_docs.length}
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-apsBlue hover:underline disabled:opacity-40">
+                <Eye className="w-3.5 h-3.5" />
+                Review all
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
               {item.kyc_docs.map((doc) => (
-                <div
+                <KycDocThumb
                   key={doc.id}
-                  className="flex flex-col rounded-lg border border-slate-200 bg-slate-50 overflow-hidden">
-                  <div className="flex items-center gap-2 px-3 py-2 min-w-0">
-                    <FileText className="w-4 h-4 text-slate-400 shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-xs font-medium text-slate-800 truncate">
-                        {doc.docLabel || doc.docType}
-                      </div>
-                      <div className="text-[10px] text-slate-500 truncate">
-                        {doc.fileName}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1 px-3 py-1.5 border-t border-slate-200 bg-white">
-                    <button
-                      type="button"
-                      title="View document"
-                      disabled={viewLoading}
-                      onClick={() =>
-                        viewDoc(item.id, doc.id, doc.docLabel || doc.docType)
-                      }
-                      className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-apsBlue hover:bg-apsBlueLt/40">
-                      <Eye className="w-3.5 h-3.5" />
-                      View
-                    </button>
-                    <button
-                      type="button"
-                      title="Download document"
-                      onClick={() => downloadDoc(item, doc.id, doc.fileName)}
-                      className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-slate-600 hover:bg-slate-100">
-                      <Download className="w-3.5 h-3.5" />
-                      Download
-                    </button>
-                  </div>
-                </div>
+                  doc={{
+                    id: doc.id,
+                    title: doc.docLabel || doc.docType,
+                    fileName: doc.fileName,
+                    mimeType: doc.mimeType,
+                    url: doc.url,
+                    agentId: item.id
+                  }}
+                  onOpen={() => openGallery(item, doc.id)}
+                />
               ))}
             </div>
           </div>
@@ -267,51 +225,13 @@ export function KycReviewQueue({ onOpenAgent }: KycReviewQueueProps) {
         </div>
       )}
 
-      {viewing && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={closeViewer}>
-          <div
-            className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden"
-            onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 shrink-0">
-              <h3 className="text-sm font-semibold text-slate-900 truncate">
-                {viewing.title}
-              </h3>
-              <button
-                type="button"
-                onClick={closeViewer}
-                className="p-1 rounded hover:bg-slate-100 text-slate-500">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-slate-50">
-              {viewing.mimeType.startsWith('image/') ? (
-                <img
-                  src={viewing.url}
-                  alt={viewing.title}
-                  className="max-w-full max-h-[75vh] object-contain rounded-lg shadow"
-                />
-              ) : viewing.mimeType === 'application/pdf' ? (
-                <iframe
-                  src={viewing.url}
-                  title={viewing.title}
-                  className="w-full h-[75vh] rounded-lg border border-slate-200"
-                />
-              ) : (
-                <div className="text-center py-12">
-                  <FileText className="w-12 h-12 mx-auto mb-3 text-slate-300" />
-                  <p className="text-sm text-slate-600 font-medium">
-                    Preview not available for this file type
-                  </p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Use the Download button to view this document
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+      {galleryDocs && (
+        <KycDocGallery
+          docs={galleryDocs}
+          index={galleryIndex}
+          onIndexChange={setGalleryIndex}
+          onClose={() => setGalleryDocs(null)}
+        />
       )}
     </>
   );
