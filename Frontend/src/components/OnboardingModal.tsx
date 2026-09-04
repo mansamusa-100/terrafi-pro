@@ -1,4 +1,4 @@
-import React, { useState, Fragment, useEffect } from 'react';
+import React, { useState, Fragment, useEffect, useCallback, useRef } from 'react';
 import {
   X,
   Check,
@@ -23,6 +23,14 @@ import { formatCoords } from '../lib/geolocation';
 import { AgentCreatedSuccess } from './AgentCreatedSuccess';
 import { MultiPageKycCapture } from './MultiPageKycCapture';
 import { KYC_DOCS, isMultiPageKycDoc } from '../lib/kyc';
+import {
+  clearOnboardingDraft,
+  draftHasProgress,
+  loadOnboardingDraft,
+  markOnboardingSessionActive,
+  saveOnboardingDraft,
+  type OnboardingDraftPayload
+} from '../lib/onboarding-draft';
 
 interface OnboardingModalProps {
   open: boolean;
@@ -43,6 +51,8 @@ const STEPS = [
   { id: 4, label: 'Review', icon: ClipboardCheck }
 ];
 
+const EMPTY_PHONE = '+220 ';
+
 export function OnboardingModal({
   open,
   onClose,
@@ -53,7 +63,6 @@ export function OnboardingModal({
   const { user } = useAuth();
   const companyLabel = user?.branding?.title ?? user?.company ?? 'your company';
   const adrs = users.filter((u) => u.role === 'adr' && u.id);
-  const isManager = user ? can(user, 'editAgent') : false;
   const canAssignAdr =
     user && (can(user, 'editAgent') || can(user, 'assignAdr'));
   const assignableAdrs =
@@ -64,14 +73,15 @@ export function OnboardingModal({
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [configLoading, setConfigLoading] = useState(false);
+  const [hydrating, setHydrating] = useState(false);
   const [onboardingConfig, setOnboardingConfig] = useState<OnboardingConfig | null>(
     null
   );
 
   const [outletName, setOutletName] = useState('');
   const [name, setName] = useState('');
-  const [phone, setPhone] = useState('+220 ');
-  const [personalPhone, setPersonalPhone] = useState('+220 ');
+  const [phone, setPhone] = useState(EMPTY_PHONE);
+  const [personalPhone, setPersonalPhone] = useState(EMPTY_PHONE);
   const [nationalId, setNationalId] = useState('');
   const [gender, setGender] = useState('');
   const [businessType, setBusinessType] = useState('');
@@ -90,6 +100,85 @@ export function OnboardingModal({
   const [branding, setBranding] = useState<string[]>([]);
 
   const [createdAgent, setCreatedAgent] = useState<Agent | null>(null);
+
+  const skipSaveRef = useRef(true);
+  const draftReadyRef = useRef(false);
+
+  const buildDraftPayload = useCallback((): OnboardingDraftPayload => {
+    return {
+      userId: user?.id ?? null,
+      step,
+      outletName,
+      name,
+      phone,
+      personalPhone,
+      nationalId,
+      gender,
+      businessType,
+      businessTypeOther,
+      zone,
+      townVillage,
+      officerId,
+      coords,
+      competitors,
+      branding,
+      docs,
+      agreementPages,
+      locationPhoto
+    };
+  }, [
+    user?.id,
+    step,
+    outletName,
+    name,
+    phone,
+    personalPhone,
+    nationalId,
+    gender,
+    businessType,
+    businessTypeOther,
+    zone,
+    townVillage,
+    officerId,
+    coords,
+    competitors,
+    branding,
+    docs,
+    agreementPages,
+    locationPhoto
+  ]);
+
+  const flushDraft = useCallback(async () => {
+    if (!open || createdAgent || !draftReadyRef.current) return;
+    try {
+      await saveOnboardingDraft(buildDraftPayload());
+    } catch {
+      /* best-effort — camera kill recovery */
+    }
+  }, [open, createdAgent, buildDraftPayload]);
+
+  const resetFields = useCallback(() => {
+    setStep(0);
+    setOutletName('');
+    setName('');
+    setPhone(EMPTY_PHONE);
+    setPersonalPhone(EMPTY_PHONE);
+    setNationalId('');
+    setGender('');
+    setBusinessType('');
+    setBusinessTypeOther('');
+    setZone('');
+    setTownVillage('');
+    setOfficerId('');
+    setDocs({});
+    setAgreementPages([]);
+    setCoords(null);
+    setLocationPhoto(null);
+    setCompetitors([]);
+    setBranding([]);
+    setSubmitting(false);
+    setCreatedAgent(null);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -123,6 +212,59 @@ export function OnboardingModal({
   }, [open, fallbackZones]);
 
   useEffect(() => {
+    if (!open) {
+      draftReadyRef.current = false;
+      skipSaveRef.current = true;
+      return;
+    }
+
+    let cancelled = false;
+    setHydrating(true);
+    skipSaveRef.current = true;
+    draftReadyRef.current = false;
+    markOnboardingSessionActive();
+
+    (async () => {
+      const draft = await loadOnboardingDraft(user?.id);
+      if (cancelled) return;
+
+      if (draft && draftHasProgress(draft)) {
+        setStep(draft.step);
+        setOutletName(draft.outletName);
+        setName(draft.name);
+        setPhone(draft.phone || EMPTY_PHONE);
+        setPersonalPhone(draft.personalPhone || EMPTY_PHONE);
+        setNationalId(draft.nationalId);
+        setGender(draft.gender);
+        setBusinessType(draft.businessType);
+        setBusinessTypeOther(draft.businessTypeOther);
+        setZone(draft.zone);
+        setTownVillage(draft.townVillage);
+        setOfficerId(draft.officerId);
+        setDocs(draft.docs);
+        setAgreementPages(draft.agreementPages);
+        setCoords(draft.coords);
+        setLocationPhoto(draft.locationPhoto);
+        setCompetitors(draft.competitors);
+        setBranding(draft.branding);
+        setCreatedAgent(null);
+        toast.message('Restored your onboarding progress', { duration: 3500 });
+      }
+
+      setHydrating(false);
+      draftReadyRef.current = true;
+      // Allow one paint so restored state settles before autosave.
+      requestAnimationFrame(() => {
+        skipSaveRef.current = false;
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, user?.id]);
+
+  useEffect(() => {
     if (!locationPhoto) {
       setLocationPreview(null);
       return;
@@ -132,6 +274,54 @@ export function OnboardingModal({
     return () => URL.revokeObjectURL(url);
   }, [locationPhoto]);
 
+  useEffect(() => {
+    if (!open || createdAgent || hydrating || skipSaveRef.current) return;
+    const t = window.setTimeout(() => {
+      void flushDraft();
+    }, 400);
+    return () => window.clearTimeout(t);
+  }, [open, createdAgent, hydrating, flushDraft, buildDraftPayload]);
+
+  useEffect(() => {
+    if (!open || createdAgent) return;
+    const onHidden = () => {
+      void flushDraft();
+    };
+    const onVis = () => {
+      if (document.visibilityState === 'hidden') onHidden();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('pagehide', onHidden);
+    return () => {
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('pagehide', onHidden);
+    };
+  }, [open, createdAgent, flushDraft]);
+
+  const handleClose = async () => {
+    skipSaveRef.current = true;
+    draftReadyRef.current = false;
+    await clearOnboardingDraft();
+    resetFields();
+    onClose();
+  };
+
+  const finishSuccess = async () => {
+    if (createdAgent) onCreated?.(createdAgent);
+    await handleClose();
+  };
+
+  const registerAnother = async () => {
+    skipSaveRef.current = true;
+    await clearOnboardingDraft();
+    resetFields();
+    markOnboardingSessionActive();
+    draftReadyRef.current = true;
+    requestAnimationFrame(() => {
+      skipSaveRef.current = false;
+    });
+  };
+
   if (!open) return null;
 
   const businessTypes = onboardingConfig?.business_types ?? [];
@@ -140,62 +330,6 @@ export function OnboardingModal({
     : fallbackZones;
   const competitorOptions = onboardingConfig?.competitor_names ?? [];
   const brandingOptions = onboardingConfig?.branding_types ?? [];
-
-  const reset = () => {
-    setStep(0);
-    setOutletName('');
-    setName('');
-    setPhone('+220 ');
-    setPersonalPhone('+220 ');
-    setNationalId('');
-    setGender('');
-    setBusinessType('');
-    setBusinessTypeOther('');
-    setZone('');
-    setTownVillage('');
-    setOfficerId('');
-    setDocs({});
-    setAgreementPages([]);
-    setCoords(null);
-    setLocationPhoto(null);
-    setCompetitors([]);
-    setBranding([]);
-    setSubmitting(false);
-    setCreatedAgent(null);
-  };
-
-  const handleClose = () => {
-    reset();
-    onClose();
-  };
-
-  const finishSuccess = () => {
-    if (createdAgent) onCreated?.(createdAgent);
-    handleClose();
-  };
-
-  const registerAnother = () => {
-    setCreatedAgent(null);
-    setStep(0);
-    setOutletName('');
-    setName('');
-    setPhone('+220 ');
-    setPersonalPhone('+220 ');
-    setNationalId('');
-    setGender('');
-    setBusinessType('');
-    setBusinessTypeOther('');
-    setZone('');
-    setTownVillage('');
-    setOfficerId('');
-    setDocs({});
-    setAgreementPages([]);
-    setCoords(null);
-    setLocationPhoto(null);
-    setCompetitors([]);
-    setBranding([]);
-    setSubmitting(false);
-  };
 
   const businessTypeValid =
     businessType && (businessType !== 'Others' || businessTypeOther.trim().length > 1);
@@ -266,6 +400,9 @@ export function OnboardingModal({
         kycFiles,
         locationPhoto || undefined
       );
+      skipSaveRef.current = true;
+      draftReadyRef.current = false;
+      await clearOnboardingDraft();
       setCreatedAgent(agent);
     } catch (e) {
       toast.error(
@@ -286,10 +423,14 @@ export function OnboardingModal({
       ? `Others — ${businessTypeOther}`
       : businessType;
 
+  const showLoading = hydrating || (configLoading && step === 0);
+
   return (
     <>
       <div
-        onClick={handleClose}
+        onClick={() => {
+          void handleClose();
+        }}
         className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 transition-opacity"
       />
 
@@ -310,7 +451,9 @@ export function OnboardingModal({
               <button
                 type="button"
                 aria-label="Close"
-                onClick={createdAgent ? finishSuccess : handleClose}
+                onClick={() => {
+                  void (createdAgent ? finishSuccess() : handleClose());
+                }}
                 className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors">
                 <X className="w-4 h-4" />
               </button>
@@ -363,13 +506,17 @@ export function OnboardingModal({
             {createdAgent ? (
               <AgentCreatedSuccess
                 agent={createdAgent}
-                onDone={finishSuccess}
-                onRegisterAnother={registerAnother}
+                onDone={() => {
+                  void finishSuccess();
+                }}
+                onRegisterAnother={() => {
+                  void registerAnother();
+                }}
               />
-            ) : configLoading && step === 0 ? (
+            ) : showLoading ? (
               <div className="flex items-center justify-center py-16 text-slate-500 gap-2">
                 <Loader2 className="w-5 h-5 animate-spin" />
-                Loading options…
+                {hydrating ? 'Restoring progress…' : 'Loading options…'}
               </div>
             ) : (
               <>
@@ -517,8 +664,9 @@ export function OnboardingModal({
                 {step === 1 && (
                   <div className="space-y-3">
                     <p className="text-xs text-slate-500">
-                      Upload clear photos of each required document. For the signed
-                      agreement you can snap multiple pages if it is not a PDF.
+                      Upload clear photos of each required document. On Android phones,
+                      prefer <span className="font-medium">Gallery / Files</span> if Camera
+                      closes the app — your progress is saved automatically.
                     </p>
                     {KYC_DOCS.map((d) => {
                       if (isMultiPageKycDoc(d.key)) {
@@ -529,58 +677,90 @@ export function OnboardingModal({
                             pages={agreementPages}
                             onChange={setAgreementPages}
                             required={d.required}
+                            onBeforeCapture={() => {
+                              void flushDraft();
+                            }}
                           />
                         );
                       }
                       const uploaded = docs[d.key];
                       return (
-                        <label
+                        <div
                           key={d.key}
                           className={cn(
-                            'w-full flex items-center gap-3 p-4 rounded-xl border-2 border-dashed transition-colors text-left cursor-pointer',
+                            'w-full rounded-xl border-2 border-dashed p-4 transition-colors',
                             uploaded
                               ? 'border-apsGreen bg-apsGreenLt/40'
-                              : 'border-slate-200 hover:border-apsBlue hover:bg-slate-50'
+                              : 'border-slate-200'
                           )}>
-                          <input
-                            type="file"
-                            accept="image/*,application/pdf"
-                            capture="environment"
-                            className="hidden"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0] || null;
-                              setDocs((prev) => ({ ...prev, [d.key]: file }));
-                            }}
-                          />
-                          <div
-                            className={cn(
-                              'w-10 h-10 rounded-lg flex items-center justify-center shrink-0',
-                              uploaded
-                                ? 'bg-apsGreen text-white'
-                                : 'bg-slate-100 text-slate-400'
-                            )}>
-                            {uploaded ? (
-                              <Check className="w-5 h-5" />
-                            ) : (
-                              <Upload className="w-5 h-5" />
-                            )}
-                          </div>
-                          <div className="flex-1">
-                            <div className="text-sm font-medium text-slate-900">
-                              {d.label}
+                          <div className="flex items-center gap-3 mb-3">
+                            <div
+                              className={cn(
+                                'w-10 h-10 rounded-lg flex items-center justify-center shrink-0',
+                                uploaded
+                                  ? 'bg-apsGreen text-white'
+                                  : 'bg-slate-100 text-slate-400'
+                              )}>
+                              {uploaded ? (
+                                <Check className="w-5 h-5" />
+                              ) : (
+                                <Upload className="w-5 h-5" />
+                              )}
                             </div>
-                            <div className="text-xs text-slate-500">
-                              {uploaded
-                                ? `${uploaded.name} · tap to replace`
-                                : 'Tap to snap or upload photo/PDF'}
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium text-slate-900 flex items-center gap-2">
+                                {d.label}
+                                {d.required && (
+                                  <span className="text-[10px] font-semibold text-apsRed uppercase tracking-wider">
+                                    Required
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-xs text-slate-500 truncate">
+                                {uploaded
+                                  ? `${uploaded.name} · replace below`
+                                  : 'Gallery preferred on Samsung · or use Camera'}
+                              </div>
                             </div>
                           </div>
-                          {d.required && (
-                            <span className="text-[10px] font-semibold text-apsRed uppercase tracking-wider">
-                              Required
-                            </span>
-                          )}
-                        </label>
+                          <div className="flex flex-col sm:flex-row gap-2">
+                            <label className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-semibold cursor-pointer hover:bg-slate-50">
+                              <Upload className="w-4 h-4" />
+                              Gallery / Files
+                              <input
+                                type="file"
+                                accept="image/*,application/pdf"
+                                className="hidden"
+                                onClick={() => {
+                                  void flushDraft();
+                                }}
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0] || null;
+                                  setDocs((prev) => ({ ...prev, [d.key]: file }));
+                                  e.target.value = '';
+                                }}
+                              />
+                            </label>
+                            <label className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-apsBlue text-white text-xs font-semibold cursor-pointer hover:bg-apsBlueMid">
+                              <Camera className="w-4 h-4" />
+                              Camera
+                              <input
+                                type="file"
+                                accept="image/*"
+                                capture="environment"
+                                className="hidden"
+                                onClick={() => {
+                                  void flushDraft();
+                                }}
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0] || null;
+                                  setDocs((prev) => ({ ...prev, [d.key]: file }));
+                                  e.target.value = '';
+                                }}
+                              />
+                            </label>
+                          </div>
+                        </div>
                       );
                     })}
                   </div>
@@ -604,39 +784,53 @@ export function OnboardingModal({
                     <div>
                       <label className={labelClass}>Location photo</label>
                       <p className="text-xs text-slate-500 mb-3">
-                        Take a clear photo of the shop front or outlet. This will be shown
-                        on the agent profile after registration.
+                        Clear photo of the shop front. Prefer Gallery on Android if Camera
+                        restarts the app — progress is restored automatically.
                       </p>
-                      <label
-                        className={cn(
-                          'block rounded-xl border-2 border-dashed overflow-hidden cursor-pointer transition-colors',
-                          locationPhoto
-                            ? 'border-apsGreen'
-                            : 'border-slate-200 hover:border-apsBlue hover:bg-slate-50'
-                        )}>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          capture="environment"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0] || null;
-                            setLocationPhoto(file);
-                          }}
-                        />
-                        {locationPreview ? (
+                      {locationPreview && (
+                        <div className="rounded-xl overflow-hidden border border-apsGreen mb-3">
                           <img
                             src={locationPreview}
                             alt="Location preview"
                             className="w-full h-48 object-cover"
                           />
-                        ) : (
-                          <div className="flex flex-col items-center justify-center py-10 text-slate-400">
-                            <Camera className="w-10 h-10 mb-2" />
-                            <span className="text-sm font-medium">Tap to capture or upload</span>
-                          </div>
-                        )}
-                      </label>
+                        </div>
+                      )}
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <label className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-semibold cursor-pointer hover:bg-slate-50">
+                          <Upload className="w-4 h-4" />
+                          Gallery / Files
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onClick={() => {
+                              void flushDraft();
+                            }}
+                            onChange={(e) => {
+                              setLocationPhoto(e.target.files?.[0] || null);
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+                        <label className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-apsBlue text-white text-xs font-semibold cursor-pointer hover:bg-apsBlueMid">
+                          <Camera className="w-4 h-4" />
+                          Camera
+                          <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            className="hidden"
+                            onClick={() => {
+                              void flushDraft();
+                            }}
+                            onChange={(e) => {
+                              setLocationPhoto(e.target.files?.[0] || null);
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -752,10 +946,13 @@ export function OnboardingModal({
             )}
           </div>
 
-          {!createdAgent && !configLoading && (
+          {!createdAgent && !showLoading && (
             <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-between shrink-0">
               <button
-                onClick={() => (step === 0 ? handleClose() : setStep(step - 1))}
+                onClick={() => {
+                  if (step === 0) void handleClose();
+                  else setStep(step - 1);
+                }}
                 className="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors">
                 {step === 0 ? 'Cancel' : 'Back'}
               </button>

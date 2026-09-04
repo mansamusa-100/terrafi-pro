@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, Users, Upload, FileSpreadsheet, Navigation, Search } from 'lucide-react';
 import { AgentCard } from '../components/AgentCard';
 import { OnboardingModal } from '../components/OnboardingModal';
@@ -13,6 +13,11 @@ import { useUserLocation } from '../lib/useUserLocation';
 import { compareAgentDistance } from '../lib/agent-distance';
 import { Pagination } from '../components/Pagination';
 import { PAGE_SIZE, useClientPagination } from '../lib/useClientPagination';
+import {
+  hasOnboardingDraft,
+  isOnboardingSessionActive,
+  markOnboardingSessionActive
+} from '../lib/onboarding-draft';
 
 interface AgentsPageProps {
   searchQ: string;
@@ -30,6 +35,19 @@ export function AgentsPage({ searchQ, setSearchQ, onAgentClick }: AgentsPageProp
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [kycBulkOpen, setKycBulkOpen] = useState(false);
+
+  useEffect(() => {
+    if (!canOnboard) return;
+    let cancelled = false;
+    (async () => {
+      if (!isOnboardingSessionActive()) return;
+      const hasDraft = await hasOnboardingDraft(user?.id);
+      if (!cancelled && hasDraft) setOnboardingOpen(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [canOnboard, user?.id]);
 
   const tabs = [
     ['all', 'All agents'],
@@ -73,7 +91,10 @@ export function AgentsPage({ searchQ, setSearchQ, onAgentClick }: AgentsPageProp
     `${filter}|${searchQ}|${sort}`
   );
 
-  const handleAddAgent = () => setOnboardingOpen(true);
+  const handleAddAgent = () => {
+    markOnboardingSessionActive();
+    setOnboardingOpen(true);
+  };
 
   return (
     <div className="page-pad">

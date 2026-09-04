@@ -8,6 +8,8 @@ interface MultiPageKycCaptureProps {
   onChange: (pages: File[]) => void;
   required?: boolean;
   className?: string;
+  /** Flush draft before opening camera (Android may kill the page). */
+  onBeforeCapture?: () => void;
 }
 
 function isPdf(file: File) {
@@ -19,7 +21,8 @@ export function MultiPageKycCapture({
   pages,
   onChange,
   required,
-  className
+  className,
+  onBeforeCapture
 }: MultiPageKycCaptureProps) {
   const previews = useMemo(
     () =>
@@ -81,8 +84,9 @@ export function MultiPageKycCapture({
             )}
           </div>
           <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-            Snap each page of the signed agreement with your camera, or upload a
-            single PDF if you have one.
+            Prefer Gallery/Files on Samsung and other Android phones — Camera can
+            briefly close the app; progress is saved automatically. Or snap pages
+            with Camera / upload a PDF.
           </p>
         </div>
       </div>
@@ -123,14 +127,29 @@ export function MultiPageKycCapture({
       )}
 
       <div className="flex flex-col sm:flex-row gap-2">
+        <label className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-semibold cursor-pointer hover:bg-slate-50 transition-colors">
+          <Upload className="w-4 h-4" />
+          {pages.length === 0 ? 'Gallery / Files' : 'Add from gallery'}
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onClick={() => onBeforeCapture?.()}
+            onChange={(e) => {
+              addImagePage(e.target.files?.[0] || null);
+              e.target.value = '';
+            }}
+          />
+        </label>
         <label className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-apsBlue text-white text-xs font-semibold cursor-pointer hover:bg-apsBlueMid transition-colors">
           <Camera className="w-4 h-4" />
-          {pages.length === 0 ? 'Snap first page' : 'Add another page'}
+          {pages.length === 0 ? 'Camera' : 'Camera page'}
           <input
             type="file"
             accept="image/*"
             capture="environment"
             className="hidden"
+            onClick={() => onBeforeCapture?.()}
             onChange={(e) => {
               addImagePage(e.target.files?.[0] || null);
               e.target.value = '';
@@ -138,12 +157,13 @@ export function MultiPageKycCapture({
           />
         </label>
         <label className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-semibold cursor-pointer hover:bg-slate-50 transition-colors">
-          <Upload className="w-4 h-4" />
+          <FileText className="w-4 h-4" />
           Upload PDF
           <input
             type="file"
             accept="application/pdf"
             className="hidden"
+            onClick={() => onBeforeCapture?.()}
             onChange={(e) => {
               addPdf(e.target.files?.[0] || null);
               e.target.value = '';

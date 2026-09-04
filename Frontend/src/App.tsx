@@ -48,6 +48,7 @@ import { toast } from 'sonner';
 import { AppOverlayOpenContext } from './lib/app-overlay-context';
 import { useDutyTracking } from './lib/useDutyTracking';
 import { DutyTrackingBar } from './components/DutyTrackingBar';
+import { isOnboardingSessionActive } from './lib/onboarding-draft';
 
 function AuthenticatedApp({
   page,
@@ -346,7 +347,13 @@ function AppShell({
 }
 
 export function App() {
-  const [page, setPage] = useState('dashboard');
+  const [page, setPage] = useState(() =>
+    isOnboardingSessionActive() ? 'agents' : 'dashboard'
+  );
+
+  useEffect(() => {
+    if (isOnboardingSessionActive()) setPage('agents');
+  }, []);
 
   return (
     <AuthProvider onUserChange={setPage}>
