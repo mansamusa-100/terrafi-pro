@@ -23,6 +23,7 @@ import { formatCoords } from '../lib/geolocation';
 import { AgentCreatedSuccess } from './AgentCreatedSuccess';
 import { MultiPageKycCapture } from './MultiPageKycCapture';
 import { KYC_DOCS, isMultiPageKycDoc } from '../lib/kyc';
+import { subTerritoriesForZone } from '../lib/sub-territories';
 import {
   clearOnboardingDraft,
   draftHasProgress,
@@ -94,6 +95,7 @@ export function OnboardingModal({
   const [businessType, setBusinessType] = useState('');
   const [businessTypeOther, setBusinessTypeOther] = useState('');
   const [zone, setZone] = useState('');
+  const [subTerritory, setSubTerritory] = useState('');
   const [townVillage, setTownVillage] = useState('');
   const [officerId, setOfficerId] = useState('');
 
@@ -124,6 +126,7 @@ export function OnboardingModal({
       businessType,
       businessTypeOther,
       zone,
+      subTerritory,
       townVillage,
       officerId,
       coords,
@@ -145,6 +148,7 @@ export function OnboardingModal({
     businessType,
     businessTypeOther,
     zone,
+    subTerritory,
     townVillage,
     officerId,
     coords,
@@ -175,6 +179,7 @@ export function OnboardingModal({
     setBusinessType('');
     setBusinessTypeOther('');
     setZone('');
+    setSubTerritory('');
     setTownVillage('');
     setOfficerId('');
     setDocs({});
@@ -204,6 +209,7 @@ export function OnboardingModal({
             'Others'
           ],
           zone_names: fallbackZones,
+          sub_territories_by_zone: {},
           competitor_names: ['Orange Money', 'QMoney', 'Wave', 'Africell Money'],
           branding_types: [
             'Poster',
@@ -246,6 +252,7 @@ export function OnboardingModal({
         setBusinessType(draft.businessType);
         setBusinessTypeOther(draft.businessTypeOther);
         setZone(draft.zone);
+        setSubTerritory(draft.subTerritory ?? '');
         setTownVillage(draft.townVillage);
         setOfficerId(draft.officerId);
         setDocs(draft.docs);
@@ -337,6 +344,10 @@ export function OnboardingModal({
     : fallbackZones;
   const competitorOptions = onboardingConfig?.competitor_names ?? [];
   const brandingOptions = onboardingConfig?.branding_types ?? [];
+  const subTerritoryOptions = subTerritoriesForZone(
+    onboardingConfig?.sub_territories_by_zone,
+    zone
+  );
 
   const businessTypeValid =
     businessType && (businessType !== 'Others' || businessTypeOther.trim().length > 1);
@@ -349,6 +360,7 @@ export function OnboardingModal({
     nationalId.trim().length > 3 &&
     businessTypeValid &&
     zone &&
+    (subTerritoryOptions.length === 0 || !!subTerritory) &&
     townVillage.trim().length > 1 &&
     (!canAssignAdr ||
       user?.role !== 'team_lead' ||
@@ -392,6 +404,7 @@ export function OnboardingModal({
           phone,
           personalPhone,
           zone,
+          subTerritory: subTerritory || undefined,
           townVillage: townVillage.trim(),
           lat: coords?.lat,
           lng: coords?.lng,
@@ -635,7 +648,10 @@ export function OnboardingModal({
                       <select
                         className={inputClass}
                         value={zone}
-                        onChange={(e) => setZone(e.target.value)}>
+                        onChange={(e) => {
+                          setZone(e.target.value);
+                          setSubTerritory('');
+                        }}>
                         <option value="">Select…</option>
                         {zoneOptions.map((z) => (
                           <option key={z} value={z}>
@@ -644,6 +660,25 @@ export function OnboardingModal({
                         ))}
                       </select>
                     </div>
+                    {subTerritoryOptions.length > 0 && (
+                      <div>
+                        <label className={labelClass}>
+                          Sub-territory
+                          <span className="text-apsRed ml-1">*</span>
+                        </label>
+                        <select
+                          className={inputClass}
+                          value={subTerritory}
+                          onChange={(e) => setSubTerritory(e.target.value)}>
+                          <option value="">Select…</option>
+                          {subTerritoryOptions.map((s) => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     {canAssignAdr && (
                       <div>
                         <label className={labelClass}>
@@ -924,6 +959,7 @@ export function OnboardingModal({
                         ['National ID', nationalId],
                         ['Business type', displayBusinessType],
                         ['Zone', zone],
+                        ...(subTerritory ? [['Sub-territory', subTerritory]] : []),
                         ['Town / village', townVillage],
                         ['GPS', coords ? formatCoords(coords) : '—'],
                         [

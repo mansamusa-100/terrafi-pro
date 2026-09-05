@@ -30,10 +30,11 @@ function addressLabel(agent) {
   return parts.join(', ') || '—';
 }
 
-async function buildScopeWhere(user, { zone, officerId, teamLeadId, status, kyc }) {
+export async function buildScopeWhere(user, { zone, officerId, teamLeadId, status, kyc, subTerritory }) {
   const where = { ...agentWhereForUser(user) };
 
   if (zone) where.zone = zone;
+  if (subTerritory) where.subTerritory = subTerritory;
   if (status) where.status = status;
   if (kyc) where.kyc = kyc;
 
@@ -50,7 +51,7 @@ async function buildScopeWhere(user, { zone, officerId, teamLeadId, status, kyc 
   return where;
 }
 
-function applySearch(where, q) {
+export function applySearch(where, q) {
   const term = q?.trim();
   if (!term) return where;
   const contains = { contains: term, mode: 'insensitive' };
@@ -67,6 +68,7 @@ function applySearch(where, q) {
           { personalPhone: contains },
           { townVillage: contains },
           { zone: contains },
+          { subTerritory: contains },
           { officer: contains }
         ]
       }
@@ -90,11 +92,15 @@ function buildTableWhere(searchWhere, { preset, period, tableScope }) {
   };
 }
 
-async function fetchLatestVisits(companyId, agentIds) {
+export async function fetchLatestVisits(companyId, agentIds, { doneOnly = false } = {}) {
   if (!agentIds.length) return new Map();
 
   const visits = await prisma.visit.findMany({
-    where: { companyId, agentId: { in: agentIds } },
+    where: {
+      companyId,
+      agentId: { in: agentIds },
+      ...(doneOnly ? { status: 'done' } : {})
+    },
     orderBy: [{ visitDate: 'desc' }, { id: 'desc' }],
     select: { agentId: true, visitDate: true, officer: true }
   });
@@ -106,7 +112,7 @@ async function fetchLatestVisits(companyId, agentIds) {
   return map;
 }
 
-async function teamLeadMapForAdrs(companyId, adrIds) {
+export async function teamLeadMapForAdrs(companyId, adrIds) {
   if (!adrIds.length) return new Map();
   const rows = await prisma.leadAdrAssignment.findMany({
     where: { companyId, adrId: { in: adrIds.filter(Boolean) } },
@@ -115,7 +121,17 @@ async function teamLeadMapForAdrs(companyId, adrIds) {
   return new Map(rows.map((r) => [r.adrId, r.lead]));
 }
 
-function serializeRow(agent, { latestVisit, teamLead }) {
+export async function fetchVisitCounts(companyId, agentIds) {
+  if (!agentIds.length) return new Map();
+  const rows = await prisma.visit.groupBy({
+    by: ['agentId'],
+    where: { companyId, agentId: { in: agentIds }, status: 'done' },
+    _count: { id: true }
+  });
+  return new Map(rows.map((r) => [r.agentId, r._count.id]));
+}
+
+export function serializeRow(agent, { latestVisit, teamLead, visitCount }) {
   return {
     id: agent.id,
     created_at: agent.createdAt.toISOString(),
@@ -129,6 +145,7 @@ function serializeRow(agent, { latestVisit, teamLead }) {
     agent_number: agent.personalPhone ?? null,
     address: addressLabel(agent),
     region: agent.zone,
+    sub_region: agent.subTerritory ?? null,
     adr_id: agent.officerId ?? null,
     adr_name: agent.officer,
     team_lead_id: teamLead?.id ?? null,
@@ -137,6 +154,7 @@ function serializeRow(agent, { latestVisit, teamLead }) {
     onboarded_by_name: agent.onboardedBy?.name ?? null,
     kyc_approved_by_id: agent.kycReviewedById ?? null,
     kyc_approved_by_name: agent.kycReviewedBy?.name ?? null,
+    visit_count: visitCount ?? agent.visits ?? 0,
     last_visit_date: latestVisit?.visitDate ?? null,
     last_visited_by: latestVisit?.officer ?? null
   };
@@ -152,6 +170,7 @@ function prismaOrderBy(sortBy, sortDir) {
     created_at: { createdAt: dir },
     name: { name: dir },
     region: { zone: dir },
+    sub_region: { subTerritory: dir },
     status: { status: dir },
     kyc: { kyc: dir },
     adr_name: { officer: dir }
@@ -247,6 +266,7 @@ export async function buildAgentRegistryReport(user, query = {}) {
 
   const scopeWhere = await buildScopeWhere(user, {
     zone: query.zone || null,
+    subTerritory: query.sub_territory || null,
     officerId: query.officer_id || null,
     teamLeadId: query.team_lead_id || null,
     status: query.status || null,
@@ -389,6 +409,7 @@ export function agentRegistryCsvRows(report) {
     r.agent_number ?? '',
     r.address,
     r.region,
+    r.sub_region ?? '',
     r.adr_name,
     r.team_lead_name ?? '',
     r.onboarded_by_name ?? '',
@@ -411,6 +432,7 @@ export const AGENT_REGISTRY_CSV_HEADERS = [
   'agent_number',
   'address',
   'region',
+  'sub_region',
   'adr',
   'team_lead',
   'onboarded_by',

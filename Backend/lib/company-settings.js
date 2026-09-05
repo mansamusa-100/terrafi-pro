@@ -8,6 +8,10 @@ import {
 } from './onboarding-config.js';
 import { companyLogoUrl } from './branding.js';
 import { parseVisitTargetClasses, serializeVisitTargetClasses } from './visit-target-classes.js';
+import {
+  countSubTerritories,
+  parseSubTerritoryMap
+} from './sub-territories.js';
 
 export const COVERAGE_MODELS = ['Officer-based', 'Zone-based', 'Hybrid'];
 
@@ -21,6 +25,7 @@ export const EDITABLE_FIELDS = new Set([
   'coverage_model',
   'business_types',
   'zone_names',
+  'sub_territory_map',
   'competitor_names',
   'branding_types',
   'visit_target_classes'
@@ -36,6 +41,7 @@ const FIELD_TO_COLUMN = {
   coverage_model: 'coverageModel',
   business_types: 'businessTypes',
   zone_names: 'zoneNames',
+  sub_territory_map: 'subTerritoryMap',
   competitor_names: 'competitorNames',
   branding_types: 'brandingTypes',
   visit_target_classes: 'visitTargetClasses'
@@ -94,7 +100,9 @@ export async function serializeCompanySettings(row, company = null) {
     },
     zones: {
       active_zones: row.activeZones,
-      sub_territories: row.subTerritories,
+      sub_territories:
+        countSubTerritories(parseSubTerritoryMap(row.subTerritoryMap)) ||
+        row.subTerritories,
       coverage_model: row.coverageModel
     },
     onboarding,
@@ -130,6 +138,12 @@ export function buildSettingsUpdate(body) {
         throw new Error('Invalid coverage model');
       }
       data[column] = value;
+      continue;
+    }
+    if (apiKey === 'sub_territory_map') {
+      const map = parseSubTerritoryMap(body[apiKey]);
+      data.subTerritoryMap = map;
+      data.subTerritories = countSubTerritories(map);
       continue;
     }
     if (ARRAY_DEFAULTS[apiKey] !== undefined) {

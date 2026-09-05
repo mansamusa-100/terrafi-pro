@@ -72,6 +72,8 @@ model CompanySettings {
   exportFormat                   String  @default("Excel, PDF") @map("export_format")
   businessTypes                  Json?   @map("business_types")
   zoneNames                      Json?   @map("zone_names")
+  /// Zone name → list of sub-territory names, e.g. { "Kombo": ["KM 01", "KM 02"] }
+  subTerritoryMap                Json?   @map("sub_territory_map")
   competitorNames                Json?   @map("competitor_names")
   brandingTypes                  Json?   @map("branding_types")
   visitTargetClasses             Json?   @map("visit_target_classes")
@@ -144,6 +146,7 @@ model Agent {
   company             Company       @relation(fields: [companyId], references: [id])
   name                String
   zone                String
+  subTerritory        String?       @map("sub_territory")
   phone               String
   phoneNormalized     String?       @map("phone_normalized")
   status              String        @default("active")

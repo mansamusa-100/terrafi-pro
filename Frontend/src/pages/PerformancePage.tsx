@@ -148,6 +148,15 @@ export function PerformancePage({ setPage }: PerformancePageProps) {
         accent: '#1565C0'
       });
     }
+    if (canAccess(user, 'performance-agent-list-by-adr')) {
+      links.push({
+        id: 'performance-agent-list-by-adr',
+        title: 'Agent List by ADR',
+        description: 'Agents assigned to each ADR, with onboarded totals and KYC',
+        icon: <Users className="w-5 h-5" />,
+        accent: '#7C3AED'
+      });
+    }
     if (canAccess(user, 'performance-officer-report')) {
       links.push({
         id: 'performance-officer-report',
@@ -163,7 +172,7 @@ export function PerformancePage({ setPage }: PerformancePageProps) {
   return (
     <div className="page-pad">
       {reportLinks.length > 0 && (
-        <div className="grid sm:grid-cols-2 gap-3 mb-5">
+        <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3 mb-5">
           {reportLinks.map((link) => (
             <button
               key={link.id}

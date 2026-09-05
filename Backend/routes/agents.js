@@ -20,6 +20,11 @@ import { logAgentOnboardedReport } from '../lib/notification-report.js';
 import { logAudit } from '../lib/audit.js';
 import { parseCsv, AGENT_IMPORT_TEMPLATE } from '../lib/csv.js';
 import { normalizePhone } from '../lib/phone.js';
+import { getOrCreateCompanySettings } from '../lib/company-settings.js';
+import {
+  parseSubTerritoryMap,
+  resolveAgentSubTerritory
+} from '../lib/sub-territories.js';
 
 const router = Router();
 
@@ -153,9 +158,10 @@ router.post('/import', requireRoles('manager', 'team_lead', 'adr'), async (req, 
               phoneNormalized: phoneFields.phoneNormalized,
               status: 'active',
               officer: assignment.officer,
-              officerId: assignment.officerId,
-              joined,
-              lat: row.lat ? parseFloat(row.lat) : 13.45,
+          officerId: assignment.officerId,
+          joined,
+          subTerritory: row.sub_territory?.trim() || null,
+          lat: row.lat ? parseFloat(row.lat) : 13.45,
               lng: row.lng ? parseFloat(row.lng) : -16.65,
               kyc: 'pending',
               lastVisit: 'Never',
@@ -289,7 +295,9 @@ router.post('/', requireRoles('manager', 'team_lead', 'adr'), async (req, res, n
       townVillage,
       competitorsPresent,
       brandingPresent,
-      gender
+      gender,
+      subTerritory,
+      sub_territory
     } = req.body;
 
     if (!name?.trim() || !phone?.trim() || !zone) {
@@ -357,6 +365,17 @@ router.post('/', requireRoles('manager', 'team_lead', 'adr'), async (req, res, n
       : [];
 
     let assignment;
+    const settings = await getOrCreateCompanySettings(companyId);
+    const subMap = parseSubTerritoryMap(settings.subTerritoryMap);
+    const resolvedSub = resolveAgentSubTerritory(
+      subMap,
+      zone,
+      subTerritory ?? sub_territory
+    );
+    if (resolvedSub.error) {
+      return res.status(400).json({ error: resolvedSub.error });
+    }
+
     if (req.user.role === 'adr') {
       assignment = { officerId: req.user.id, officer: req.user.name };
     } else {
@@ -394,6 +413,7 @@ router.post('/', requireRoles('manager', 'team_lead', 'adr'), async (req, res, n
           companyId,
           name: name.trim(),
           zone,
+          subTerritory: resolvedSub.value,
           phone: phoneFields.phone,
           phoneNormalized: phoneFields.phoneNormalized,
           status: 'active',
@@ -682,6 +702,7 @@ router.patch('/:id', async (req, res, next) => {
       'name',
       'phone',
       'zone',
+      'sub_territory',
       'status',
       'national_id',
       'business_type',
@@ -707,7 +728,6 @@ router.patch('/:id', async (req, res, next) => {
     const data = {};
     const map = {
       name: 'name',
-      zone: 'zone',
       efloat: 'efloat',
       cash: 'cash',
       status: 'status',
@@ -751,6 +771,28 @@ router.patch('/:id', async (req, res, next) => {
       }
       data.personalPhone = personalFields.phone;
       data.personalPhoneNormalized = personalFields.phoneNormalized;
+    }
+
+    if (req.body.zone !== undefined || req.body.sub_territory !== undefined) {
+      const nextZone =
+        req.body.zone !== undefined ? String(req.body.zone).trim() : agent.zone;
+      if (!nextZone) {
+        return res.status(400).json({ error: 'Zone is required' });
+      }
+      const settings = await getOrCreateCompanySettings(agent.companyId);
+      const subMap = parseSubTerritoryMap(settings.subTerritoryMap);
+      const resolvedSub = resolveAgentSubTerritory(
+        subMap,
+        nextZone,
+        req.body.sub_territory !== undefined
+          ? req.body.sub_territory
+          : agent.subTerritory
+      );
+      if (resolvedSub.error) {
+        return res.status(400).json({ error: resolvedSub.error });
+      }
+      data.zone = nextZone;
+      data.subTerritory = resolvedSub.value;
     }
 
     if (req.body.officer_id !== undefined && req.user.role === 'manager') {

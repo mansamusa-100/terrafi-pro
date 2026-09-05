@@ -115,6 +115,7 @@ export const PAGES = [
   { id: 'float-sync', icon: History, label: 'Float sync log' },
   { id: 'performance', icon: TrendingUp, label: 'Overview' },
   { id: 'performance-agent-report', icon: ClipboardList, label: 'Agent report' },
+  { id: 'performance-agent-list-by-adr', icon: Users, label: 'Agent List by ADR' },
   { id: 'performance-officer-report', icon: ClipboardList, label: 'Officer report' },
   { id: 'training', icon: GraduationCap, label: 'Training' },
   { id: 'compliance', icon: ShieldCheck, label: 'Compliance' },
@@ -141,10 +142,16 @@ const NAV_GROUPS = [
     id: 'performance-group',
     icon: TrendingUp,
     label: 'Performance',
-    pageIds: ['performance', 'performance-agent-report', 'performance-officer-report'] as const,
+    pageIds: [
+      'performance',
+      'performance-agent-report',
+      'performance-agent-list-by-adr',
+      'performance-officer-report'
+    ] as const,
     childLabels: {
       performance: 'Overview',
       'performance-agent-report': 'Agent report',
+      'performance-agent-list-by-adr': 'Agent List by ADR',
       'performance-officer-report': 'Officer report'
     } as Record<string, string>
   },
@@ -173,6 +180,7 @@ export const PAGE_ACCESS: Record<Role, string[]> = {
     'float-sync',
     'performance',
     'performance-agent-report',
+    'performance-agent-list-by-adr',
     'performance-officer-report',
     'training',
     'compliance',
@@ -182,7 +190,7 @@ export const PAGE_ACCESS: Record<Role, string[]> = {
     'settings',
     'partner-integration'
   ],
-  internal: ['dashboard', 'float', 'performance', 'performance-agent-report', 'performance-officer-report', 'compliance'],
+  internal: ['dashboard', 'float', 'performance', 'performance-agent-report', 'performance-agent-list-by-adr', 'performance-officer-report', 'compliance'],
   team_lead: [
     'dashboard',
     'agents',
@@ -190,9 +198,10 @@ export const PAGE_ACCESS: Record<Role, string[]> = {
     'visits',
     'performance',
     'performance-agent-report',
+    'performance-agent-list-by-adr',
     'performance-officer-report'
   ],
-  adr: ['dashboard', 'agents', 'map', 'visits', 'performance-agent-report', 'performance-officer-report'],
+  adr: ['dashboard', 'agents', 'map', 'visits', 'performance-agent-report', 'performance-agent-list-by-adr', 'performance-officer-report'],
   agent: ['dashboard', 'float', 'visits', 'training'],
   teller: ['dashboard', 'float']
 };
@@ -207,6 +216,7 @@ export const PAGE_TITLES: Record<string, string> = {
   'float-sync': 'Float sync log',
   performance: 'Performance · Overview',
   'performance-agent-report': 'Performance · Agent report',
+  'performance-agent-list-by-adr': 'Performance · Agent List by ADR',
   'performance-officer-report': 'Performance · Officer report',
   training: 'Training',
   compliance: 'Compliance',

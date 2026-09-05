@@ -17,6 +17,7 @@ export type OnboardingDraftFields = {
   businessType: string;
   businessTypeOther: string;
   zone: string;
+  subTerritory: string;
   townVillage: string;
   officerId: string;
   coords: { lat: number; lng: number } | null;
@@ -142,6 +143,7 @@ export async function saveOnboardingDraft(payload: OnboardingDraftPayload): Prom
     businessType: payload.businessType,
     businessTypeOther: payload.businessTypeOther,
     zone: payload.zone,
+    subTerritory: payload.subTerritory,
     townVillage: payload.townVillage,
     officerId: payload.officerId,
     coords: payload.coords,
@@ -193,6 +195,7 @@ export async function loadOnboardingDraft(
       businessType: raw.businessType ?? '',
       businessTypeOther: raw.businessTypeOther ?? '',
       zone: raw.zone ?? '',
+      subTerritory: raw.subTerritory ?? '',
       townVillage: raw.townVillage ?? '',
       officerId: raw.officerId ?? '',
       coords: raw.coords ?? null,

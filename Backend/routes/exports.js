@@ -19,6 +19,11 @@ import {
   officerReportCsvSections,
   OFFICER_CSV_HEADERS
 } from '../lib/officer-report.js';
+import {
+  buildAgentListByAdr,
+  agentListByAdrCsvRows,
+  AGENT_LIST_BY_ADR_CSV_HEADERS
+} from '../lib/agent-list-by-adr.js';
 
 const router = Router();
 
@@ -227,6 +232,21 @@ router.get(
       const csv = toCsv(AGENT_REGISTRY_CSV_HEADERS, agentRegistryCsvRows(report));
       const { from, to } = report.period;
       csvResponse(res, `agent-report-${from}-to-${to}.csv`, csv);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+router.get(
+  '/agent-list-by-adr',
+  requireRolesOrInternalCapability(['manager', 'team_lead', 'adr'], 'export_data'),
+  async (req, res, next) => {
+    try {
+      const report = await buildAgentListByAdr(req.user, req.query);
+      const csv = toCsv(AGENT_LIST_BY_ADR_CSV_HEADERS, agentListByAdrCsvRows(report));
+      const { from, to } = report.period;
+      csvResponse(res, `agent-list-by-adr-${from}-to-${to}.csv`, csv);
     } catch (err) {
       next(err);
     }

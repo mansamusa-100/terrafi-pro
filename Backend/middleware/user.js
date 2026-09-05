@@ -220,6 +220,7 @@ export function serializeAgent(agent, extra = {}, options = {}) {
     name: agent.name,
     outlet_name: agent.outletName ?? null,
     zone: agent.zone,
+    sub_territory: agent.subTerritory ?? null,
     town_village: agent.townVillage ?? null,
     phone: agent.phone,
     personal_phone: agent.personalPhone ?? null,

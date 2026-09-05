@@ -1,5 +1,6 @@
 import { prisma } from './prisma.js';
 import { getOrCreateCompanySettings } from './company-settings.js';
+import { parseSubTerritoryMap } from './sub-territories.js';
 
 export const DEFAULT_BUSINESS_TYPES = [
   'Retail shop',
@@ -61,6 +62,7 @@ export async function getOnboardingConfig(companyId) {
     branding_types: parseStringArray(
       settings.brandingTypes,
       DEFAULT_BRANDING_TYPES
-    )
+    ),
+    sub_territories_by_zone: parseSubTerritoryMap(settings.subTerritoryMap)
   };
 }

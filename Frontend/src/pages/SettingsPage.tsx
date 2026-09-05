@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2, Upload, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ApiError, api, CompanySettings, OnboardingConfig, type VisitTargetClasses } from '../lib/api';
@@ -7,6 +7,7 @@ import { can } from '../lib/rbac';
 import { cn } from '../lib/utils';
 import { BillingCard } from '../components/BillingCard';
 import { BrandMark } from '../components/BrandMark';
+import { countSubTerritories } from '../lib/sub-territories';
 
 type FieldConfig = {
   id: keyof CompanySettingsPatchKeys;
@@ -24,7 +25,6 @@ type CompanySettingsPatchKeys = {
   alert_notification_delay_minutes: number;
   auto_suspend_missed_visits_days: number;
   active_zones: number;
-  sub_territories: number;
   coverage_model: string;
 };
 
@@ -78,13 +78,6 @@ const EDITABLE_SECTIONS: { title: string; fields: FieldConfig[] }[] = [
         getValue: (s) => s.zones.active_zones
       },
       {
-        id: 'sub_territories',
-        label: 'Sub-territories',
-        inputType: 'number',
-        format: (v) => String(v),
-        getValue: (s) => s.zones.sub_territories
-      },
-      {
         id: 'coverage_model',
         label: 'Coverage model',
         inputType: 'select',
@@ -113,7 +106,7 @@ function displayValue(field: FieldConfig, settings: CompanySettings) {
   return field.suffix ? `${formatted} ${field.suffix}` : formatted;
 }
 
-type ListKey = keyof OnboardingConfig;
+type ListKey = 'business_types' | 'zone_names' | 'competitor_names' | 'branding_types';
 
 const ONBOARDING_LISTS: {
   key: ListKey;
@@ -131,7 +124,7 @@ const ONBOARDING_LISTS: {
     key: 'zone_names',
     apiKey: 'zone_names',
     label: 'Zone names',
-    hint: 'One per line. Used in agent onboarding zone dropdown.'
+    hint: 'One per line. Used as regions in onboarding and reports.'
   },
   {
     key: 'competitor_names',
@@ -251,6 +244,152 @@ function OnboardingListsSection({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function SubTerritoriesByZoneSection({
+  zoneNames,
+  map,
+  onSaved
+}: {
+  zoneNames: string[];
+  map: Record<string, string[]>;
+  onSaved: (onboarding: OnboardingConfig, subCount: number) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+
+  const zoneKeys = useMemo(() => {
+    const extra = Object.keys(map).filter((z) => !zoneNames.includes(z));
+    return [...zoneNames, ...extra];
+  }, [zoneNames, map]);
+
+  const startEdit = () => {
+    const next: Record<string, string> = {};
+    for (const zone of zoneKeys) {
+      next[zone] = (map[zone] || []).join('\n');
+    }
+    setDraft(next);
+    setEditing(true);
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const nextMap: Record<string, string[]> = {};
+      for (const [zone, text] of Object.entries(draft)) {
+        const names = text
+          .split(/[\n,]/)
+          .map((v) => v.trim())
+          .filter(Boolean);
+        if (names.length) nextMap[zone] = [...new Set(names)];
+      }
+      const updated = await api.settings.update({ sub_territory_map: nextMap });
+      onSaved(updated.onboarding, updated.zones.sub_territories);
+      setEditing(false);
+      toast.success('Sub-territories saved');
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const total = countSubTerritories(map);
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
+        <div>
+          <h3 className="text-sm font-semibold text-slate-900">
+            Sub-territories by region
+          </h3>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Nested under each region. Shown as “Sub Region” on the Agent report
+            and required at onboarding when a region has names configured.
+          </p>
+          <p className="text-[11px] text-slate-400 mt-1">
+            {total} sub-territor{total === 1 ? 'y' : 'ies'} across {zoneKeys.length} region
+            {zoneKeys.length === 1 ? '' : 's'}
+          </p>
+        </div>
+        {editing ? (
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              disabled={saving}
+              onClick={save}
+              className="text-xs text-white bg-apsBlue hover:bg-apsBlue/90 px-3 py-1 rounded-md font-medium disabled:opacity-50">
+              Save
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => setEditing(false)}
+              className="text-xs text-slate-600 hover:bg-slate-100 px-3 py-1 rounded-md font-medium">
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={startEdit}
+            className="text-xs text-apsBlue bg-apsBlueLt hover:bg-apsBlue/20 px-3 py-1 rounded-md font-medium transition-colors shrink-0">
+            Edit
+          </button>
+        )}
+      </div>
+
+      {zoneKeys.length === 0 ? (
+        <p className="text-xs text-slate-500">
+          Add zone names above first, then nest sub-territories under each region.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {zoneKeys.map((zone) => {
+            const names = editing
+              ? (draft[zone] || '')
+                  .split(/[\n,]/)
+                  .map((v) => v.trim())
+                  .filter(Boolean)
+              : map[zone] || [];
+            return (
+              <div
+                key={zone}
+                className="rounded-lg border border-slate-100 bg-slate-50/60 p-3">
+                <div className="text-sm font-medium text-slate-900">{zone}</div>
+                {editing ? (
+                  <textarea
+                    value={draft[zone] || ''}
+                    onChange={(e) =>
+                      setDraft((d) => ({ ...d, [zone]: e.target.value }))
+                    }
+                    rows={3}
+                    placeholder="One sub-territory per line"
+                    className="mt-2 w-full text-sm border border-slate-200 rounded-lg px-3 py-2 font-mono resize-y bg-white"
+                  />
+                ) : names.length ? (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {names.map((item) => (
+                      <span
+                        key={item}
+                        className="text-xs font-medium px-2 py-0.5 rounded-full bg-white border border-slate-200 text-slate-700">
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    No sub-territories for this region
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -643,12 +782,29 @@ export function SettingsPage({ setPage }: { setPage: (page: string) => void }) {
       )}
 
       {canEdit && settings.onboarding && (
-        <OnboardingListsSection
-          onboarding={settings.onboarding}
-          onSaved={(onboarding) =>
-            setSettings((prev) => (prev ? { ...prev, onboarding } : prev))
-          }
-        />
+        <>
+          <OnboardingListsSection
+            onboarding={settings.onboarding}
+            onSaved={(onboarding) =>
+              setSettings((prev) => (prev ? { ...prev, onboarding } : prev))
+            }
+          />
+          <SubTerritoriesByZoneSection
+            zoneNames={settings.onboarding.zone_names || []}
+            map={settings.onboarding.sub_territories_by_zone || {}}
+            onSaved={(onboarding, subCount) =>
+              setSettings((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      onboarding,
+                      zones: { ...prev.zones, sub_territories: subCount }
+                    }
+                  : prev
+              )
+            }
+          />
+        </>
       )}
 
       <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">

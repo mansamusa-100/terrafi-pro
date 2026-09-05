@@ -6,6 +6,7 @@ import { buildAgentVisitSparklines } from '../lib/analytics.js';
 import { buildAgentRegistryReport } from '../lib/agent-registry.js';
 import { buildOfficerReport } from '../lib/officer-report.js';
 import { buildOfficerJourney } from '../lib/journey-tracking.js';
+import { buildAgentListByAdr } from '../lib/agent-list-by-adr.js';
 
 const router = Router();
 
@@ -67,6 +68,19 @@ router.get(
   async (req, res, next) => {
     try {
       const report = await buildAgentRegistryReport(req.user, req.query);
+      res.json(report);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+router.get(
+  '/agent-list-by-adr',
+  requireRoles('manager', 'internal', 'team_lead', 'adr'),
+  async (req, res, next) => {
+    try {
+      const report = await buildAgentListByAdr(req.user, req.query);
       res.json(report);
     } catch (err) {
       next(err);

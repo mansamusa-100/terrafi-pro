@@ -68,8 +68,8 @@ export function BulkKycModal({ open, onClose }: BulkKycModalProps) {
             <p className="font-semibold text-apsBlue mb-1">Filename format</p>
             <p>
               <code>{'{agentId}-{docType}.ext'}</code> — docType is{' '}
-              <code>nationalId</code>, <code>businessPermit</code>, or{' '}
-              <code>agentAgreement</code>
+              <code>nationalId</code>, <code>businessPermit</code>,{' '}
+              <code>tinCertificate</code>, or <code>agentAgreement</code>
             </p>
           </div>
 

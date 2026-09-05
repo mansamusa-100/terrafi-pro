@@ -26,6 +26,7 @@ import { FloatPage } from './pages/FloatPage';
 import { FloatSyncPage } from './pages/FloatSyncPage';
 import { PerformancePage } from './pages/PerformancePage';
 import { AgentReportPage } from './pages/AgentReportPage';
+import { AgentListByAdrPage } from './pages/AgentListByAdrPage';
 import { OfficerReportPage } from './pages/OfficerReportPage';
 import { TrainingPage } from './pages/TrainingPage';
 import { CompliancePage } from './pages/CompliancePage';
@@ -167,6 +168,9 @@ function AuthenticatedApp({
     performance: <PerformancePage setPage={handleSetPage} />,
     'performance-agent-report': (
       <AgentReportPage onAgentClick={setSelectedAgent} />
+    ),
+    'performance-agent-list-by-adr': (
+      <AgentListByAdrPage onAgentClick={setSelectedAgent} />
     ),
     'performance-officer-report': <OfficerReportPage />,
     training: <TrainingPage />,

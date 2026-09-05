@@ -30,6 +30,7 @@ import { STATUS_META } from '../lib/data';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { cn } from '../lib/utils';
 import { PAGE_SIZE } from '../lib/useClientPagination';
+import { subTerritoriesForZone } from '../lib/sub-territories';
 
 const selectClass =
   'px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 outline-none focus:border-apsBlue transition-colors';
@@ -54,6 +55,7 @@ type SortKey =
   | 'created_at'
   | 'name'
   | 'region'
+  | 'sub_region'
   | 'status'
   | 'kyc'
   | 'adr_name'
@@ -63,6 +65,7 @@ const SORTABLE: { key: SortKey; label: string }[] = [
   { key: 'created_at', label: 'Onboarded' },
   { key: 'name', label: 'Name' },
   { key: 'region', label: 'Region' },
+  { key: 'sub_region', label: 'Sub Region' },
   { key: 'status', label: 'Status' },
   { key: 'kyc', label: 'KYC' },
   { key: 'adr_name', label: 'ADR' },
@@ -70,7 +73,7 @@ const SORTABLE: { key: SortKey; label: string }[] = [
 ];
 
 const GRID_COLS =
-  'grid grid-cols-[repeat(18,minmax(0,1fr))] gap-2';
+  'grid grid-cols-[repeat(19,minmax(0,1fr))] gap-2';
 
 interface AgentReportSectionProps {
   onAgentClick?: (agent: Agent) => void;
@@ -87,6 +90,10 @@ export function AgentReportSection({ onAgentClick }: AgentReportSectionProps) {
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search, 300);
   const [zoneFilter, setZoneFilter] = useState('');
+  const [subTerritoryFilter, setSubTerritoryFilter] = useState('');
+  const [subTerritoryMap, setSubTerritoryMap] = useState<Record<string, string[]>>(
+    {}
+  );
   const [adrFilter, setAdrFilter] = useState('');
   const [teamLeadFilter, setTeamLeadFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -124,6 +131,7 @@ export function AgentReportSection({ onAgentClick }: AgentReportSectionProps) {
       table_scope: tableScope,
       q: debouncedSearch.trim() || undefined,
       zone: zoneFilter || undefined,
+      sub_territory: subTerritoryFilter || undefined,
       officer_id: adrFilter || undefined,
       team_lead_id: teamLeadFilter || undefined,
       status: statusFilter || undefined,
@@ -140,6 +148,7 @@ export function AgentReportSection({ onAgentClick }: AgentReportSectionProps) {
       tableScope,
       debouncedSearch,
       zoneFilter,
+      subTerritoryFilter,
       adrFilter,
       teamLeadFilter,
       statusFilter,
@@ -168,6 +177,18 @@ export function AgentReportSection({ onAgentClick }: AgentReportSectionProps) {
   }, [loadReport]);
 
   useEffect(() => {
+    api
+      .onboardingConfig()
+      .then((c) => setSubTerritoryMap(c.sub_territories_by_zone || {}))
+      .catch(() => setSubTerritoryMap({}));
+  }, []);
+
+  const subTerritoryOptions = useMemo(() => {
+    if (zoneFilter) return subTerritoriesForZone(subTerritoryMap, zoneFilter);
+    return [...new Set(Object.values(subTerritoryMap).flat())].sort();
+  }, [subTerritoryMap, zoneFilter]);
+
+  useEffect(() => {
     setOffset(0);
   }, [
     preset,
@@ -176,6 +197,7 @@ export function AgentReportSection({ onAgentClick }: AgentReportSectionProps) {
     tableScope,
     debouncedSearch,
     zoneFilter,
+    subTerritoryFilter,
     adrFilter,
     teamLeadFilter,
     statusFilter,
@@ -189,7 +211,7 @@ export function AgentReportSection({ onAgentClick }: AgentReportSectionProps) {
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
     } else {
       setSortBy(key);
-      setSortDir(key === 'name' || key === 'region' ? 'asc' : 'desc');
+      setSortDir(key === 'name' || key === 'region' || key === 'sub_region' ? 'asc' : 'desc');
     }
   };
 
@@ -218,6 +240,7 @@ export function AgentReportSection({ onAgentClick }: AgentReportSectionProps) {
     table_scope: tableScope,
     q: debouncedSearch.trim() || undefined,
     zone: zoneFilter || undefined,
+    sub_territory: subTerritoryFilter || undefined,
     officer_id: adrFilter || undefined,
     team_lead_id: teamLeadFilter || undefined,
     status: statusFilter || undefined,
@@ -370,7 +393,10 @@ export function AgentReportSection({ onAgentClick }: AgentReportSectionProps) {
               aria-label="Filter by region"
               className={selectClass}
               value={zoneFilter}
-              onChange={(e) => setZoneFilter(e.target.value)}>
+              onChange={(e) => {
+                setZoneFilter(e.target.value);
+                setSubTerritoryFilter('');
+              }}>
               <option value="">All regions</option>
               {zones.map((z) => (
                 <option key={z} value={z}>
@@ -378,6 +404,21 @@ export function AgentReportSection({ onAgentClick }: AgentReportSectionProps) {
                 </option>
               ))}
             </select>
+
+            {subTerritoryOptions.length > 0 && (
+              <select
+                aria-label="Filter by sub region"
+                className={selectClass}
+                value={subTerritoryFilter}
+                onChange={(e) => setSubTerritoryFilter(e.target.value)}>
+                <option value="">All sub regions</option>
+                {subTerritoryOptions.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            )}
 
             <select
               aria-label="Filter by ADR"
@@ -443,7 +484,7 @@ export function AgentReportSection({ onAgentClick }: AgentReportSectionProps) {
           </p>
         ) : (
           <>
-            <DataTable minWidth="1680px">
+            <DataTable minWidth="1800px">
               <div
                 className={cn(
                   GRID_COLS,
@@ -503,6 +544,9 @@ export function AgentReportSection({ onAgentClick }: AgentReportSectionProps) {
                     </span>
                     <span className="font-medium text-slate-900 truncate">{row.name}</span>
                     <span className="text-slate-600 truncate">{row.region}</span>
+                    <span className="text-slate-600 truncate">
+                      {row.sub_region ?? '—'}
+                    </span>
                     <span>
                       {statusMeta ? (
                         <span

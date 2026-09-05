@@ -27,6 +27,7 @@ import { toast } from 'sonner';
 import { useAuth } from '../lib/auth';
 import { can } from '../lib/rbac';
 import { useAppData } from '../lib/data-context';
+import { subTerritoriesForZone } from '../lib/sub-territories';
 import { Pencil } from 'lucide-react';
 import { AgentOnboardingEdit } from './AgentOnboardingEdit';
 import { GoVisitButton } from './GoVisitButton';
@@ -46,7 +47,7 @@ type Tab = 'overview' | 'kyc' | 'visits';
 
 export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
   const { user } = useAuth();
-  const { users, updateAgent, reviewKyc } = useAppData();
+  const { users, updateAgent, reviewKyc, zones } = useAppData();
   const canUploadKyc = user ? can(user, 'onboardAgent') : false;
   const canEdit = user ? can(user, 'editAgent') : false;
   const canEditOnboarding =
@@ -54,6 +55,9 @@ export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
     (can(user, 'editAgent') || can(user, 'editAgentOnboarding'));
   const canReview = user ? can(user, 'reviewKyc') : false;
   const adrs = users.filter((u) => u.role === 'adr' && u.id);
+  const [subTerritoryMap, setSubTerritoryMap] = useState<Record<string, string[]>>(
+    {}
+  );
   const [mounted, setMounted] = useState(false);
   const [tab, setTab] = useState<Tab>('overview');
   const [detail, setDetail] = useState<AgentDetail | null>(null);
@@ -70,6 +74,7 @@ export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
     name: '',
     phone: '',
     zone: '',
+    sub_territory: '',
     status: 'active',
     officer_id: ''
   });
@@ -87,6 +92,13 @@ export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
   }, [agent]);
 
   useEffect(() => {
+    api
+      .onboardingConfig()
+      .then((c) => setSubTerritoryMap(c.sub_territories_by_zone || {}))
+      .catch(() => setSubTerritoryMap({}));
+  }, []);
+
+  useEffect(() => {
     if (!agent) return;
     setLoading(true);
     api.agents
@@ -102,6 +114,7 @@ export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
       name: detail.name,
       phone: detail.phone,
       zone: detail.zone,
+      sub_territory: detail.sub_territory || '',
       status: detail.status,
       officer_id: detail.officer_id || ''
     });
@@ -115,6 +128,7 @@ export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
         name: editForm.name.trim(),
         phone: editForm.phone.trim(),
         zone: editForm.zone,
+        sub_territory: editForm.sub_territory || null,
         status: editForm.status,
         officer_id: editForm.officer_id || null
       });
@@ -325,6 +339,9 @@ export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
                 )}
                 {[
                   [MapPin, 'Zone', data.zone],
+                  ...(data.sub_territory
+                    ? [[MapPin, 'Sub-territory', data.sub_territory] as const]
+                    : []),
                   ...(data.town_village
                     ? [[MapPin, 'Town / village', data.town_village] as const]
                     : []),
@@ -467,14 +484,52 @@ export function AgentDrawer({ agent, onClose }: AgentDrawerProps) {
                         }
                         placeholder="Phone"
                       />
-                      <input
+                      <select
                         className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm"
                         value={editForm.zone}
                         onChange={(e) =>
-                          setEditForm((f) => ({ ...f, zone: e.target.value }))
-                        }
-                        placeholder="Zone"
-                      />
+                          setEditForm((f) => ({
+                            ...f,
+                            zone: e.target.value,
+                            sub_territory: ''
+                          }))
+                        }>
+                        <option value="">Select zone…</option>
+                        {(zones.length ? zones : [editForm.zone].filter(Boolean)).map(
+                          (z) => (
+                            <option key={z} value={z}>
+                              {z}
+                            </option>
+                          )
+                        )}
+                        {editForm.zone &&
+                          zones.length > 0 &&
+                          !zones.includes(editForm.zone) && (
+                            <option value={editForm.zone}>{editForm.zone}</option>
+                          )}
+                      </select>
+                      {subTerritoriesForZone(subTerritoryMap, editForm.zone).length >
+                        0 && (
+                        <select
+                          className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm"
+                          value={editForm.sub_territory}
+                          onChange={(e) =>
+                            setEditForm((f) => ({
+                              ...f,
+                              sub_territory: e.target.value
+                            }))
+                          }>
+                          <option value="">Select sub-territory…</option>
+                          {subTerritoriesForZone(
+                            subTerritoryMap,
+                            editForm.zone
+                          ).map((s) => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ))}
+                        </select>
+                      )}
                       <select
                         className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm"
                         value={editForm.officer_id}

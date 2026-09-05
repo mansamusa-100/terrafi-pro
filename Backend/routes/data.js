@@ -27,7 +27,7 @@ router.get('/zones', async (req, res, next) => {
   }
 });
 
-router.get('/onboarding-config', requireRoles('manager', 'team_lead', 'adr'), async (req, res, next) => {
+router.get('/onboarding-config', requireRoles('manager', 'internal', 'team_lead', 'adr'), async (req, res, next) => {
   try {
     const companyId = companyFilter(req.user);
     if (!companyId) {

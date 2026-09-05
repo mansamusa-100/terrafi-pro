@@ -18,6 +18,7 @@ const ITEMS = [
     isActive: (page: string) =>
       page === 'performance-officer-report' ||
       page === 'performance-agent-report' ||
+      page === 'performance-agent-list-by-adr' ||
       page === 'performance'
   }
 ] as const;

@@ -56,6 +56,7 @@ export interface Agent {
   name: string;
   outlet_name?: string | null;
   zone: string;
+  sub_territory?: string | null;
   town_village?: string | null;
   phone: string;
   personal_phone?: string | null;
@@ -474,6 +475,7 @@ export interface AgentReportRow {
   agent_number: string | null;
   address: string;
   region: string;
+  sub_region: string | null;
   adr_id: string | null;
   adr_name: string;
   team_lead_id: string | null;
@@ -482,6 +484,7 @@ export interface AgentReportRow {
   onboarded_by_name: string | null;
   kyc_approved_by_id: string | null;
   kyc_approved_by_name: string | null;
+  visit_count?: number;
   last_visit_date: string | null;
   last_visited_by: string | null;
 }
@@ -591,11 +594,42 @@ export interface OfficerReport {
   journey: OfficerJourney | null;
 }
 
+export interface AgentListByAdrSummary {
+  total_adrs: number;
+  total_agents: number;
+  onboarded_in_period: number;
+  adrs_with_zero_agents: number;
+  kyc_pending: number;
+}
+
+export interface AgentListByAdrSection {
+  adr_id: string | null;
+  adr_name: string;
+  zone: string;
+  sub_regions: string[];
+  status: string;
+  team_lead_id: string | null;
+  team_lead_name: string | null;
+  agent_count: number;
+  onboarded_in_period: number;
+  kyc_verified: number;
+  kyc_pending: number;
+  rows: AgentReportRow[];
+}
+
+export interface AgentListByAdrReport {
+  period: { preset: string; from: string; to: string };
+  table_scope: 'onboarded' | 'all';
+  summary: AgentListByAdrSummary;
+  sections: AgentListByAdrSection[];
+}
+
 export interface OnboardingConfig {
   business_types: string[];
   zone_names: string[];
   competitor_names: string[];
   branding_types: string[];
+  sub_territories_by_zone: Record<string, string[]>;
 }
 
 export interface CompanySettings {
@@ -740,6 +774,7 @@ export type CompanySettingsUpdate = Partial<{
   coverage_model: string;
   business_types: string[] | string;
   zone_names: string[] | string;
+  sub_territory_map: Record<string, string[]>;
   competitor_names: string[] | string;
   branding_types: string[] | string;
   visit_target_classes: VisitTargetClasses;
@@ -946,7 +981,17 @@ export const api = {
     officerJourney: (officerId: string, date: string) =>
       request<OfficerJourney>(
         `/performance/officer-journey?officer_id=${encodeURIComponent(officerId)}&date=${encodeURIComponent(date)}`
-      )
+      ),
+    agentListByAdr: (params: Record<string, string | number | undefined>) => {
+      const q = new URLSearchParams();
+      for (const [key, val] of Object.entries(params)) {
+        if (val !== undefined && val !== '') q.set(key, String(val));
+      }
+      const qs = q.toString();
+      return request<AgentListByAdrReport>(
+        `/performance/agent-list-by-adr${qs ? `?${qs}` : ''}`
+      );
+    }
   },
   tracking: {
     getSession: () =>
@@ -991,6 +1036,14 @@ export const api = {
       }
       const qs = q.toString();
       return `/export/agent-report${qs ? `?${qs}` : ''}`;
+    },
+    agentListByAdr: (params: Record<string, string | undefined>) => {
+      const q = new URLSearchParams();
+      for (const [key, val] of Object.entries(params)) {
+        if (val) q.set(key, val);
+      }
+      const qs = q.toString();
+      return `/export/agent-list-by-adr${qs ? `?${qs}` : ''}`;
     },
     officerReport: (params: Record<string, string | undefined>, table = 'visit_achieved') => {
       const q = new URLSearchParams();
